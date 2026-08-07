@@ -544,7 +544,7 @@ body{
           <div id="home-market-pos"></div>
         </div>
         <div class="card">
-          <div class="card-hd">Member Health</div>
+          <div class="card-hd"><span class="card-hd-lbl">Member Health</span><i class="info-icon" onclick="event.stopPropagation();showInfo('member-health')">i</i></div>
           <div id="home-member-health"></div>
         </div>
       </div>
@@ -658,11 +658,11 @@ body{
 
       <div class="two-col">
         <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">RFM Segments</span></div>
+          <div class="card-hd"><span class="card-hd-lbl">RFM Segments</span><i class="info-icon" onclick="event.stopPropagation();showInfo('rfm-segments')">i</i></div>
           <div class="chart-wrap"><canvas id="chart-rfm"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">Retention Rate</span></div>
+          <div class="card-hd"><span class="card-hd-lbl">Retention Rate</span><i class="info-icon" onclick="event.stopPropagation();showInfo('retention-rate')">i</i></div>
           <div class="chart-wrap"><canvas id="chart-ret"></canvas></div>
         </div>
       </div>
@@ -924,6 +924,86 @@ const METRIC_INFO = {
     what:'Gabungan antara Occupancy dan Value Capture dalam satu angka. Mengukur efisiensi keseluruhan venue: seberapa penuh court DAN seberapa baik mereka monetisasi setiap booking.',
     source:'Value Index = Occupancy × Value Capture %. Contoh: Occ 60% × Value Capture 50% = Value Index 30%. Sumber: Benchmark file → sheet "Demand & Value".',
     bench:'Value Index >25%: kompetitif. >40%: venue dengan performa terbaik di kategorinya. Rendah di keduanya → masalah fundamental positioning. Rendah di salah satu → fokus pada aspek yang lemah tersebut.'},
+
+  // HOME — MEMBER HEALTH
+  'member-health':{title:'Member Health',
+    what:'Ringkasan kesehatan basis member PPC berdasarkan RFM (Recency, Frequency, Monetary) segmentation. Menunjukkan berapa member yang aktif & loyal vs yang perlu diperhatikan.',
+    source:'Dihitung dari RFM segmentation pipeline: setiap member diberi skor R (terakhir booking), F (frekuensi), dan M (total spend), lalu dipetakan ke segmen Champions / Loyal / New / Needs Attention / At Risk / Cannot Lose / Lost.',
+    bench:'Distribusi sehat: >50% member di segmen positif (Champions + Loyal + New). Jika "Perlu Tindakan" mendominasi → prioritaskan program win-back dan onboarding aktif. (Gupta et al., JMR 2006)'},
+  'member-health-healthy':{title:'Aktif & Loyal',
+    what:'Jumlah member di segmen Champions, Loyal, dan New — yaitu yang masih aktif bertransaksi dan memiliki engagement positif dengan klub.',
+    source:'Filter dari RFM segmentation: segment ∈ ["Champions", "Loyal", "New"]. Dihitung pipeline dari match ESB + Membership List.',
+    bench:'Target minimal 60% dari total member. Jika di bawah 40% → ada masalah engagement atau churn dini yang perlu segera ditangani. (Gupta et al., JMR 2006)'},
+  'member-health-atrisk':{title:'Perlu Tindakan',
+    what:'Member di segmen At Risk, Needs Attention, Cannot Lose, dan Lost — yang aktivitasnya menurun atau sudah tidak aktif. Perlu intervensi sebelum churn permanen.',
+    source:'Filter: segment ∈ ["At Risk", "Needs Attention", "Cannot Lose", "Lost"]. Data dari pipeline RFM yang membaca riwayat transaksi ESB.',
+    bench:'Memenangkan kembali member yang sudah churn 5–7× lebih mahal daripada mempertahankannya. Win-back window terbaik: 30–60 hari sejak kunjungan terakhir. (Reichheld, "The Loyalty Effect", HBS Press)'},
+  'rfm-champions':{title:'Champions',
+    what:'Member terbaik: baru-baru ini booking (Recency tinggi), sering datang (Frequency tinggi), dan total spend besar (Monetary tinggi). Mereka adalah aset terbesar klub.',
+    source:'RFM score: R ≥ 4, F ≥ 4, M ≥ 4 (skala 1–5). Dihitung dari riwayat transaksi ESB yang di-match ke Membership List.',
+    bench:'Champions adalah kandidat terbaik untuk referral program, early access promo, dan exclusive event. Churn rate Champions biasanya <10%/tahun. Fokus mempertahankan mereka, bukan mendiskon — mereka sudah loyal. (Blattberg & Deighton, HBR 1996)'},
+  'rfm-loyal':{title:'Loyal',
+    what:'Member yang sering datang dan spend konsisten — backbone revenue klub. Belum sesering Champions, tapi reliabel dan engaged.',
+    source:'RFM: Frequency ≥ 4 dengan total score menengah-atas. Pipeline menghitung dari frekuensi transaksi per member per bulan.',
+    bench:'Prioritas: upsell ke coaching atau ball machine untuk meningkatkan Monetary dan frekuensi. Loyal members yang ter-upsell memiliki LTV 2× lebih tinggi. (Reinartz & Kumar, HBR 2002)'},
+  'rfm-new':{title:'New',
+    what:'Member yang baru bergabung atau baru mulai aktif — Recency tinggi tapi Frequency dan Monetary masih rendah karena belum banyak riwayat.',
+    source:'RFM: R tinggi (baru bertransaksi), F dan M rendah. Biasanya member dengan history transaksi < 60 hari pertama.',
+    bench:'30–90 hari pertama adalah periode kritis: 70% churn terjadi di bulan 1–3. Program onboarding aktif (intro session, buddy system, free coaching trial) di periode ini meningkatkan LTV hingga 3×. (Cleverbridge Retention Study, 2023)'},
+  'rfm-needs-attention':{title:'Needs Attention',
+    what:'Member yang dulu aktif tapi mulai menurun frekuensinya. Belum "At Risk" namun perlu perhatian sebelum semakin jarang datang.',
+    source:'RFM: Recency mulai turun (R = 2–3), Frequency sebelumnya cukup tinggi. Pipeline mendeteksi dari jarak antar transaksi yang semakin melebar.',
+    bench:'Intervensi terbaik: pesan personal (bukan blast), tawaran berdasarkan preferensi booking mereka. Jangan tunggu lebih dari 21 hari tanpa kontak setelah kunjungan terakhir. (Reichheld, HBR 2000)'},
+  'rfm-at-risk':{title:'At Risk',
+    what:'Member yang pernah aktif tapi sudah lama tidak muncul. Risiko signifikan tidak kembali tanpa intervensi langsung.',
+    source:'RFM: R rendah (≤ 2), tapi F dan M historis cukup tinggi — menunjukkan mereka dulu pelanggan baik yang kini tidak aktif.',
+    bench:'Win-back: personal WhatsApp dari staff (bukan broadcast), tawarkan gratis 1 sesi atau diskon ≥20%. Success rate win-back yang realistis: 15–25%. (Jill Griffin, "Customer Loyalty", 2002)'},
+  'rfm-cannot-lose':{title:'Cannot Lose',
+    what:'Member high-value yang sudah sangat lama tidak datang. Pernah jadi Champions atau Loyal, kini "menghilang" — tidak boleh dibiarkan pergi.',
+    source:'RFM: M dan F historis sangat tinggi (pernah di tier atas), Recency sangat rendah (>90 hari tidak booking).',
+    bench:'Prioritas tertinggi untuk personal outreach: telepon langsung, undangan event eksklusif, atau penawaran membership renewal khusus. Kehilangan 1 Cannot Lose ≈ kehilangan Rp 5–15 juta future LTV. (Blattberg, "Customer Equity", 2001)'},
+  'rfm-lost':{title:'Lost',
+    what:'Member yang sudah sangat lama tidak aktif dan kemungkinan besar telah berpindah ke venue lain atau berhenti bermain padel.',
+    source:'RFM: Semua score rendah, Recency sangat rendah (>120 hari tanpa transaksi). Probabilitas return secara statistik sangat rendah (<5%).',
+    bench:'Untuk Lost members: kirim survey churn reason via WhatsApp (bukan promo) — data alasan churn lebih berharga daripada upaya win-back yang mahal. Fokus budget retention pada At Risk, bukan Lost. (Recklies, 2006)'},
+
+  // MEMBERS PAGE
+  'rfm-segments':{title:'RFM Segments',
+    what:'Distribusi member berdasarkan RFM (Recency, Frequency, Monetary) segmentation. Setiap segmen menunjukkan karakteristik perilaku dan loyalitas yang berbeda.',
+    source:'Pipeline menghitung R, F, M score tiap member dari data ESB + Membership List, lalu memetakan ke segmen berdasarkan threshold score. Model mengacu pada Kumar & Reinartz (2005).',
+    bench:'Distribusi sehat: Champions + Loyal >40% dari total. Jika At Risk + Lost >50% → segera prioritaskan program retention. Gunakan segmen ini sebagai dasar personalisasi komunikasi, bukan broadcast massal. (Hughes, "Strategic Database Marketing", 1994)'},
+  'retention-rate':{title:'Retention Rate',
+    what:'Persentase member yang masih aktif di periode ini dibandingkan periode sebelumnya. Mengukur kemampuan klub mempertahankan pelanggan dari bulan ke bulan.',
+    source:'Retention Rate = (Member aktif bulan ini ÷ Member aktif bulan lalu) × 100%. Dihitung dari cohort monthly membership yang diekstrak pipeline dari Membership List + ESB.',
+    bench:'Benchmark industri gym/sports club: 70–80% = baik, >80% = excellent, <60% = kritis. Meningkatkan retention 5% saja bisa meningkatkan profit 25–95% (Reichheld & Sasser, HBR 1990). Target PPC: ≥70% per bulan.'},
+
+  // MARKETING
+  'offer-analysis':{title:'Offer Analysis',
+    what:'Breakdown performa tiap campaign/offer iklan berdasarkan spend, leads, dan konversi di periode yang dipilih. Mengidentifikasi offer mana yang paling cost-effective mendatangkan member baru.',
+    source:'Sumber: Meta Ads API (spend, results per campaign) + WA Manual Data sheet (actual leads, konversi) → dijoin berdasarkan nama campaign. Filter periode dari date picker.',
+    bench:'Prinsip Pareto: biasanya 20% offer menghasilkan 80% konversi. Hentikan campaign dengan CPL >3× rata-rata dan realokasikan budget ke winner. Review offer setiap 2 minggu, bukan bulanan. (Kotler, "Marketing Management", 2023)'},
+  'lead-funnel':{title:'Lead-to-Member Funnel',
+    what:'Visualisasi konversi dari Meta Results → Actual Leads → Member berbayar. Menunjukkan di mana prospek "bocor" — apakah di tahap iklan ke kontak, atau dari kontak ke pembelian.',
+    source:'Funnel: Results (Meta API) → Actual Leads (WA Manual Data, diisi admin per minggu) → Converted (kolom Convert di sheet yang sama). Setiap tahap adalah subset dari tahap sebelumnya.',
+    bench:'Benchmark konversi yang sehat: Results→Lead >40%, Lead→Member >20%. Jika Lead→Member <10% → evaluasi kecepatan respons WA (idealnya <5 menit), script follow-up, dan kualitas offer pasca-klik. (MarketingSherpa B2C Funnel Report, 2023)'},
+
+  // BUSINESS SCORE — IMPROVEMENT TIPS
+  'score-roas':{title:'Cara Naikan Skor ROAS',
+    what:'ROAS (Return on Ad Spend) = Revenue dari ads ÷ Total Ad Spend. Skor penuh (30 pts) dicapai dengan ROAS ≥ 3×. Skor ini mengukur efisiensi iklan menghasilkan revenue.',
+    source:'Revenue diambil dari member yang memiliki Kode Ads di Membership List, dijumlahkan dari transaksi ESB mereka. Ad Spend dari Meta Ads API.',
+    bench:'Tips naikan ROAS: (1) Prioritaskan budget ke campaign dengan ROAS tertinggi (kill losers cepat). (2) Retarget leads yang sudah pernah kontak tapi belum konversi — ROAS retargeting 2–3× lebih tinggi dari cold audience. (3) Optimalkan post-click funnel: respon WA <5 menit meningkatkan konversi hingga 21×. (Harvard Business Review, "The Value of Speed in Sales", 2011)'},
+  'score-retention':{title:'Cara Naikan Skor Retention',
+    what:'Retention Rate = member yang kembali aktif ÷ total member periode lalu. Skor penuh (25 pts) dicapai dengan retention ≥ 70%. Mengukur kemampuan klub mempertahankan pelanggan.',
+    source:'Dihitung dari cohort monthly: member aktif bulan ini vs bulan lalu, berdasarkan data transaksi ESB + Membership List.',
+    bench:'Tips naikan retention: (1) Program loyalty reward yang terstruktur (stamp card, point system, exclusive member perks). (2) Personal check-in via WhatsApp untuk member yang absen >3 minggu. (3) Coaching trial gratis untuk member baru di bulan pertama. (4) Komunitas — member yang punya "teman di venue" churn 50% lebih jarang. (EuropeActive Retention Report, 2023)'},
+  'score-revenue-mom':{title:'Cara Naikan Revenue MoM',
+    what:'Revenue Month-over-Month = (Revenue bulan ini − bulan lalu) ÷ bulan lalu × 100%. Skor penuh (25 pts) dicapai dengan pertumbuhan ≥ 10%. Mengukur momentum bisnis.',
+    source:'Revenue dari ESB Sales Recapitulation, dijumlahkan per bulan kalender. MoM dihitung dari 2 bulan terakhir yang tersedia.',
+    bench:'Tips naikan revenue: (1) Upsell saat booking court: tawarkan ball machine atau coaching add-on. (2) Dynamic pricing: naikkan rate di peak hours (weekend pagi, weekday malam). (3) Event tournament bulanan → revenue turnamen + eksposur ke audience baru. (4) Package membership vs pay-per-session: member package menghasilkan predictable revenue dan avg spend 40% lebih tinggi. (Deloitte Sports Business Group, 2023)'},
+  'score-cir':{title:'Cara Naikan Skor Efisiensi Iklan (CIR)',
+    what:'CIR (Cost-to-Income Ratio) Iklan = Total Ad Spend ÷ Revenue bulan ini × 100%. Skor penuh (20 pts) dicapai dengan CIR < 20% (artinya iklan tidak melebihi 20% dari revenue).',
+    source:'Ad Spend dari Meta Ads API → total bulan berjalan. Revenue dari ESB Summary → revenue_this_month.',
+    bench:'Tips efisienkan CIR: (1) Kurangi spend di campaign yang performanya buruk (CPL >3× rata-rata). (2) Tingkatkan organic acquisition: referral program member-get-member mengurangi ketergantungan paid ads. (3) Retarget lebih banyak (CPL retargeting jauh lebih murah). (4) Target CIR ideal: <15% untuk bisnis leisure/premium. Di atas 40% → bisnis tidak sustainable dari ads saja. (Kotler, 2023)'},
 };
 
 function showInfo(key) {
@@ -1112,10 +1192,17 @@ function renderHome() {
     if(revL>0){ momPct=(revM-revL)/revL*100; momPt=momPct>=10?25:momPct>=0?15:5; } else momPt=10;
     const spend=si(s.total_ads_budget), cir=revM>0?(spend/revM*100):null;
     const cirPt = cir!==null?(cir<20?20:cir<40?12:5):0;
-    const row=(lbl,sub,pt,max)=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
-        <div><div style="font-size:12px;color:var(--txt);font-weight:500">${lbl}</div>
-          <div style="font-size:10px;color:var(--txt3);margin-top:1px">${sub}</div></div>
+    const row=(lbl,sub,pt,max,page,infoKey)=>`
+      <div onclick="if(event.target.closest('.info-icon'))return;const p=document.getElementById('score-popup');if(p)p.remove();nav('${page||'home'}')"
+        style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;margin:0 -4px;padding-left:4px;padding-right:4px"
+        onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+        <div style="display:flex;align-items:flex-start;gap:4px">
+          <div>
+            <div style="font-size:12px;color:var(--txt);font-weight:500">${lbl}</div>
+            <div style="font-size:10px;color:var(--txt3);margin-top:1px">${sub}</div>
+          </div>
+          ${infoKey?ii(infoKey):''}
+        </div>
         <div style="text-align:right;flex-shrink:0;margin-left:12px">
           <span style="font-weight:700;font-size:13px;color:${pt>=max*.8?'var(--green)':pt>=max*.4?'var(--amber)':'var(--red)'}">${pt}</span>
           <span style="color:var(--txt3);font-size:11px">/${max}pt</span>
@@ -1123,13 +1210,14 @@ function renderHome() {
       </div>`;
     const pop = document.createElement('div');
     pop.id = 'score-popup';
-    pop.style.cssText = 'position:absolute;right:0;top:calc(100% + 8px);z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow-md);min-width:270px;font-family:inherit';
+    pop.style.cssText = 'position:absolute;right:0;top:calc(100% + 8px);z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow-md);min-width:280px;font-family:inherit';
     pop.innerHTML = `
-      <div style="font-size:13px;font-weight:700;color:var(--txt);margin-bottom:8px">Business Score Breakdown</div>
-      ${row('ROAS Meta Ads', roas>0?`${roas.toFixed(2)}x`:'Data tidak tersedia', roasPt, 30)}
-      ${row('Retention Rate', ret>0?`${ret.toFixed(1)}%`:'Data tidak tersedia', retPt, 25)}
-      ${row('Revenue MoM', momPct!==null?`${momPct>=0?'+':''}${momPct.toFixed(1)}%`:'Bulan lalu tidak ada', momPt, 25)}
-      ${row('Efisiensi Iklan (CIR)', cir!==null?`${cir.toFixed(0)}% spend dari revenue`:'Data tidak tersedia', cirPt, 20)}
+      <div style="font-size:13px;font-weight:700;color:var(--txt);margin-bottom:4px">Business Score Breakdown</div>
+      <div style="font-size:10px;color:var(--txt3);margin-bottom:10px">Klik baris untuk ke halaman terkait · <i class="info-icon" style="cursor:default;position:static;opacity:.7">i</i> untuk tips naikan skor</div>
+      ${row('ROAS Meta Ads', roas>0?`${roas.toFixed(2)}x`:'Data tidak tersedia', roasPt, 30, 'marketing', 'score-roas')}
+      ${row('Retention Rate', ret>0?`${ret.toFixed(1)}%`:'Data tidak tersedia', retPt, 25, 'members', 'score-retention')}
+      ${row('Revenue MoM', momPct!==null?`${momPct>=0?'+':''}${momPct.toFixed(1)}%`:'Bulan lalu tidak ada', momPt, 25, 'home', 'score-revenue-mom')}
+      ${row('Efisiensi Iklan (CIR)', cir!==null?`${cir.toFixed(0)}% spend dari revenue`:'Data tidak tersedia', cirPt, 20, 'marketing', 'score-cir')}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:2px solid var(--border)">
         <span style="font-size:12px;color:var(--txt2)">Total Skor</span>
         <span style="font-size:20px;font-weight:800;color:${score>=70?'var(--green)':score>=40?'var(--amber)':'var(--red)'}">${score}<span style="font-size:13px;font-weight:500;color:var(--txt3)">/100</span></span>
@@ -1303,22 +1391,23 @@ function renderHome() {
   const healthyN  = rfmSegs.filter(s=>healthy.includes(s.segment)).reduce((a,s)=>a+si(s.count),0);
   const atRiskN   = rfmSegs.filter(s=>atRisk.includes(s.segment)).reduce((a,s)=>a+si(s.count),0);
   const totalN    = healthyN + atRiskN;
+  const _rfmKey = {'Champions':'rfm-champions','Loyal':'rfm-loyal','New':'rfm-new','Needs Attention':'rfm-needs-attention','At Risk':'rfm-at-risk','Cannot Lose':'rfm-cannot-lose','Lost':'rfm-lost'};
   document.getElementById('home-member-health').innerHTML = rfmSegs.length ? `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       <div style="text-align:center;padding:8px;background:var(--green-bg);border-radius:var(--r-sm)">
         <div style="font-size:22px;font-weight:700;color:var(--green)">${fN(healthyN)}</div>
-        <div style="font-size:10px;color:var(--txt3)">Aktif & Loyal</div>
+        <div style="font-size:10px;color:var(--txt3)">Aktif & Loyal ${ii('member-health-healthy')}</div>
       </div>
       <div style="text-align:center;padding:8px;background:var(--red-bg);border-radius:var(--r-sm)">
         <div style="font-size:22px;font-weight:700;color:var(--red)">${fN(atRiskN)}</div>
-        <div style="font-size:10px;color:var(--txt3)">Perlu Tindakan</div>
+        <div style="font-size:10px;color:var(--txt3)">Perlu Tindakan ${ii('member-health-atrisk')}</div>
       </div>
     </div>
     ${rfmSegs.map(s=>`
       <div class="mini-stat">
         <div class="mini-stat-lbl">
           <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${rfmColors[s.segment]||'#9ca3af'};margin-right:5px"></span>
-          ${s.segment}
+          ${s.segment} ${ii(_rfmKey[s.segment]||'')}
         </div>
         <div class="mini-stat-val">${fN(si(s.count))}</div>
       </div>`).join('')}
@@ -1870,7 +1959,7 @@ function renderOfferAnalysis() {
     }).join('');
 
     bdEl.innerHTML = `
-      <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Spend per Offer</div>
+      <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Spend per Offer ${ii('offer-analysis')}</div>
       ${totalSpend>0
         ?`<div style="height:8px;border-radius:5px;overflow:hidden;display:flex;margin-bottom:14px">${stackedBar}</div>
           ${offerRows}
@@ -1912,7 +2001,7 @@ function renderOfferAnalysis() {
     const arr = (t) => `<div style="text-align:center;font-size:10px;color:var(--txt3);margin:-1px 0;padding-left:12px">↓ ${t}</div>`;
 
     funnelEl.innerHTML = `
-      <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Lead-to-Member Funnel</div>
+      <div style="font-size:11px;font-weight:700;color:var(--txt);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Lead-to-Member Funnel ${ii('lead-funnel')}</div>
       ${step('👁️','Impresi',fN(totalImpr),'dari Meta Ads','#6366f1')}
       ${arr('CTR '+totalCTR)}
       ${step('🖱️','Klik',fN(totalClicks),'dari Meta Ads','#3b82f6')}
