@@ -1497,9 +1497,7 @@ function renderUsageSummary() {
         </tr></thead>
         <tbody>
           ${svcRows.map(renderRow).join('')}
-          ${svcRows.length?subTotalRow('↳ Subtotal Layanan', totSvcSes, totSvcRev, 'var(--txt2)'):''}
-          ${memRows.length?memRows.map(renderRow).join(''):''}
-          ${memRows.length?subTotalRow('↳ Subtotal Keanggotaan', totMemSes, totMemRev, '#7c3aed'):''}
+          ${memRows.map(renderRow).join('')}
           <tr style="border-top:2px solid var(--border);font-weight:700;background:var(--bg)">
             <td>Total</td>
             <td class="r mono">${totAll}</td>
