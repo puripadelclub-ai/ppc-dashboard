@@ -2,11 +2,13 @@
 sheets_client.py
 Baca dan tulis data dari/ke Google Sheets.
 
-Dua sheet digunakan:
+Sheet yang digunakan:
   - PPC Dashboard Hub (SHEET_ID)        : output pipeline + raw ads/leads/avm
   - PPC Coaching Log (COACHING_SHEET_ID): input admin harian (raw_coaching)
+  - WA Manual Data   (LEADS_SHEET_ID)   : input admin leads per minggu per bulan
 """
 import os
+import re
 import json
 import pandas as pd
 import gspread
@@ -158,6 +160,114 @@ def read_actual_leads():
     df["Period_End"]   = pd.to_datetime(df["Period_End"],   errors="coerce")
     df["Actual_Leads"]     = pd.to_numeric(df.get("Actual_Leads", 0),     errors="coerce").fillna(0)
     df["Convert_Customer"] = pd.to_numeric(df.get("Convert_Customer", 0), errors="coerce").fillna(0)
+    return df
+
+
+# ── WA Manual Data Sheet (Leads per minggu, input admin) ────────────────────
+LEADS_SHEET_ID = "1uBnwUV9Eo4ntN2aSRDDFwHswPhoxpGii9FXGwgqNXZA"
+
+_MONTH_MAP = {
+    'january':1,'february':2,'march':3,'april':4,'may':5,'june':6,
+    'july':7,'august':8,'september':9,'october':10,'november':11,'december':12,
+    'jan':1,'feb':2,'mar':3,'apr':4,'jun':6,'jul':7,'aug':8,
+    'sep':9,'oct':10,'nov':11,'dec':12,
+}
+
+def _parse_period_str(s):
+    """
+    Parse period string:
+    - "18 July - 24 July 2026"
+    - "1 - 7 August 2026"
+    Returns (YYYY-MM-DD, YYYY-MM-DD) or (None, None)
+    """
+    s = s.strip().lower()
+    # "18 july - 24 july 2026"
+    m = re.search(r'(\d+)\s+(\w+)\s*[-–]\s*(\d+)\s+(\w+)\s+(\d{4})', s)
+    if m:
+        d1, mn1, d2, mn2, yr = m.groups()
+        m1, m2 = _MONTH_MAP.get(mn1), _MONTH_MAP.get(mn2)
+        if m1 and m2:
+            return (f"{yr}-{m1:02d}-{int(d1):02d}", f"{yr}-{m2:02d}-{int(d2):02d}")
+    # "1 - 7 august 2026"
+    m = re.search(r'(\d+)\s*[-–]\s*(\d+)\s+(\w+)\s+(\d{4})', s)
+    if m:
+        d1, d2, mn, yr = m.groups()
+        mn_num = _MONTH_MAP.get(mn)
+        if mn_num:
+            return (f"{yr}-{mn_num:02d}-{int(d1):02d}", f"{yr}-{mn_num:02d}-{int(d2):02d}")
+    return (None, None)
+
+
+def read_leads_from_monthly_sheet():
+    """
+    Baca WA Manual Data sheet — tab per bulan (July, August, dst).
+    Setiap tab berisi beberapa periode mingguan Sabtu–Jumat.
+    Format baris: [Period: DD Month - DD Month YYYY] lalu [Ads Campaign | Leads | Convert | Note]
+    Returns DataFrame: Ads_Campaign, Period_Start, Period_End, Actual_Leads, Convert_Customer, Note
+    """
+    try:
+        gc = get_gspread_client()
+        sh = gc.open_by_key(LEADS_SHEET_ID)
+    except Exception:
+        return pd.DataFrame()
+
+    all_records = []
+
+    for ws in sh.worksheets():
+        try:
+            raw_rows = ws.get_all_values()
+            if not raw_rows:
+                continue
+
+            period_start, period_end = None, None
+
+            for row in raw_rows:
+                if not row:
+                    continue
+                first = (row[0] or '').strip()
+
+                # Period header row (contains "Period:" or "period")
+                first_lower = first.lower()
+                if 'period' in first_lower and any(c.isdigit() for c in first):
+                    # Strip "Period:" prefix and any trailing "Ads Campaign" text
+                    period_part = re.sub(r'(?i)period\s*:', '', first).strip()
+                    # Remove "Ads Campaign" suffix if present (merged cell artifact)
+                    period_part = re.sub(r'(?i)ads\s*campaign.*$', '', period_part).strip()
+                    period_start, period_end = _parse_period_str(period_part)
+                    continue
+
+                # Skip column header rows
+                if first_lower in ('ads campaign', 'campaign', 'iklan', ''):
+                    continue
+
+                # Only process rows that look like ad names
+                if not first.startswith('['):
+                    continue
+
+                try:
+                    leads    = int(float(row[1])) if len(row) > 1 and str(row[1]).strip() not in ('', '-', '0') else (int(float(row[1])) if len(row) > 1 and str(row[1]).strip() == '0' else 0)
+                    converts = int(float(row[2])) if len(row) > 2 and str(row[2]).strip() not in ('', '-') else 0
+                    note     = str(row[3]).strip() if len(row) > 3 else ''
+                except (ValueError, TypeError):
+                    leads, converts, note = 0, 0, ''
+
+                all_records.append({
+                    'Ads_Campaign':    first,
+                    'Period_Start':    period_start,
+                    'Period_End':      period_end,
+                    'Actual_Leads':    leads,
+                    'Convert_Customer': converts,
+                    'Note':            note,
+                })
+        except Exception:
+            continue
+
+    if not all_records:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(all_records)
+    df['Actual_Leads']     = pd.to_numeric(df['Actual_Leads'],     errors='coerce').fillna(0).astype(int)
+    df['Convert_Customer'] = pd.to_numeric(df['Convert_Customer'], errors='coerce').fillna(0).astype(int)
     return df
 
 

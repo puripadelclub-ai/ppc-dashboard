@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from drive_reader import read_sales_from_drive, read_membership_from_drive, read_occupancy_benchmark
 from sheets_client import (
     read_raw_ads, read_actual_leads, read_court_pass, read_raw_coaching,
-    read_raw_programs,
+    read_raw_programs, read_leads_from_monthly_sheet,
     read_tab_as_df, write_df_to_tab, batch_read_tabs,
     TAB_RAW_ADS, TAB_ACTUAL_LEADS,
     TAB_OUT_MEMBERS, TAB_OUT_CAMPAIGNS, TAB_OUT_RFM,
@@ -173,7 +173,12 @@ def dashboard_data():
         occupancy_rows    = rows(TAB_OUT_OCCUPANCY)
         competitors_rows  = rows(TAB_OUT_COMPETITORS)
         raw_ads_rows      = rows(TAB_RAW_ADS)
-        actual_leads_rows = rows(TAB_ACTUAL_LEADS)
+        # Baca actual_leads dari WA Manual Data sheet (primary) atau fallback ke Hub Sheet tab
+        try:
+            _leads_df = read_leads_from_monthly_sheet()
+            actual_leads_rows = _leads_df.to_dict("records") if not _leads_df.empty else rows(TAB_ACTUAL_LEADS)
+        except Exception:
+            actual_leads_rows = rows(TAB_ACTUAL_LEADS)
         raw_avm_rows      = rows(TAB_RAW_AVM)
         preferences_rows  = rows(TAB_OUT_PREFERENCES)
         coaching_rows     = rows(TAB_OUT_COACHING)
