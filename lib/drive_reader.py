@@ -5,6 +5,7 @@ Membaca file Excel terbaru (Sales & Membership) dari Google Drive folder.
 import io
 import os
 import pandas as pd
+import gspread
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2.service_account import Credentials
@@ -31,6 +32,33 @@ def get_credentials():
 
 def get_drive_service():
     return build("drive", "v3", credentials=get_credentials())
+
+
+def _get_gspread_client():
+    """gspread client menggunakan credentials yang sama."""
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+    info = json.loads(creds_json)
+    creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+    return gspread.authorize(creds)
+
+
+def _read_sheet_via_gspread(file_id: str, sheet_name: str) -> pd.DataFrame:
+    """
+    Baca worksheet dari Drive xlsx via Sheets API (evaluates formulas).
+    Jauh lebih reliable daripada pd.read_excel(raw_bytes) untuk file dengan formulas.
+    """
+    gc = _get_gspread_client()
+    wb = gc.open_by_key(file_id)
+    ws = wb.worksheet(sheet_name)
+    data = ws.get_all_values()
+    if not data or len(data) < 2:
+        return pd.DataFrame()
+    headers = [str(h).strip() for h in data[0]]
+    rows = data[1:]
+    # Pad rows yang lebih pendek dari header
+    padded = [list(row) + [''] * (len(headers) - len(row)) for row in rows]
+    df = pd.DataFrame(padded, columns=headers)
+    return df
 
 
 def get_latest_file(drive_service, folder_id, name_contains):
@@ -143,17 +171,13 @@ def read_occupancy_benchmark(trend_days: int = 14) -> tuple[pd.DataFrame, pd.Dat
     latest = files[0]
     snapshot_date = _date_from_benchmark_name(latest["name"])
 
-    buf = download_excel_from_drive(latest["id"])
     try:
-        df_occ = pd.read_excel(buf, sheet_name="Occupancy")
-        df_occ.columns = [str(c).strip() for c in df_occ.columns]
-        buf.seek(0)
-        df_dv = pd.read_excel(buf, sheet_name="Demand & Value")
-        df_dv.columns = [str(c).strip() for c in df_dv.columns]
+        df_occ = _read_sheet_via_gspread(latest["id"], "Occupancy")
+        df_dv  = _read_sheet_via_gspread(latest["id"], "Demand & Value")
     except Exception as e:
-        print(f"Warning: error reading latest benchmark: {e}")
+        print(f"Warning: error reading latest benchmark via gspread: {e}")
         df_occ = pd.DataFrame()
-        df_dv = pd.DataFrame()
+        df_dv  = pd.DataFrame()
 
     if not df_occ.empty and not df_dv.empty:
         merge_cols = [c for c in ["Venue", "Rev Captured (M IDR)", "Rev Ceiling (M IDR)", "Value Capture %", "Value Index"]
@@ -164,18 +188,28 @@ def read_occupancy_benchmark(trend_days: int = 14) -> tuple[pd.DataFrame, pd.Dat
         df_competitors = df_occ.copy()
         df_competitors["snapshot_date"] = snapshot_date
 
+    # Konversi kolom numerik di df_competitors
+    for col in df_competitors.columns:
+        if col not in ("Venue", "snapshot_date"):
+            df_competitors[col] = pd.to_numeric(df_competitors[col], errors="coerce")
+
     # ── PPC trend dari trend_days file terbaru ─────────
     ppc_rows = []
     for file in files[:trend_days]:
         date_str = _date_from_benchmark_name(file["name"])
         try:
-            fbuf = download_excel_from_drive(file["id"])
-            df_day = pd.read_excel(fbuf, sheet_name="Occupancy")
-            df_day.columns = [str(c).strip() for c in df_day.columns]
+            df_day = _read_sheet_via_gspread(file["id"], "Occupancy")
 
             ppc = df_day[df_day["Venue"].str.contains(PPC_VENUE_KEYWORD, na=False)]
             if not ppc.empty:
                 row = ppc.iloc[0].to_dict()
+                # Convert numeric values
+                for k, v in row.items():
+                    if k != "Venue":
+                        try:
+                            row[k] = float(v) if v != '' else None
+                        except (ValueError, TypeError):
+                            pass
                 row["date"] = date_str
                 ppc_rows.append(row)
         except Exception as e:
