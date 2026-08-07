@@ -947,9 +947,6 @@ document.addEventListener('keydown', e => { if(e.key==='Escape') closeInfo(); })
 // Helper: info icon HTML
 const ii = k => `<i class="info-icon" onclick="event.stopPropagation();showInfo('${k}')">i</i>`;
 
-// ── STATE ──────────────────────────────────────────
-let D = null; // global data
-let currentPage = 'home';
 let memberPage = 0;
 const MEMBERS_PER_PAGE = 50;
 let filteredMembers = [];
