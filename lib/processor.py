@@ -607,7 +607,9 @@ def calculate_summary(fd, rev_monthly, df_ads, df_sales=None):
         if spent_col:
             total_budget = pd.to_numeric(df_ads[spent_col], errors="coerce").sum()
 
-    overall_roas = round(total_spending / total_budget, 2) if total_budget > 0 else 0
+    # ROAS = revenue dari member yang datang via ads / total ad spend
+    ads_member_spending = fd[fd["Source Type"] == "ADS Campaign"]["total_spending"].sum()
+    overall_roas = round(ads_member_spending / total_budget, 2) if total_budget > 0 else 0
 
     ads_members = fd[fd["Source Type"] == "ADS Campaign"]["Member Name"].count()
 

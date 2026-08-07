@@ -641,8 +641,18 @@ body{
         <!-- Weekly mini-KPIs -->
         <div id="mkt-week-kpis" style="display:grid;grid-template-columns:repeat(5,1fr);gap:0;border-bottom:1px solid var(--border)"></div>
         <div style="overflow-x:auto;padding:0 0 12px"><div id="mkt-camp-tbl"></div></div>
-        <div style="padding:8px 16px 12px;font-size:10px;color:var(--txt3);font-style:italic;border-top:1px solid var(--border)">
-          Status: WINNER / MONITOR / KILLED / BARU otomatis dari Meta Ads. Result &amp; CPR = metrik native Meta; Actual Leads &amp; Converts = dari tab <em>actual_leads</em>.
+        <div style="padding:10px 16px 14px;border-top:1px solid var(--border)">
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            <span style="background:#16a34a;color:#fff;padding:3px 8px;border-radius:4px;font-size:10.5px;font-weight:700">WINNER</span>
+            <span style="font-size:10px;color:var(--txt2);align-self:center;margin-right:8px">Results ≥ 3 &amp; lebih baik dari minggu lalu → scale budget +20–30%</span>
+            <span style="background:#d97706;color:#fff;padding:3px 8px;border-radius:4px;font-size:10.5px;font-weight:700">MONITOR</span>
+            <span style="font-size:10px;color:var(--txt2);align-self:center;margin-right:8px">Aktif tapi belum perform → tunggu 3–5 hari atau ganti creative</span>
+            <span style="background:#dc2626;color:#fff;padding:3px 8px;border-radius:4px;font-size:10.5px;font-weight:700">KILLED</span>
+            <span style="font-size:10px;color:var(--txt2);align-self:center;margin-right:8px">Spend = 0 minggu ini → analisis penyebab sebelum reaktivasi</span>
+            <span style="background:#2563eb;color:#fff;padding:3px 8px;border-radius:4px;font-size:10.5px;font-weight:700">BARU</span>
+            <span style="font-size:10px;color:var(--txt2);align-self:center">Campaign baru → jangan ubah budget/targeting di learning phase (3–5 hari)</span>
+          </div>
+          <div style="font-size:10px;color:var(--txt3);font-style:italic">Status dihitung oleh dashboard dari perbandingan data minggu ini vs minggu lalu (bukan label dari Meta Ads Manager). Result &amp; CPR = metrik native Meta; Actual Leads &amp; Converts = dari tab <em>actual_leads</em>. Klik <i class="info-icon" style="cursor:default;position:static;opacity:.7;font-size:9px">i</i> di header Status untuk detail lengkap.</div>
         </div>
       </div>
     </div>
@@ -1004,6 +1014,37 @@ const METRIC_INFO = {
     what:'CIR (Cost-to-Income Ratio) Iklan = Total Ad Spend ÷ Revenue bulan ini × 100%. Skor penuh (20 pts) dicapai dengan CIR < 20% (artinya iklan tidak melebihi 20% dari revenue).',
     source:'Ad Spend dari Meta Ads API → total bulan berjalan. Revenue dari ESB Summary → revenue_this_month.',
     bench:'Tips efisienkan CIR: (1) Kurangi spend di campaign yang performanya buruk (CPL >3× rata-rata). (2) Tingkatkan organic acquisition: referral program member-get-member mengurangi ketergantungan paid ads. (3) Retarget lebih banyak (CPL retargeting jauh lebih murah). (4) Target CIR ideal: <15% untuk bisnis leisure/premium. Di atas 40% → bisnis tidak sustainable dari ads saja. (Kotler, 2023)'},
+
+  // ── WEEKLY ADS KPIs ─────────────────────────────
+  'wk-spend':{title:'Ad Spend Mingguan',
+    what:'Total uang yang dibelanjakan ke Meta Ads (Facebook/Instagram) dalam minggu yang dipilih. Mencakup semua campaign aktif di akun.',
+    source:'Meta Ads Insights API → field "spend". Dijumlahkan dari seluruh ad level dalam minggu Sabtu–Jumat.',
+    bench:'Best practice: Spend ideal ~15–25% dari projected revenue untuk bisnis premium. Jaga agar CIR (Cost-to-Income Ratio) di bawah 20%. Naikkan budget bertahap (+20–30%/minggu) saat ada campaign WINNER, jangan langsung dobel karena bisa ganggu algoritma Meta. (Meta Business, 2024)'},
+  'wk-impresi':{title:'Impresi & CTR',
+    what:'Impresi = berapa kali iklan ditampilkan ke audiens (termasuk tayangan berulang ke orang yang sama). CTR (Click-Through Rate) = Klik ÷ Impresi × 100%.',
+    source:'Meta Ads Insights API → fields "impressions" dan "clicks". Data per ad name, dijumlahkan per minggu.',
+    bench:'CTR benchmark untuk niche olahraga/leisure Indonesia: 1–3% dianggap normal. Di atas 3% = iklan sangat relevan. Di bawah 0.5% = creative perlu diganti. CTR rendah tapi CPR bagus = mungkin targeting terlalu sempit tapi tepat sasaran. (Wordstream, 2024)'},
+  'wk-klik':{title:'Klik Mingguan',
+    what:'Total klik pada iklan, biasanya mengarah ke WhatsApp, link profil Instagram, atau landing page. Klik berbeda dengan reach — satu orang bisa klik lebih dari satu kali.',
+    source:'Meta Ads Insights API → field "clicks". Mencakup semua klik pada iklan termasuk link clicks dan profile visits.',
+    bench:'Klik yang sehat menghasilkan lead. Rasio Klik-ke-Lead (Lead Rate) ideal: 5–15%. Di bawah 5% = landing page atau CTA kurang menarik. Pastikan klik mengarah ke WhatsApp yang responsif — response time >1 jam dapat kehilangan 60% calon member. (HubSpot, 2023)'},
+  'wk-results':{title:'Results & CPR',
+    what:'Results = jumlah konversi yang dihitung Meta sesuai objective campaign (biasanya "Lead" dari Lead Form atau "Message" dari WhatsApp). CPR (Cost Per Result) = Spend ÷ Results.',
+    source:'Meta Ads Insights API → fields "results" dan "cost_per_result". Ini adalah data native Meta, bukan leads aktual yang tercatat di sheet.',
+    bench:'CPR benchmark untuk bisnis padel/premium olahraga: CPR < Rp 50.000 = sangat efisien. Rp 50–150rb = normal. > Rp 200rb = perlu evaluasi. Bedakan "Result" Meta (tracking pixel) vs "Actual Lead" (konfirmasi manual) — Meta sering over-count hingga 30% akibat iOS privacy changes. (AppsFlyer, 2024)'},
+  'ads-status':{title:'Status Ads Mingguan',
+    what:`Status dihitung otomatis oleh dashboard dari data Meta Ads minggu ini vs minggu lalu — bukan label dari Meta Ads Manager.
+
+🏆 WINNER: Campaign aktif, Results ≥ 3 dan lebih tinggi dari minggu lalu dengan CPR yang lebih baik, atau Results ≥ 5 dengan CPR < Rp200rb.
+📊 MONITOR: Campaign aktif tapi belum memenuhi kriteria WINNER — bisa karena minggu pertama, spend rendah, atau performa campuran.
+💀 KILLED: Spend = 0 minggu ini padahal ada spend di minggu lalu — campaign dimatikan atau dipaused.
+🆕 BARU: Spend > 0 minggu ini tapi tidak ada spend di minggu lalu — campaign baru diluncurkan.`,
+    source:'Logika JS dashboard membandingkan data minggu ini (weekMap[currentWeek]) vs minggu lalu (weekMap[prevWeek]). Data bersumber dari Meta Ads API via /api/fetch-ads.',
+    bench:`What's next per status:
+• WINNER → Scale budget +20–30%. Duplikat ad set untuk audience baru (lookalike). Jangan ubah creative yang sedang perform.
+• MONITOR → Tunggu 3–5 hari lagi jika BARU. Coba ganti creative atau headline jika sudah >7 hari tanpa result. Periksa frekuensi: jika >3 berarti audiens mulai bosan.
+• KILLED → Analisis kenapa dimatikan. Jika CPR tinggi: pertimbangkan retarget audience atau ubah offer. Jika budget habis: review anggaran mingguan.
+• BARU → Beri waktu 3–5 hari untuk learning phase Meta. Jangan ubah budget atau targeting di fase ini. Pantau CPR vs benchmark setelah 50+ impresi.`},
 };
 
 function showInfo(key) {
@@ -1744,6 +1785,13 @@ function renderMarketing() {
     spendByMonth[ds]=(spendByMonth[ds]||0)+sf(r.Spend||r.budget_spent||r['Amount Spent']||0);
   });
 
+  // Convert customers per month dari actual_leads
+  const convertsByMonth = {};
+  (D.actual_leads||[]).forEach(r=>{
+    const pEnd = (r.Period_End||'').toString().slice(0,7);
+    if(pEnd && pEnd.length===7) convertsByMonth[pEnd] = (convertsByMonth[pEnd]||0) + Math.max(0,+(r.Convert_Customer||0));
+  });
+
   const rev6 = rev.filter(r=>{const m=r.Month||r.month||''; return m&&m!=='NaT'&&m!=='nan';}).slice(-6);
   destroyChart('chart-mkt-trend');
   CHARTS['chart-mkt-trend'] = new Chart(document.getElementById('chart-mkt-trend'),{
@@ -1751,13 +1799,19 @@ function renderMarketing() {
     data:{
       labels: rev6.map(r=>r.Month||r.month||''),
       datasets:[
-        {label:'Revenue',data:rev6.map(r=>si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0)),borderColor:'#034842',backgroundColor:'rgba(3,72,66,0.08)',fill:true,tension:0.3,yAxisID:'y'},
+        {label:'Revenue (ESB)',data:rev6.map(r=>si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0)),borderColor:'#034842',backgroundColor:'rgba(3,72,66,0.08)',fill:true,tension:0.3,yAxisID:'y'},
         {label:'Spend Ads',data:rev6.map(r=>(spendByMonth[(r.Month||r.month||'').slice(0,7)]||0)),borderColor:'#dc2626',backgroundColor:'rgba(220,38,38,0.05)',fill:true,tension:0.3,yAxisID:'y'},
+        {label:'Convert Member',data:rev6.map(r=>(convertsByMonth[(r.Month||r.month||'').slice(0,7)]||0)),borderColor:'#2563eb',backgroundColor:'rgba(37,99,235,0.07)',fill:false,tension:0.3,yAxisID:'y2',borderDash:[4,3],pointRadius:4,pointBackgroundColor:'#2563eb'},
       ]
     },
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{position:'top',labels:{font:{size:11},boxWidth:10}}},
-      scales:{y:{ticks:{callback:v=>fIDR(v)},grid:{color:'rgba(0,0,0,0.04)'}},x:{grid:{display:false}}}}
+      scales:{
+        y:{ticks:{callback:v=>fIDR(v)},grid:{color:'rgba(0,0,0,0.04)'},title:{display:true,text:'Revenue / Spend',font:{size:10},color:'var(--txt3)'}},
+        y2:{position:'right',ticks:{stepSize:1,callback:v=>v+' member'},grid:{display:false},title:{display:true,text:'Convert Member',font:{size:10},color:'#2563eb'}},
+        x:{grid:{display:false}}
+      }
+    }
   });
 
   // ── Helper: status iklan dari raw_ads ──────────────
@@ -2158,18 +2212,18 @@ function renderWeeklyAdsTable(weekKey) {
   const wkClicks  = Object.values(wData).reduce((s,d)=>s+d.clicks,0);
   const wkCTR     = wkImpr>0?(wkClicks/wkImpr*100):0;
   const wkCPR     = wkResults>0&&wkSpend>0?wkSpend/wkResults:0;
-  const mkpi = (lbl,val,sub='') => `
+  const mkpi = (lbl,val,sub='',infoKey='') => `
     <div style="padding:12px 16px;border-right:1px solid var(--border)">
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);margin-bottom:4px">${lbl}</div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);margin-bottom:4px;display:flex;align-items:center;gap:4px">${lbl}${infoKey?ii(infoKey):''}</div>
       <div style="font-size:18px;font-weight:700;color:var(--txt);letter-spacing:-.3px">${val}</div>
       ${sub?`<div style="font-size:10px;color:var(--txt3);margin-top:2px">${sub}</div>`:''}
     </div>`;
   const weekKpisEl = document.getElementById('mkt-week-kpis');
   if(weekKpisEl) weekKpisEl.innerHTML =
-    mkpi('Spend', fIDR(wkSpend)) +
-    mkpi('Impresi', fN(wkImpr), `CTR ${wkCTR.toFixed(2)}%`) +
-    mkpi('Klik', fN(wkClicks)) +
-    mkpi('Results', fN(wkResults), wkResults>0?`CPR ${fIDR(wkCPR)}`:'') +
+    mkpi('Spend', fIDR(wkSpend), '', 'wk-spend') +
+    mkpi('Impresi', fN(wkImpr), `CTR ${wkCTR.toFixed(2)}%`, 'wk-impresi') +
+    mkpi('Klik', fN(wkClicks), '', 'wk-klik') +
+    mkpi('Results', fN(wkResults), wkResults>0?`CPR ${fIDR(wkCPR)}`:'', 'wk-results') +
     `<div style="padding:12px 16px">
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--txt3);margin-bottom:4px">Aktif Ads</div>
       <div style="font-size:18px;font-weight:700;color:var(--txt);letter-spacing:-.3px">${rows.filter(r=>r.status!=='KILLED').length}</div>
@@ -2195,7 +2249,7 @@ function renderWeeklyAdsTable(weekKey) {
       <th style="${TH}">Actual<br>Leads${ii('actual-leads')}</th>
       <th style="${TH}">CAC${ii('cac')}</th>
       <th style="${TH}">Convert<br>Customers</th>
-      <th style="${THL};min-width:140px">Status</th>
+      <th style="${THL};min-width:140px">Status${ii('ads-status')}</th>
       <th style="${THL};min-width:220px">Note</th>
     </tr></thead>
     <tbody>${rows.map((r,i)=>{
