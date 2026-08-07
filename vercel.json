@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "crons": [
+    {
+      "path": "/api/fetch-ads",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/process",
+      "schedule": "30 0 * * *"
+    }
+  ]
+}

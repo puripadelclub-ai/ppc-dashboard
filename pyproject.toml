@@ -1,0 +1,17 @@
+[project]
+name = "ppc-dashboard"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "flask==3.0.3",
+    "pandas==2.2.2",
+    "numpy==1.26.4",
+    "openpyxl==3.1.2",
+    "google-auth==2.29.0",
+    "google-api-python-client==2.128.0",
+    "gspread==6.1.2",
+    "requests==2.32.3",
+]
+
+[tool.vercel]
+entrypoint = "api.process:app"
