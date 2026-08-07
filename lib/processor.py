@@ -605,10 +605,17 @@ def calculate_summary(fd, rev_monthly, df_ads, df_sales=None):
     if not df_ads.empty:
         spent_col = next((c for c in df_ads.columns if "budget_spent" in c.lower() or "amount spent" in c.lower()), None)
         if spent_col:
-            total_budget = pd.to_numeric(df_ads[spent_col], errors="coerce").sum()
+            # Filter ke bulan ini agar ROAS = revenue bulan ini ÷ spend bulan ini
+            date_col = next((c for c in df_ads.columns if c.lower() in ("date", "week_start", "week", "report_date")), None)
+            if date_col:
+                _df_ads_m = df_ads.copy()
+                _df_ads_m["_ym"] = pd.to_datetime(_df_ads_m[date_col], errors="coerce").dt.to_period("M").astype(str)
+                _df_ads_m = _df_ads_m[_df_ads_m["_ym"] == current_month]
+                total_budget = pd.to_numeric(_df_ads_m[spent_col], errors="coerce").sum() if not _df_ads_m.empty else 0
+            if total_budget == 0:  # fallback jika date_col tidak ditemukan
+                total_budget = pd.to_numeric(df_ads[spent_col], errors="coerce").sum()
 
     # Blended ROAS = Revenue bulan ini (ESB) ÷ Total Ad Spend bulan ini
-    # Tidak bergantung pada name-matching — lebih stabil & representatif untuk bisnis leisure
     overall_roas = round(float(rev_this) / total_budget, 2) if total_budget > 0 else 0
 
     ads_members = fd[fd["Source Type"] == "ADS Campaign"]["Member Name"].count()

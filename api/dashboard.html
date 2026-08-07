@@ -1769,9 +1769,6 @@ function renderMarketing() {
   const effectiveSpend = rawTotalSpend>0 ? rawTotalSpend : si(s.total_ads_budget);
   const effectiveRoas  = effectiveSpend>0 ? si(s.total_spending||s.revenue_this_month||0)/effectiveSpend : sf(s.overall_roas);
 
-  // ROAS: only show if reasonable (pipeline-calculated, not revenue_this_month / spend)
-  const pipelineRoas = sf(s.overall_roas);
-  const roasDisplay = pipelineRoas>0 ? pipelineRoas.toFixed(2)+'x' : '—';
   const totalResults = rawTotalRes;
   const avgCPR = totalResults>0&&rawTotalSpend>0 ? fIDR(rawTotalSpend/totalResults) : '—';
   // KPI row rendered after adData is built (nActive needs adData)
@@ -1784,6 +1781,19 @@ function renderMarketing() {
     if(!ds||ds.length<7) return;
     spendByMonth[ds]=(spendByMonth[ds]||0)+sf(r.Spend||r.budget_spent||r['Amount Spent']||0);
   });
+
+  // Blended ROAS = Revenue bulan ini ÷ Spend bulan ini (dari raw_ads — tidak perlu pipeline re-run)
+  const currentMonthStr = todayLocal().slice(0,7);
+  const currentMonthSpend = spendByMonth[currentMonthStr]||0;
+  const revThisMonth = si(s.revenue_this_month)||0;
+  const pipelineRoas = sf(s.overall_roas);
+  // Prefer pipeline value if available, else compute directly from raw data
+  const computedRoas = currentMonthSpend>0&&revThisMonth>0 ? revThisMonth/currentMonthSpend : 0;
+  const roasVal = pipelineRoas>0 ? pipelineRoas : computedRoas;
+  const roasDisplay = roasVal>0 ? roasVal.toFixed(1)+'x' : '—';
+  const roasSub = roasVal>0
+    ? (currentMonthSpend>0 ? `${fIDR(revThisMonth)} ÷ ${fIDR(currentMonthSpend)} spend` : 'dari pipeline')
+    : 'jalankan /api/process';
 
   // Convert customers per month dari actual_leads
   const convertsByMonth = {};
@@ -1881,7 +1891,7 @@ function renderMarketing() {
   // ── KPI row (needs adData for nActive) ─────────────
   const nActive = adData.filter(a=>a.status.active).length;
   document.getElementById('mkt-kpi-row').innerHTML = `
-    <div class="kpi accent"><div class="kpi-lbl">ROAS${ii('roas')}</div><div class="kpi-val">${roasDisplay}</div><div class="kpi-d"><span style="color:var(--txt3)">dari pipeline atribusi</span></div></div>
+    <div class="kpi accent"><div class="kpi-lbl">ROAS${ii('roas')}</div><div class="kpi-val">${roasDisplay}</div><div class="kpi-d"><span style="color:var(--txt3)">${roasSub}</span></div></div>
     <div class="kpi"><div class="kpi-lbl">Total Results${ii('total-results')}</div><div class="kpi-val">${fN(totalResults)}</div><div class="kpi-d"><span style="color:var(--txt3)">CPR avg ${avgCPR}</span></div></div>
     <div class="kpi"><div class="kpi-lbl">Member dari Ads${ii('member-dari-ads')}</div><div class="kpi-val">${fN(si(s.ads_members))}</div><div class="kpi-d"><span style="color:var(--txt3)">${nActive} ads aktif</span></div></div>
   `;
