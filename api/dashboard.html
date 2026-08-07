@@ -1435,15 +1435,16 @@ function renderUsageSummary() {
   });
 
   // Booking type definitions (AVM codes → label)
-  // memberBenefit:true → sesi ini selalu free di AVM karena sudah termasuk benefit keanggotaan
+  // memberBenefit:true  → selalu free (benefit member, total_price=0)
+  // membershipFee:true  → total_price di AVM = biaya keanggotaan, bukan sewa lapangan
   const usageDef = [
     { codes:['REGULAR','CO','FT'], label:'Court Rent',             icon:'🏓' },
     { codes:['BP1'],               label:'Ball Machine Baru (BP1)',icon:'🎾', memberBenefit:true },
     { codes:['BP2'],               label:'Ball Machine Lama (BP2)',icon:'🎾', memberBenefit:true },
     { codes:['BP'],                label:'Ball Machine',           icon:'🎾', memberBenefit:true },
     { codes:['CBA'],               label:'Coaching',               icon:'👨‍🏫' },
-    { codes:['R'],                 label:'Reclub Aktif',           icon:'♻️' },
-    { codes:['RX'],                label:'Reclub Tidak Aktif',     icon:'⏸️' },
+    { codes:['R'],                 label:'Reclub Aktif',           icon:'♻️',  membershipFee:true },
+    { codes:['RX'],                label:'Reclub Tidak Aktif',     icon:'⏸️',  membershipFee:true },
   ];
 
   const rows = usageDef.map(def => {
@@ -1456,12 +1457,35 @@ function renderUsageSummary() {
     return { ...def, total:recs.length, paid, free, rev };
   }).filter(Boolean);
 
-  const totAll  = rawAvm.length;
-  const totPaid = rawAvm.filter(r=>sf(r.total_price)>0).length;
-  const totFree = totAll - totPaid;
-  const totRev  = rows.reduce((s,r)=>s+r.rev, 0);
+  const totAll   = rawAvm.length;
+  const totPaid  = rawAvm.filter(r=>sf(r.total_price)>0).length;
+  const totFree  = totAll - totPaid;
+  const svcRows  = rows.filter(r=>!r.membershipFee);
+  const memRows  = rows.filter(r=>r.membershipFee);
+  const totSvcRev = svcRows.reduce((s,r)=>s+r.rev,0);
+  const totMemRev = memRows.reduce((s,r)=>s+r.rev,0);
+  const totSvcSes = svcRows.reduce((s,r)=>s+r.total,0);
+  const totMemSes = memRows.reduce((s,r)=>s+r.total,0);
 
-  const benefitTag = `<span style="font-size:9px;font-weight:600;color:#059669;background:#d1fae5;border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">benefit</span>`;
+  const benefitTag    = `<span style="font-size:9px;font-weight:600;color:#059669;background:#d1fae5;border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">benefit</span>`;
+  const membershipTag = `<span style="font-size:9px;font-weight:600;color:#7c3aed;background:#ede9fe;border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">membership</span>`;
+
+  const renderRow = r => `<tr${r.memberBenefit?' style="background:rgba(5,150,105,.04)"':r.membershipFee?' style="background:rgba(124,58,237,.03)"':''}>
+    <td>${r.icon} ${r.label}${r.memberBenefit?benefitTag:r.membershipFee?membershipTag:''}</td>
+    <td class="r mono"><b>${r.total}</b></td>
+    <td class="r mono">${r.memberBenefit?`<span style="color:var(--txt3);font-size:10px">—</span>`:r.paid>0?r.paid:'—'}</td>
+    <td class="r mono">${r.free>0?`<span style="color:${r.memberBenefit?'#059669':'inherit'}">${r.free}</span>`:'—'}</td>
+    <td class="r mono">${r.rev>0?fIDR(r.rev):'—'}</td>
+  </tr>`;
+
+  const subTotalRow = (lbl, ses, rev, color) => `
+    <tr style="border-top:1px dashed var(--border);font-size:11px;color:${color};background:var(--bg)">
+      <td style="font-weight:600">${lbl}</td>
+      <td class="r mono" style="font-weight:600">${ses}</td>
+      <td class="r mono" colspan="2" style="color:var(--txt3);font-size:10px">—</td>
+      <td class="r mono" style="font-weight:600">${rev>0?fIDR(rev):'—'}</td>
+    </tr>`;
+
   document.getElementById('ops-usage-tbl').innerHTML = rows.length
     ? `<table class="tbl">
         <thead><tr>
@@ -1469,26 +1493,26 @@ function renderUsageSummary() {
           <th class="r">Sesi</th>
           <th class="r">Paid</th>
           <th class="r">Free</th>
-          <th class="r">Revenue <span style="font-weight:400;font-size:9px;color:var(--txt3)">(ESB)</span></th>
+          <th class="r">Revenue <span style="font-weight:400;font-size:9px;color:var(--txt3)">(AVM)</span></th>
         </tr></thead>
-        <tbody>${rows.map(r=>`<tr${r.memberBenefit?' style="background:rgba(5,150,105,.04)"':''}>
-          <td>${r.icon} ${r.label}${r.memberBenefit?benefitTag:''}</td>
-          <td class="r mono"><b>${r.total}</b></td>
-          <td class="r mono">${r.memberBenefit?`<span style="color:var(--txt3);font-size:10px">—</span>`:r.paid>0?r.paid:'—'}</td>
-          <td class="r mono">${r.free>0?`<span style="color:${r.memberBenefit?'#059669':'inherit'}">${r.free}</span>`:'—'}</td>
-          <td class="r mono">${r.rev>0?fIDR(r.rev):'—'}</td>
-        </tr>`).join('')}
-        <tr style="border-top:2px solid var(--border);font-weight:700;background:var(--bg)">
-          <td>Total</td>
-          <td class="r mono">${totAll}</td>
-          <td class="r mono">${totPaid}</td>
-          <td class="r mono">${totFree}</td>
-          <td class="r mono">${fIDR(totRev)}</td>
-        </tr></tbody>
+        <tbody>
+          ${svcRows.map(renderRow).join('')}
+          ${svcRows.length?subTotalRow('↳ Subtotal Layanan', totSvcSes, totSvcRev, 'var(--txt2)'):''}
+          ${memRows.length?memRows.map(renderRow).join(''):''}
+          ${memRows.length?subTotalRow('↳ Subtotal Keanggotaan', totMemSes, totMemRev, '#7c3aed'):''}
+          <tr style="border-top:2px solid var(--border);font-weight:700;background:var(--bg)">
+            <td>Total</td>
+            <td class="r mono">${totAll}</td>
+            <td class="r mono">${totPaid}</td>
+            <td class="r mono">${totFree}</td>
+            <td class="r mono">${fIDR(totSvcRev+totMemRev)}</td>
+          </tr>
+        </tbody>
       </table>
-      <div style="font-size:10px;color:var(--txt3);padding:6px 0 2px;line-height:1.5">
-        Sesi · Paid · Free · Revenue semua dihitung dari AVM periode yang dipilih<br>
-        <span style="color:#059669">●</span> <b>benefit</b> = Ball Machine selalu free di AVM (hak akses member). Revenue-nya Rp0 karena tidak dicharge per sesi — sudah termasuk dalam membership. Dalam 1 booking, court tercatat <i>paid</i> dan ball machine tercatat <i>free</i> secara terpisah.
+      <div style="font-size:10px;color:var(--txt3);padding:6px 0 2px;line-height:1.6">
+        Semua kolom dari AVM periode yang dipilih &nbsp;·&nbsp; Revenue AVM ≠ Revenue ESB (Home) karena sistem berbeda<br>
+        <span style="color:#059669">●</span> <b>benefit</b> = Ball Machine free (hak akses member) · court tercatat <i>paid</i>, BM tercatat <i>free</i> secara terpisah<br>
+        <span style="color:#7c3aed">●</span> <b>membership</b> = Reclub (R/RX) — <i>total_price</i> di AVM mencatat biaya keanggotaan, bukan sewa court. Bandingkan "Subtotal Layanan" dengan revenue Home untuk konsistensi.
       </div>`
     : `<div style="color:var(--txt3);padding:16px;font-size:13px">Tidak ada data untuk periode ini</div>`;
 }
