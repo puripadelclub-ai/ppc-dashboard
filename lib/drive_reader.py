@@ -13,7 +13,7 @@ import json
 
 
 SCOPES = [
-    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive",  # full — needed for files.copy + files.delete
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
@@ -42,23 +42,55 @@ def _get_gspread_client():
     return gspread.authorize(creds)
 
 
-def _read_sheet_via_gspread(file_id: str, sheet_name: str) -> pd.DataFrame:
-    """
-    Baca worksheet dari Drive xlsx via Sheets API (evaluates formulas).
-    Jauh lebih reliable daripada pd.read_excel(raw_bytes) untuk file dengan formulas.
-    """
-    gc = _get_gspread_client()
-    wb = gc.open_by_key(file_id)
+def _ws_to_df(wb: "gspread.Spreadsheet", sheet_name: str) -> pd.DataFrame:
+    """Convert gspread worksheet ke DataFrame."""
     ws = wb.worksheet(sheet_name)
     data = ws.get_all_values()
     if not data or len(data) < 2:
         return pd.DataFrame()
     headers = [str(h).strip() for h in data[0]]
     rows = data[1:]
-    # Pad rows yang lebih pendek dari header
     padded = [list(row) + [''] * (len(headers) - len(row)) for row in rows]
-    df = pd.DataFrame(padded, columns=headers)
-    return df
+    return pd.DataFrame(padded, columns=headers)
+
+
+def _copy_xlsx_as_sheet(drive_service, file_id: str) -> str:
+    """
+    Copy Drive xlsx sebagai native Google Sheet (Google evaluate semua formula saat convert).
+    Returns temp_sheet_id — caller HARUS delete setelah selesai via:
+        drive_service.files().delete(fileId=temp_id).execute()
+    """
+    resp = drive_service.files().copy(
+        fileId=file_id,
+        body={
+            "name": f"_tmp_benchmark_{file_id}",
+            "mimeType": "application/vnd.google-apps.spreadsheet",
+        },
+    ).execute()
+    return resp["id"]
+
+
+def _read_xlsx_sheets(drive_service, gc, file_id: str, sheet_names: list) -> dict:
+    """
+    Baca beberapa worksheet dari xlsx Drive dalam 1 copy+read+delete cycle.
+    Returns dict {sheet_name: DataFrame}.
+    """
+    temp_id = _copy_xlsx_as_sheet(drive_service, file_id)
+    result = {}
+    try:
+        wb = gc.open_by_key(temp_id)
+        for name in sheet_names:
+            try:
+                result[name] = _ws_to_df(wb, name)
+            except Exception as e:
+                print(f"Warning: sheet '{name}' not found in {file_id}: {e}")
+                result[name] = pd.DataFrame()
+    finally:
+        try:
+            drive_service.files().delete(fileId=temp_id).execute()
+        except Exception:
+            pass
+    return result
 
 
 def get_latest_file(drive_service, folder_id, name_contains):
@@ -162,20 +194,23 @@ def read_occupancy_benchmark(trend_days: int = 14) -> tuple[pd.DataFrame, pd.Dat
       df_ppc_trend  — trend PPC selama trend_days hari terakhir
     """
     drive_service = get_drive_service()
+    gc = _get_gspread_client()
     files = list_benchmark_files(drive_service, OCCUPANCY_FOLDER_ID, limit=max(trend_days + 2, 30))
 
     if not files:
         return pd.DataFrame(), pd.DataFrame()
 
     # ── Competitor snapshot dari file terbaru ──────────
+    # Copy xlsx → native Google Sheet agar Google evaluate semua formula
     latest = files[0]
     snapshot_date = _date_from_benchmark_name(latest["name"])
 
     try:
-        df_occ = _read_sheet_via_gspread(latest["id"], "Occupancy")
-        df_dv  = _read_sheet_via_gspread(latest["id"], "Demand & Value")
+        sheets = _read_xlsx_sheets(drive_service, gc, latest["id"], ["Occupancy", "Demand & Value"])
+        df_occ = sheets.get("Occupancy", pd.DataFrame())
+        df_dv  = sheets.get("Demand & Value", pd.DataFrame())
     except Exception as e:
-        print(f"Warning: error reading latest benchmark via gspread: {e}")
+        print(f"Warning: error reading latest benchmark: {e}")
         df_occ = pd.DataFrame()
         df_dv  = pd.DataFrame()
 
@@ -194,16 +229,21 @@ def read_occupancy_benchmark(trend_days: int = 14) -> tuple[pd.DataFrame, pd.Dat
             df_competitors[col] = pd.to_numeric(df_competitors[col], errors="coerce")
 
     # ── PPC trend dari trend_days file terbaru ─────────
+    # File pertama (latest) sudah punya df_occ — ekstrak PPC tanpa copy ulang
     ppc_rows = []
-    for file in files[:trend_days]:
+    for i, file in enumerate(files[:trend_days]):
         date_str = _date_from_benchmark_name(file["name"])
         try:
-            df_day = _read_sheet_via_gspread(file["id"], "Occupancy")
+            if i == 0 and not df_occ.empty:
+                # Reuse df_occ yang sudah dibaca dari latest file
+                df_day = df_occ
+            else:
+                day_sheets = _read_xlsx_sheets(drive_service, gc, file["id"], ["Occupancy"])
+                df_day = day_sheets.get("Occupancy", pd.DataFrame())
 
             ppc = df_day[df_day["Venue"].str.contains(PPC_VENUE_KEYWORD, na=False)]
             if not ppc.empty:
                 row = ppc.iloc[0].to_dict()
-                # Convert numeric values
                 for k, v in row.items():
                     if k != "Venue":
                         try:
