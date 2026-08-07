@@ -1434,24 +1434,16 @@ function renderUsageSummary() {
     return true;
   });
 
-  // ESB helper: revenue for a set of Menu_Codes OR a Menu_Category
-  const esbRevByCodes = codes => prods
-    .filter(r=>codes.includes((r.Menu_Code||'').toUpperCase()))
-    .reduce((s,r)=>s+sf(r.Total_Revenue),0);
-  const esbRevByCat = cat => prods
-    .filter(r=>(r.Menu_Category||'').toUpperCase()===cat.toUpperCase())
-    .reduce((s,r)=>s+sf(r.Total_Revenue),0);
-
-  // Booking type definitions (AVM codes → label + ESB mapping)
+  // Booking type definitions (AVM codes → label)
   // memberBenefit:true → sesi ini selalu free di AVM karena sudah termasuk benefit keanggotaan
   const usageDef = [
-    { codes:['REGULAR','CO','FT'], label:'Court Rent',             icon:'🏓', esbCat:'COURT RENT' },
-    { codes:['BP1'],               label:'Ball Machine Baru (BP1)',icon:'🎾', esbCodes:['BP1'], memberBenefit:true },
-    { codes:['BP2'],               label:'Ball Machine Lama (BP2)',icon:'🎾', esbCodes:['BP2'], memberBenefit:true },
-    { codes:['BP'],                label:'Ball Machine',           icon:'🎾', esbCat:'BALL MACHINE', memberBenefit:true },
-    { codes:['CBA'],               label:'Coaching',               icon:'👨‍🏫', esbCat:'COACHING PROGRAM' },
-    { codes:['R'],                 label:'Reclub Aktif',           icon:'♻️', esbCat:'MEMBERSHIP PROGRAM' },
-    { codes:['RX'],                label:'Reclub Tidak Aktif',     icon:'⏸️', esbCat:'MEMBERSHIP PROGRAM' },
+    { codes:['REGULAR','CO','FT'], label:'Court Rent',             icon:'🏓' },
+    { codes:['BP1'],               label:'Ball Machine Baru (BP1)',icon:'🎾', memberBenefit:true },
+    { codes:['BP2'],               label:'Ball Machine Lama (BP2)',icon:'🎾', memberBenefit:true },
+    { codes:['BP'],                label:'Ball Machine',           icon:'🎾', memberBenefit:true },
+    { codes:['CBA'],               label:'Coaching',               icon:'👨‍🏫' },
+    { codes:['R'],                 label:'Reclub Aktif',           icon:'♻️' },
+    { codes:['RX'],                label:'Reclub Tidak Aktif',     icon:'⏸️' },
   ];
 
   const rows = usageDef.map(def => {
@@ -1459,7 +1451,8 @@ function renderUsageSummary() {
     if (!recs.length) return null;
     const paid = recs.filter(r=>sf(r.total_price)>0).length;
     const free = recs.length - paid;
-    const rev  = def.esbCodes ? esbRevByCodes(def.esbCodes) : esbRevByCat(def.esbCat||'');
+    // Revenue langsung dari AVM total_price — konsisten dengan filter tanggal Sesi/Paid/Free
+    const rev  = recs.reduce((s,r)=>s+sf(r.total_price),0);
     return { ...def, total:recs.length, paid, free, rev };
   }).filter(Boolean);
 
@@ -1494,9 +1487,8 @@ function renderUsageSummary() {
         </tr></tbody>
       </table>
       <div style="font-size:10px;color:var(--txt3);padding:6px 0 2px;line-height:1.5">
-        Sesi/Paid/Free = AVM periode filter &nbsp;·&nbsp; Revenue = ESB semua periode<br>
-        <span style="color:#059669">●</span> <b>benefit</b> = Ball Machine selalu free di AVM karena termasuk dalam hak akses member.
-        Dalam 1 sesi booking, court tercatat <i>paid</i> dan ball machine tercatat <i>free</i> secara terpisah.
+        Sesi · Paid · Free · Revenue semua dihitung dari AVM periode yang dipilih<br>
+        <span style="color:#059669">●</span> <b>benefit</b> = Ball Machine selalu free di AVM (hak akses member). Revenue-nya Rp0 karena tidak dicharge per sesi — sudah termasuk dalam membership. Dalam 1 booking, court tercatat <i>paid</i> dan ball machine tercatat <i>free</i> secara terpisah.
       </div>`
     : `<div style="color:var(--txt3);padding:16px;font-size:13px">Tidak ada data untuk periode ini</div>`;
 }
