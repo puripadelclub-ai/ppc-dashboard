@@ -1224,15 +1224,16 @@ function renderHome() {
     e.stopPropagation();
     const existing = document.getElementById('score-popup');
     if(existing) { existing.remove(); return; }
-    const roas = sf(s.overall_roas);
+    const roas = getBlendedRoas();
     const roasPt = roas>=3?30:roas>=2?20:roas>=1?10:0;
     const ret = sf(s.retention_rate);
     const retPt = ret>=70?25:ret>=50?15:ret>=30?8:0;
     const revM=si(s.revenue_this_month), revL=si(s.revenue_last_month);
     let momPct=null, momPt=0;
     if(revL>0){ momPct=(revM-revL)/revL*100; momPt=momPct>=10?25:momPct>=0?15:5; } else momPt=10;
-    const spend=si(s.total_ads_budget), cir=revM>0?(spend/revM*100):null;
-    const cirPt = cir!==null?(cir<20?20:cir<40?12:5):0;
+    const spend=getCurrentMonthAdSpend()||si(s.total_ads_budget);
+    const cir=revM>0&&spend>0?(spend/revM*100):null;
+    const cirPt = cir!==null?(cir<20?20:cir<40?12:5):(spend===0?20:0);
     const row=(lbl,sub,pt,max,page,infoKey)=>`
       <div onclick="if(event.target.closest('.info-icon'))return;const p=document.getElementById('score-popup');if(p)p.remove();nav('${page||'home'}')"
         style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;margin:0 -4px;padding-left:4px;padding-right:4px"
@@ -1255,10 +1256,10 @@ function renderHome() {
     pop.innerHTML = `
       <div style="font-size:13px;font-weight:700;color:var(--txt);margin-bottom:4px">Business Score Breakdown</div>
       <div style="font-size:10px;color:var(--txt3);margin-bottom:10px">Klik baris untuk ke halaman terkait · <i class="info-icon" style="cursor:default;position:static;opacity:.7">i</i> untuk tips naikan skor</div>
-      ${row('ROAS Meta Ads', roas>0?`${roas.toFixed(2)}x`:'Data tidak tersedia', roasPt, 30, 'marketing', 'score-roas')}
+      ${row('ROAS Meta Ads', roas>0?`${roas.toFixed(1)}x (blended)`:'Data tidak tersedia', roasPt, 30, 'marketing', 'score-roas')}
       ${row('Retention Rate', ret>0?`${ret.toFixed(1)}%`:'Data tidak tersedia', retPt, 25, 'members', 'score-retention')}
       ${row('Revenue MoM', momPct!==null?`${momPct>=0?'+':''}${momPct.toFixed(1)}%`:'Bulan lalu tidak ada', momPt, 25, 'home', 'score-revenue-mom')}
-      ${row('Efisiensi Iklan (CIR)', cir!==null?`${cir.toFixed(0)}% spend dari revenue`:'Data tidak tersedia', cirPt, 20, 'marketing', 'score-cir')}
+      ${row('Efisiensi Iklan (CIR)', cir!==null?`${cir.toFixed(1)}% spend dari revenue`:(spend===0?'Tidak ada iklan bulan ini':'Data tidak tersedia'), cirPt, 20, 'marketing', 'score-cir')}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:2px solid var(--border)">
         <span style="font-size:12px;color:var(--txt2)">Total Skor</span>
         <span style="font-size:20px;font-weight:800;color:${score>=70?'var(--green)':score>=40?'var(--amber)':'var(--red)'}">${score}<span style="font-size:13px;font-weight:500;color:var(--txt3)">/100</span></span>
@@ -2916,16 +2917,38 @@ async function renderCopilot() { return; }
 function filterCopilotMembers() {}
 
 // ── BUSINESS SCORE ────────────────────────────────
+
+// Helper: hitung spend bulan ini langsung dari D.raw_ads (tidak bergantung pipeline)
+function getCurrentMonthAdSpend() {
+  const rawAds = D.raw_ads||[];
+  const currentMonth = todayLocal().slice(0,7);
+  return rawAds.reduce((t,r)=>{
+    const ds=(r.Date||r.date||'').toString().slice(0,7);
+    return ds===currentMonth ? t+sf(r.Spend||r.budget_spent||r['Amount Spent']||0) : t;
+  }, 0);
+}
+
+// Helper: blended ROAS = revenue bulan ini ÷ spend bulan ini
+function getBlendedRoas() {
+  const s = D.summary||{};
+  const pipelineRoas = sf(s.overall_roas);
+  if(pipelineRoas>0) return pipelineRoas;
+  const spend = getCurrentMonthAdSpend();
+  const rev = si(s.revenue_this_month)||0;
+  return spend>0&&rev>0 ? rev/spend : 0;
+}
+
 function calcScore(s) {
   let score = 0;
-  const roas = sf(s.overall_roas);
+  const roas = getBlendedRoas();
   if(roas>=3) score+=30; else if(roas>=2) score+=20; else if(roas>=1) score+=10;
   const ret = sf(s.retention_rate);
   if(ret>=70) score+=25; else if(ret>=50) score+=15; else if(ret>=30) score+=8;
   const revM = si(s.revenue_this_month), revL = si(s.revenue_last_month);
   if(revL>0){const mom=(revM-revL)/revL; if(mom>=0.1)score+=25; else if(mom>=0)score+=15; else score+=5;} else score+=10;
-  const spend = si(s.total_ads_budget), rev = si(s.revenue_this_month);
-  if(rev>0){const cir=spend/rev; if(cir<0.2)score+=20; else if(cir<0.4)score+=12; else score+=5;}
+  const spend = getCurrentMonthAdSpend()||si(s.total_ads_budget), rev = si(s.revenue_this_month);
+  if(rev>0&&spend>0){const cir=spend/rev; if(cir<0.2)score+=20; else if(cir<0.4)score+=12; else score+=5;}
+  else if(spend===0) score+=20; // tidak ada iklan = efisiensi sempurna (0% CIR)
   return Math.min(score,100);
 }
 
