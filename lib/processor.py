@@ -607,9 +607,9 @@ def calculate_summary(fd, rev_monthly, df_ads, df_sales=None):
         if spent_col:
             total_budget = pd.to_numeric(df_ads[spent_col], errors="coerce").sum()
 
-    # ROAS = revenue dari member yang datang via ads / total ad spend
-    ads_member_spending = fd[fd["Source Type"] == "ADS Campaign"]["total_spending"].sum()
-    overall_roas = round(ads_member_spending / total_budget, 2) if total_budget > 0 else 0
+    # Blended ROAS = Revenue bulan ini (ESB) ÷ Total Ad Spend bulan ini
+    # Tidak bergantung pada name-matching — lebih stabil & representatif untuk bisnis leisure
+    overall_roas = round(float(rev_this) / total_budget, 2) if total_budget > 0 else 0
 
     ads_members = fd[fd["Source Type"] == "ADS Campaign"]["Member Name"].count()
 

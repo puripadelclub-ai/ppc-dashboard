@@ -854,10 +854,10 @@ const METRIC_INFO = {
     bench:'Ball machine usage yang tinggi (>15% dari total booking) menunjukkan demand latihan mandiri — peluang untuk paket "Train Solo" premium.'},
 
   // MARKETING
-  'roas':{title:'ROAS (Return on Ad Spend)',
-    what:'Berapa rupiah revenue yang dihasilkan untuk setiap Rp1 yang dibelanjakan ke iklan Meta. ROAS 3 = setiap Rp1 spend → Rp3 revenue.',
-    source:'ROAS = Revenue dari member yang tercatat dari ads ÷ Total Ad Spend. Revenue diambil dari pipeline member-to-sales matching, spend dari Meta Ads API.',
-    bench:'ROAS >3x: profitable untuk most niches. ROAS >5x: sangat baik. Fitness/sports industry Meta Ads avg: 2.5–4x. (Wordstream Industry Benchmarks, 2024). Catatan: ROAS ini adalah estimasi atribusi — bukan last-click exact.'},
+  'roas':{title:'Blended ROAS (Return on Ad Spend)',
+    what:'Berapa rupiah revenue klub yang dihasilkan untuk setiap Rp1 yang dibelanjakan ke iklan Meta. Blended ROAS = Total Revenue Bulan Ini ÷ Total Ad Spend Bulan Ini.',
+    source:'Revenue dari ESB Sales Recapitulation (revenue_this_month). Ad Spend dari Meta Ads API (total budget_spent semua campaign aktif bulan ini).',
+    bench:'Blended ROAS untuk bisnis leisure/premium: >10x sangat baik, >5x normal, <3x perlu evaluasi apakah iklan berkontribusi cukup. Catatan: blended ROAS menggabungkan member organik & paid — semakin besar % member dari ads, semakin akurat cerminan kontribusi ads. (Profitwell, 2024)'},
   'total-results':{title:'Total Results (Meta Ads)',
     what:'Jumlah total "result" atau konversi yang dicatat oleh Meta Ads untuk semua iklan aktif. Result bisa berupa: WhatsApp conversation started, landing page view, atau lead form submission — tergantung campaign objective.',
     source:'Sumber: Meta Ads API → field "actions" per ad per hari → sum nilai action type yang dianggap konversi (messaging conversation, landing page views, dll).',
@@ -999,8 +999,8 @@ const METRIC_INFO = {
 
   // BUSINESS SCORE — IMPROVEMENT TIPS
   'score-roas':{title:'Cara Naikan Skor ROAS',
-    what:'ROAS (Return on Ad Spend) = Revenue dari ads ÷ Total Ad Spend. Skor penuh (30 pts) dicapai dengan ROAS ≥ 3×. Skor ini mengukur efisiensi iklan menghasilkan revenue.',
-    source:'Revenue diambil dari member yang memiliki Kode Ads di Membership List, dijumlahkan dari transaksi ESB mereka. Ad Spend dari Meta Ads API.',
+    what:'Blended ROAS = Revenue Bulan Ini (ESB) ÷ Total Ad Spend Bulan Ini. Skor penuh (30 pts) dicapai dengan ROAS ≥ 3×.',
+    source:'Revenue dari ESB Sales Recapitulation (bulan berjalan). Ad Spend dari Meta Ads API (total semua campaign aktif). Dihitung ulang setiap kali pipeline /api/process dijalankan.',
     bench:'Tips naikan ROAS: (1) Prioritaskan budget ke campaign dengan ROAS tertinggi (kill losers cepat). (2) Retarget leads yang sudah pernah kontak tapi belum konversi — ROAS retargeting 2–3× lebih tinggi dari cold audience. (3) Optimalkan post-click funnel: respon WA <5 menit meningkatkan konversi hingga 21×. (Harvard Business Review, "The Value of Speed in Sales", 2011)'},
   'score-retention':{title:'Cara Naikan Skor Retention',
     what:'Retention Rate = member yang kembali aktif ÷ total member periode lalu. Skor penuh (25 pts) dicapai dengan retention ≥ 70%. Mengukur kemampuan klub mempertahankan pelanggan.',
@@ -1771,7 +1771,7 @@ function renderMarketing() {
 
   // ROAS: only show if reasonable (pipeline-calculated, not revenue_this_month / spend)
   const pipelineRoas = sf(s.overall_roas);
-  const roasDisplay = (pipelineRoas>0&&pipelineRoas<=15) ? pipelineRoas.toFixed(2)+'x' : '—';
+  const roasDisplay = pipelineRoas>0 ? pipelineRoas.toFixed(2)+'x' : '—';
   const totalResults = rawTotalRes;
   const avgCPR = totalResults>0&&rawTotalSpend>0 ? fIDR(rawTotalSpend/totalResults) : '—';
   // KPI row rendered after adData is built (nActive needs adData)
@@ -2161,15 +2161,25 @@ function renderWeeklyAdsTable(weekKey) {
     const cac=converts&&converts>0&&spend>0?spend/converts:0;
 
     // Status logic
+    // Prioritas: KILLED > BARU > (gunakan data aktual jika ada, fallback ke Meta results)
     let status='MONITOR';
-    if(spend===0&&prevSpend>0)                                         status='KILLED';
-    else if(spend>0&&!prevSpend)                                        status='BARU';
-    else if(results>=3&&results>prevResults&&(cpr<prevCpr||!prevCpr))  status='WINNER';
-    else if(cpr>0&&cpr<200000&&results>=5)                             status='WINNER';
+    if(spend===0&&prevSpend>0){
+      status='KILLED';
+    } else if(spend>0&&!prevSpend){
+      status='BARU';
+    } else if(converts!==null){
+      // Data aktual tersedia (dari actual_leads) — ini yang diprioritaskan
+      // WINNER hanya jika ada actual convert yang terbukti
+      if(converts>0) status='WINNER';
+      // converts===0 walau ada leads → tetap MONITOR
+    } else {
+      // Tidak ada data aktual (actual_leads tidak match) — pakai Meta results sebagai proxy
+      if(results>=5&&cpr>0&&cpr<150000&&(cpr<=prevCpr||!prevCpr)) status='WINNER';
+      else if(results>=3&&results>prevResults&&cpr>0&&(cpr<prevCpr||!prevCpr)) status='WINNER';
+    }
     let statusNote='';
-    if(status==='MONITOR'){
-      if(cpl>0&&cpl>300000) statusNote=' (CPL tinggi tapi convert)';
-      else if(converts&&converts>0) statusNote=` (${converts} convert)`;
+    if(status==='MONITOR'&&converts===0&&leads!==null&&leads>0){
+      statusNote=` (${leads} leads, 0 convert)`;
     }
 
     // Note generation
