@@ -1568,7 +1568,7 @@ function renderMarketing() {
 
   const sortedWeeks=Object.keys(weekMap).sort().reverse();
   const weekSel=document.getElementById('mkt-week-select');
-  weekSel.innerHTML=sortedWeeks.map(k=>`<option value="${k}">${weekMeta[k]?.label||k}</option>`).join('');
+  weekSel.innerHTML=sortedWeeks.map(k=>`<option value="${k}" style="color:#1a1a1a;background:#fff">${weekMeta[k]?.label||k}</option>`).join('');
 
   // Store for global access
   window._PPC_weekMap=weekMap; window._PPC_weekMeta=weekMeta;
