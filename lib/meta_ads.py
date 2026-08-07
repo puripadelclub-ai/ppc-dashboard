@@ -15,34 +15,64 @@ import pandas as pd
 META_API_VERSION = "v20.0"
 META_GRAPH_URL = f"https://graph.facebook.com/{META_API_VERSION}"
 
-# Action type yang dianggap sebagai "lead"
+# Action type yang dianggap sebagai "result" / konversi utama
 LEAD_ACTION_TYPES = {
+    # Lead form
     "lead",
     "offsite_conversion.fb_pixel_lead",
     "offsite_conversion.lead",
     "complete_registration",
     "contact",
+    # WhatsApp / Messenger / DM (paling umum untuk bisnis Indonesia)
+    "onsite_conversion.messaging_conversation_started_7d",
+    "onsite_conversion.messaging_conversation_started_28d",
+    "onsite_conversion.messaging_first_reply",
+    "onsite_conversion.post_save",
+    # Pixel conversions
+    "offsite_conversion.fb_pixel_purchase",
+    "offsite_conversion.fb_pixel_complete_registration",
+    "offsite_conversion.fb_pixel_custom",
 }
 
 
+EXCLUDE_ACTION_TYPES = {
+    "link_click", "post_engagement", "page_engagement",
+    "video_view", "post_reaction", "comment", "photo_view",
+}
+
 def _extract_lead_value(actions_list: list) -> float:
-    """Ambil nilai lead dari list actions Meta API."""
+    """Ambil nilai result/konversi utama dari list actions Meta API."""
     if not actions_list:
         return 0.0
+    # Priority 1: match known lead/conversion types
     for action in actions_list:
         if action.get("action_type") in LEAD_ACTION_TYPES:
             return float(action.get("value", 0) or 0)
-    return 0.0
+    # Priority 2: fallback — ambil action terbesar yang bukan engagement/click
+    candidates = [
+        float(a.get("value", 0) or 0)
+        for a in actions_list
+        if a.get("action_type") not in EXCLUDE_ACTION_TYPES
+    ]
+    return max(candidates) if candidates else 0.0
 
 
 def _extract_cpl_value(cost_list: list) -> float:
-    """Ambil cost per lead dari list cost_per_action_type Meta API."""
+    """Ambil cost per result dari list cost_per_action_type Meta API."""
     if not cost_list:
         return 0.0
+    # Priority 1: match known types
     for item in cost_list:
         if item.get("action_type") in LEAD_ACTION_TYPES:
             return float(item.get("value", 0) or 0)
-    return 0.0
+    # Priority 2: fallback — cost untuk action terkecil (paling efisien) yang bukan engagement
+    candidates = [
+        float(i.get("value", 0) or 0)
+        for i in cost_list
+        if i.get("action_type") not in EXCLUDE_ACTION_TYPES
+        and float(i.get("value", 0) or 0) > 0
+    ]
+    return min(candidates) if candidates else 0.0
 
 
 def fetch_ads_insights(date_preset: str = "last_90d") -> pd.DataFrame:
