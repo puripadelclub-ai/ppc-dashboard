@@ -1427,15 +1427,9 @@ function renderMarketing() {
   // ROAS: only show if reasonable (pipeline-calculated, not revenue_this_month / spend)
   const pipelineRoas = sf(s.overall_roas);
   const roasDisplay = (pipelineRoas>0&&pipelineRoas<=15) ? pipelineRoas.toFixed(2)+'x' : '—';
-  const nActive = adData.filter(a=>a.status.active).length;
   const totalResults = rawTotalRes;
   const avgCPR = totalResults>0&&rawTotalSpend>0 ? fIDR(rawTotalSpend/totalResults) : '—';
-
-  document.getElementById('mkt-kpi-row').innerHTML = `
-    <div class="kpi accent"><div class="kpi-lbl">ROAS</div><div class="kpi-val">${roasDisplay}</div><div class="kpi-d"><span style="color:var(--txt3)">dari pipeline atribusi</span></div></div>
-    <div class="kpi"><div class="kpi-lbl">Total Results</div><div class="kpi-val">${fN(totalResults)}</div><div class="kpi-d"><span style="color:var(--txt3)">CPR avg ${avgCPR}</span></div></div>
-    <div class="kpi"><div class="kpi-lbl">Member dari Ads</div><div class="kpi-val">${fN(si(s.ads_members))}</div><div class="kpi-d"><span style="color:var(--txt3)">${nActive} ads aktif</span></div></div>
-  `;
+  // KPI row rendered after adData is built (nActive needs adData)
 
   // Revenue + spend trend
   const rev6 = rev.filter(r=>{const m=r.Month||r.month||''; return m&&m!=='NaT'&&m!=='nan';}).slice(-6);
@@ -1517,11 +1511,18 @@ function renderMarketing() {
     return {name,campName,spend,impr,clicks,results,ctr,cpm,roas,cac,cpl,converts,status,rec};
   }).sort((a,b)=>b.spend-a.spend);
 
+  // ── KPI row (needs adData for nActive) ─────────────
+  const nActive = adData.filter(a=>a.status.active).length;
+  document.getElementById('mkt-kpi-row').innerHTML = `
+    <div class="kpi accent"><div class="kpi-lbl">ROAS</div><div class="kpi-val">${roasDisplay}</div><div class="kpi-d"><span style="color:var(--txt3)">dari pipeline atribusi</span></div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Results</div><div class="kpi-val">${fN(totalResults)}</div><div class="kpi-d"><span style="color:var(--txt3)">CPR avg ${avgCPR}</span></div></div>
+    <div class="kpi"><div class="kpi-lbl">Member dari Ads</div><div class="kpi-val">${fN(si(s.ads_members))}</div><div class="kpi-d"><span style="color:var(--txt3)">${nActive} ads aktif</span></div></div>
+  `;
+
   // ── Raw ads summary banner ──────────────────────────
   if(rawTotalSpend>0||rawTotalImpr>0) {
     const rawCTR = rawTotalImpr>0?(rawTotalClick/rawTotalImpr*100).toFixed(2):'—';
     const rawCPR = rawTotalRes>0?fIDR(rawTotalSpend/rawTotalRes):'—';
-    const nActive = adData.filter(a=>a.status.active).length;
     document.getElementById('mkt-raw-ads-bar').innerHTML = `
       <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;font-size:12px">
         <span style="font-weight:600;color:var(--txt)">📊 Meta Ads</span>
