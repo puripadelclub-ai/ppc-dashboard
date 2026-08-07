@@ -697,10 +697,13 @@ def run_pipeline():
     # ── 5. OCCUPANCY BENCHMARK ─────────────────────────
     log.append("Fetching occupancy benchmark from Drive...")
     try:
-        df_competitors, df_ppc_trend = read_occupancy_benchmark(trend_days=14)
-        if not df_competitors.empty:
-            write_df_to_tab(df_competitors, TAB_OUT_COMPETITORS)
-            log.append(f"  → {len(df_competitors)} venues in competitor snapshot")
+        df_competitors, df_ppc_trend, df_all_history = read_occupancy_benchmark(trend_days=14)
+        # Tulis all-venues history (semua tanggal) ke out_competitors agar dashboard bisa filter by date
+        write_target = df_all_history if not df_all_history.empty else df_competitors
+        if not write_target.empty:
+            write_df_to_tab(write_target, TAB_OUT_COMPETITORS)
+            n_dates = write_target["date"].nunique() if "date" in write_target.columns else 1
+            log.append(f"  → {len(write_target)} venue-day rows ({n_dates} tanggal)")
         if not df_ppc_trend.empty:
             write_df_to_tab(df_ppc_trend, TAB_OUT_OCCUPANCY)
             log.append(f"  → {len(df_ppc_trend)} days of PPC occupancy trend")

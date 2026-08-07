@@ -662,7 +662,7 @@ body{
 
       <div class="two-col-wide">
         <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">Ranking Occupancy</span><span class="card-meta" id="intel-snap-date"></span></div>
+          <div class="card-hd"><span class="card-hd-lbl">Ranking Occupancy</span><select id="intel-date-sel" style="font-size:11px;padding:2px 6px;border:1px solid var(--bdr);border-radius:4px;background:var(--surface);color:var(--txt1);cursor:pointer" onchange="_intelDate=this.value;renderIntelligence()"></select></div>
           <div style="overflow-x:auto;max-height:320px;overflow-y:auto"><div id="intel-comp-tbl"></div></div>
         </div>
         <div class="card">
@@ -2153,65 +2153,77 @@ function changeMemberPage(dir) {
 
 // ── INTELLIGENCE ──────────────────────────────────
 function renderIntelligence() {
-  const comps = D.competitors||[];
+  const allComps = D.competitors||[];
   const occ = D.occupancy||[];
 
-  if(comps.length===0) {
+  if(allComps.length===0) {
     document.getElementById('intel-kpi-row').innerHTML='';
     document.getElementById('intel-comp-tbl').innerHTML='<div class="placeholder-box" style="padding:30px"><div class="icon">🌐</div><h3>Data kompetitor belum tersedia</h3><p>Jalankan /api/process untuk fetch data benchmark dari Drive.</p></div>';
     return;
   }
 
-  // If PPC not in competitors data, inject from our own occupancy
+  // ── Date filter ────────────────────────────────
+  const allDates = [...new Set(allComps.map(r=>r.date||r.snapshot_date||''))].filter(Boolean).sort().reverse();
+  if(!_intelDate || !allDates.includes(_intelDate)) _intelDate = allDates[0]||'';
+  const dateSel = document.getElementById('intel-date-sel');
+  if(dateSel) {
+    dateSel.innerHTML = allDates.map(d=>`<option value="${d}" ${d===_intelDate?'selected':''} style="color:#1a1a1a;background:#fff">${d}</option>`).join('');
+  }
+
+  // Filter comps untuk tanggal yang dipilih
+  const comps = allComps.filter(r=>(r.date||r.snapshot_date||'')=== _intelDate);
+
+  // Inject PPC from occupancy trend if not in competitors data
   let compsWithPPC = [...comps];
   if(!comps.find(r=>(r.Venue||'').includes('Puri Padel')) && occ.length>0) {
-    const latestO = occ[occ.length-1]||{};
+    // Cari data PPC dari occupancy trend untuk tanggal yang sama atau terdekat
+    const ppcOccEntry = occ.find(o=>o.date===_intelDate) || occ[occ.length-1] || {};
     compsWithPPC.push({
       Venue: 'Puri Padel Club',
-      'Overall Occ %': latestO['Overall Occ %']||0,
-      'Morning Occ %': latestO['Morning Occ %']||0,
-      'Evening Occ %': latestO['Evening Occ %']||0,
+      'Overall Occ %': ppcOccEntry['Overall Occ %']||0,
+      'Morning Occ %': ppcOccEntry['Morning Occ %']||0,
+      'Evening Occ %': ppcOccEntry['Evening Occ %']||0,
       Courts: 4,
-      snapshot_date: latestO.date||'',
+      date: _intelDate,
       _injected: true,
     });
   }
+
   const ppcRow = compsWithPPC.find(r=>(r.Venue||'').includes('Puri Padel'))||{};
   const sorted = [...compsWithPPC].sort((a,b)=>nOcc(b['Overall Occ %'])-nOcc(a['Overall Occ %']));
   const ppcRank = sorted.findIndex(r=>(r.Venue||'').includes('Puri Padel'))+1;
-  const marketAvg = comps.reduce((s,r)=>s+nOcc(r['Overall Occ %']||0),0)/comps.length;
+  const marketAvg = comps.length>0 ? comps.reduce((s,r)=>s+nOcc(r['Overall Occ %']||0),0)/comps.length : 0;
   const ppcOcc = nOcc(ppcRow['Overall Occ %']||0);
   const marketTop = nOcc(sorted[0]?.['Overall Occ %']||0);
 
-  document.getElementById('intel-snap-date').textContent = comps[0]?.snapshot_date||'';
   document.getElementById('intel-kpi-row').innerHTML = `
-    <div class="kpi accent"><div class="kpi-lbl">Ranking PPC</div><div class="kpi-val">#${ppcRank}</div><div class="kpi-d">dari ${comps.length} venue</div></div>
+    <div class="kpi accent"><div class="kpi-lbl">Ranking PPC</div><div class="kpi-val">#${ppcRank}</div><div class="kpi-d">dari ${compsWithPPC.length} venue</div></div>
     <div class="kpi"><div class="kpi-lbl">PPC Occupancy</div><div class="kpi-val">${fPct(ppcOcc*100)}</div><div class="kpi-d ${ppcOcc>marketAvg?'up':'warn'}">${ppcOcc>marketAvg?'▲':'▼'} vs market avg</div></div>
     <div class="kpi"><div class="kpi-lbl">Market Average</div><div class="kpi-val">${fPct(marketAvg*100)}</div><div class="kpi-d">${comps.length} venue aktif</div></div>
     <div class="kpi"><div class="kpi-lbl">Market Leader</div><div class="kpi-val">${fPct(marketTop*100)}</div><div class="kpi-d">${(sorted[0]?.Venue||'—').split(' ').slice(0,2).join(' ')}</div></div>
   `;
 
-  // Competitor table
+  // ── Competitor table ──────────────────────────
   document.getElementById('intel-comp-tbl').innerHTML = `<table class="tbl">
     <thead><tr><th>#</th><th>Venue</th><th class="r">Court</th><th>Occupancy</th><th class="r">Morning</th><th class="r">Evening</th></tr></thead>
     <tbody>${sorted.map((r,i)=>{
       const isPPC = (r.Venue||'').includes('Puri Padel');
       const injLabel = r._injected?' <span style="font-size:9px;color:var(--txt3)">(live)</span>':'';
-      const occ = nOcc(r['Overall Occ %']||0)*100;
-      const fillClass = occ>=60?'good':occ>=30?'':'low';
+      const occPct = nOcc(r['Overall Occ %']||0)*100;
+      const fillClass = occPct>=60?'good':occPct>=30?'':'low';
       const rankEl = i<3?`<span class="rank-badge rank-${i+1}">${i+1}</span>`:isPPC?`<span class="rank-badge rank-top">${i+1}</span>`:`<span style="font-size:11px;color:var(--txt3)">${i+1}</span>`;
       return `<tr style="${isPPC?'background:var(--brand-lt);font-weight:500':''}">
         <td>${rankEl}</td>
         <td>${r.Venue||'—'}${injLabel}</td>
         <td class="r mono">${si(r.Courts||0)}</td>
-        <td><div class="occ-bar-wrap"><div class="occ-bar-track"><div class="occ-bar-fill ${fillClass}" style="width:${Math.min(occ,100)}%"></div></div><span class="occ-val">${occ.toFixed(0)}%</span></div></td>
+        <td><div class="occ-bar-wrap"><div class="occ-bar-track"><div class="occ-bar-fill ${fillClass}" style="width:${Math.min(occPct,100)}%"></div></div><span class="occ-val">${occPct.toFixed(0)}%</span></div></td>
         <td class="r mono">${(nOcc(r['Morning Occ %']||0)*100).toFixed(0)}%</td>
         <td class="r mono">${(nOcc(r['Evening Occ %']||0)*100).toFixed(0)}%</td>
       </tr>`;
     }).join('')}</tbody>
   </table>`;
 
-  // Comparison chart (top 8 + PPC always included)
+  // ── Comparison chart (top 8 + PPC always included) ──
   let chartVenues = sorted.slice(0,8);
   if(!chartVenues.find(r=>(r.Venue||'').includes('Puri Padel')) && Object.keys(ppcRow).length>0) chartVenues.push(ppcRow);
   destroyChart('chart-intel-comp');
@@ -2231,23 +2243,54 @@ function renderIntelligence() {
       scales:{x:{min:0,max:100,ticks:{callback:v=>v+'%'},grid:{color:'rgba(0,0,0,0.04)'}},y:{grid:{display:false},ticks:{font:{size:10}}}}}
   });
 
-  // Revenue table (top 10 by Rev Captured) — use compsWithPPC so PPC always present
-  const revSorted = [...compsWithPPC].filter(r=>sf(r['Rev Captured (M IDR)']||0)>0).sort((a,b)=>sf(b['Rev Captured (M IDR)'])-sf(a['Rev Captured (M IDR)'])).slice(0,10);
+  // ── Revenue Capture table ──────────────────────
+  // Gunakan data dari tanggal terbaru (D&V hanya tersedia di snapshot terakhir)
+  const latestComps = allComps.filter(r=>(r.date||r.snapshot_date||'')=== allDates[0]);
+  let revBase = latestComps.length>0 ? [...latestComps] : [...compsWithPPC];
+  // Pastikan PPC ada
+  if(!revBase.find(r=>(r.Venue||'').includes('Puri Padel')) && Object.keys(ppcRow).length>0) revBase.push(ppcRow);
+
+  const fullRevSorted = [...revBase]
+    .filter(r=>sf(r['Rev Captured (M IDR)']||0)>0)
+    .sort((a,b)=>sf(b['Rev Captured (M IDR)'])-sf(a['Rev Captured (M IDR)']));
+  const revTop10 = fullRevSorted.slice(0,10);
+  const ppcInTop10 = revTop10.find(r=>(r.Venue||'').includes('Puri Padel'));
+  const ppcRevIdx = fullRevSorted.findIndex(r=>(r.Venue||'').includes('Puri Padel'));
+  const ppcRevRank = ppcRevIdx + 1;
+  const ppcRevRow = fullRevSorted[ppcRevIdx];
+
+  const revRowHtml = r => {
+    const vc = sf(r['Value Capture %']||0);
+    const vi = sf(r['Value Index']||0);
+    const isPPC = (r.Venue||'').includes('Puri Padel');
+    return `<tr style="${isPPC?'background:var(--brand-lt);font-weight:500':''}">
+      <td>${r.Venue||'—'}</td>
+      <td class="r mono">Rp${sf(r['Rev Captured (M IDR)']||0).toFixed(1)}M</td>
+      <td class="r mono">Rp${sf(r['Rev Ceiling (M IDR)']||0).toFixed(1)}M</td>
+      <td class="r"><span class="badge ${vc>=0.6?'badge-green':vc>=0.3?'badge-amber':'badge-red'}">${(vc*100).toFixed(0)}%</span></td>
+      <td class="r mono">${vi>0?(vi*100).toFixed(0)+'%':'—'}</td>
+    </tr>`;
+  };
+
+  // Append PPC row below separator if not in top 10
+  const ppcExtraHtml = (!ppcInTop10 && ppcRevRow) ? `
+    <tr><td colspan="5" style="text-align:center;color:var(--txt3);font-size:11px;padding:4px 0;border-bottom:none">· · ·</td></tr>
+    <tr style="background:var(--brand-lt);font-weight:500">
+      <td><span style="font-size:10px;color:var(--txt3);margin-right:4px">#${ppcRevRank}</span>${ppcRevRow.Venue||'—'}</td>
+      <td class="r mono">Rp${sf(ppcRevRow['Rev Captured (M IDR)']||0).toFixed(1)}M</td>
+      <td class="r mono">Rp${sf(ppcRevRow['Rev Ceiling (M IDR)']||0).toFixed(1)}M</td>
+      <td class="r"><span class="badge ${sf(ppcRevRow['Value Capture %']||0)>=0.6?'badge-green':sf(ppcRevRow['Value Capture %']||0)>=0.3?'badge-amber':'badge-red'}">${(sf(ppcRevRow['Value Capture %']||0)*100).toFixed(0)}%</span></td>
+      <td class="r mono">${sf(ppcRevRow['Value Index']||0)>0?(sf(ppcRevRow['Value Index']||0)*100).toFixed(0)+'%':'—'}</td>
+    </tr>` : '';
+
   document.getElementById('intel-revenue-tbl').innerHTML = `<table class="tbl">
-    <thead><tr><th>Venue</th><th class="r">Rev Captured</th><th class="r">Rev Ceiling</th><th class="r" title="Rev Captured / Rev Ceiling — % potensi revenue yang berhasil dimonetisasi">Value Capture ℹ</th><th class="r" title="Occupancy × Value Capture — efisiensi keseluruhan">Courts</th></tr></thead>
-    <tbody>${revSorted.map(r=>{
-      const vc = sf(r['Value Capture %']||0);
-      const isPPC = (r.Venue||'').includes('Puri Padel');
-      return `<tr style="${isPPC?'background:var(--brand-lt);font-weight:500':''}">
-        <td>${r.Venue||'—'}</td>
-        <td class="r mono">Rp${sf(r['Rev Captured (M IDR)']||0).toFixed(1)}M</td>
-        <td class="r mono">Rp${sf(r['Rev Ceiling (M IDR)']||0).toFixed(1)}M</td>
-        <td class="r"><span class="badge ${vc>=0.6?'badge-green':vc>=0.3?'badge-amber':'badge-red'}">${(vc*100).toFixed(0)}%</span></td>
-        <td class="r mono">${sf(r['Courts']||0)}</td>
-      </tr>`;
-    }).join('')}</tbody>
+    <thead><tr><th>Venue</th><th class="r">Rev Captured</th><th class="r">Rev Ceiling</th><th class="r" title="Rev Captured / Rev Ceiling — % potensi revenue yang berhasil dimonetisasi">Value Capture ℹ</th><th class="r" title="Occupancy × Value Capture — efisiensi keseluruhan">Value Index</th></tr></thead>
+    <tbody>${revTop10.map(revRowHtml).join('')}${ppcExtraHtml}</tbody>
   </table>`;
 }
+
+// ── INTELLIGENCE state ─────────────────────────────
+let _intelDate = null;   // tanggal yang dipilih di date filter Ranking Occupancy
 
 // ── PRODUCTS ──────────────────────────────────────
 let _prodChartCat = null, _prodChartTop = null;

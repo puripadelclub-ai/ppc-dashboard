@@ -209,9 +209,21 @@ def read_occupancy_benchmark(trend_days: int = 14) -> tuple[pd.DataFrame, pd.Dat
         if col not in ("Venue", "snapshot_date"):
             df_competitors[col] = pd.to_numeric(df_competitors[col], errors="coerce")
 
-    # ── PPC trend dari trend_days file terbaru ─────────
+    # D&V merge columns (untuk di-join ke history semua tanggal)
+    dv_merge_cols = [c for c in ["Venue", "Rev Captured (M IDR)", "Rev Ceiling (M IDR)", "Value Capture %", "Value Index"]
+                     if not df_dv.empty and c in df_dv.columns]
+
+    # ── PPC trend + All-venues history dari trend_days file terbaru ─────────
     # File pertama (latest) sudah punya df_occ — reuse tanpa request ulang
     ppc_rows = []
+    history_rows = []   # semua venue × semua tanggal
+
+    def _to_float(v):
+        try:
+            return float(v) if v is not None and v != '' else None
+        except (ValueError, TypeError):
+            return None
+
     for i, file in enumerate(files[:trend_days]):
         date_str = _date_from_benchmark_name(file["name"])
         try:
@@ -220,15 +232,20 @@ def read_occupancy_benchmark(trend_days: int = 14) -> tuple[pd.DataFrame, pd.Dat
             else:
                 df_day = _read_xlsx_via_gviz(file["id"], "Occupancy")
 
+            # Semua venue untuk tanggal ini → history
+            for _, row_s in df_day.iterrows():
+                rec = {"date": date_str}
+                for k, v in row_s.items():
+                    rec[k] = v if k == "Venue" else _to_float(v)
+                history_rows.append(rec)
+
+            # PPC only → trend
             ppc = df_day[df_day["Venue"].str.contains(PPC_VENUE_KEYWORD, na=False)]
             if not ppc.empty:
                 row = ppc.iloc[0].to_dict()
                 for k, v in row.items():
                     if k != "Venue":
-                        try:
-                            row[k] = float(v) if v is not None and v != '' else None
-                        except (ValueError, TypeError):
-                            pass
+                        row[k] = _to_float(v)
                 row["date"] = date_str
                 ppc_rows.append(row)
         except Exception as e:
@@ -239,7 +256,16 @@ def read_occupancy_benchmark(trend_days: int = 14) -> tuple[pd.DataFrame, pd.Dat
     else:
         df_ppc_trend = pd.DataFrame()
 
-    return df_competitors, df_ppc_trend
+    # Bangun all-venues history, merge dengan D&V dari latest file
+    if history_rows:
+        df_all_history = pd.DataFrame(history_rows).sort_values(["date", "Venue"]).reset_index(drop=True)
+        if dv_merge_cols:
+            df_all_history = pd.merge(df_all_history, df_dv[dv_merge_cols], on="Venue", how="left")
+    else:
+        df_all_history = df_competitors.copy()  # fallback
+
+    print(f"Benchmark: history={len(df_all_history)} rows across {len(files[:trend_days])} days")
+    return df_competitors, df_ppc_trend, df_all_history
 
 
 def read_ads_from_drive():
