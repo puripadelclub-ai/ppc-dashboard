@@ -569,8 +569,6 @@ body{
 
       <div id="mkt-kpi-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px"></div>
 
-      <div id="mkt-raw-ads-bar" style="display:none;background:var(--brand-lt);border:1px solid var(--brand);border-radius:var(--r-sm);padding:10px 14px;margin-bottom:12px"></div>
-
       <div class="card mb">
         <div class="card-hd"><span class="card-hd-lbl">Spend vs Revenue Trend</span></div>
         <div class="chart-wrap-lg"><canvas id="chart-mkt-trend"></canvas></div>
@@ -1432,6 +1430,14 @@ function renderMarketing() {
   // KPI row rendered after adData is built (nActive needs adData)
 
   // Revenue + spend trend
+  // Monthly spend from raw_ads
+  const spendByMonth = {};
+  rawAds.forEach(r=>{
+    const ds=(r.Date||r.date||'').toString().slice(0,7);
+    if(!ds||ds.length<7) return;
+    spendByMonth[ds]=(spendByMonth[ds]||0)+sf(r.Spend||r.budget_spent||r['Amount Spent']||0);
+  });
+
   const rev6 = rev.filter(r=>{const m=r.Month||r.month||''; return m&&m!=='NaT'&&m!=='nan';}).slice(-6);
   destroyChart('chart-mkt-trend');
   CHARTS['chart-mkt-trend'] = new Chart(document.getElementById('chart-mkt-trend'),{
@@ -1440,6 +1446,7 @@ function renderMarketing() {
       labels: rev6.map(r=>r.Month||r.month||''),
       datasets:[
         {label:'Revenue',data:rev6.map(r=>si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0)),borderColor:'#034842',backgroundColor:'rgba(3,72,66,0.08)',fill:true,tension:0.3,yAxisID:'y'},
+        {label:'Spend Ads',data:rev6.map(r=>(spendByMonth[(r.Month||r.month||'').slice(0,7)]||0)),borderColor:'#dc2626',backgroundColor:'rgba(220,38,38,0.05)',fill:true,tension:0.3,yAxisID:'y'},
       ]
     },
     options:{responsive:true,maintainAspectRatio:false,
@@ -1520,23 +1527,6 @@ function renderMarketing() {
   `;
 
   // ── Raw ads summary banner ──────────────────────────
-  if(rawTotalSpend>0||rawTotalImpr>0) {
-    const rawCTR = rawTotalImpr>0?(rawTotalClick/rawTotalImpr*100).toFixed(2):'—';
-    const rawCPR = rawTotalRes>0?fIDR(rawTotalSpend/rawTotalRes):'—';
-    document.getElementById('mkt-raw-ads-bar').innerHTML = `
-      <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;font-size:12px">
-        <span style="font-weight:600;color:var(--txt)">📊 Meta Ads</span>
-        <span style="color:var(--txt2)">Spend: <strong style="color:var(--txt)">${fIDR(rawTotalSpend)}</strong></span>
-        <span style="color:var(--txt2)">Impresi: <strong style="color:var(--txt)">${fN(rawTotalImpr)}</strong></span>
-        <span style="color:var(--txt2)">Klik: <strong style="color:var(--txt)">${fN(rawTotalClick)}</strong></span>
-        <span style="color:var(--txt2)">CTR: <strong style="color:var(--txt)">${rawCTR}%</strong></span>
-        <span style="color:var(--txt2)">Results: <strong style="color:var(--txt)">${fN(rawTotalRes)}</strong></span>
-        <span style="color:var(--txt2)">CPR: <strong style="color:var(--txt)">${rawCPR}</strong></span>
-        <span style="color:var(--txt2)">Aktif: <strong style="color:#16a34a">${nActive} ads</strong></span>
-      </div>`;
-    document.getElementById('mkt-raw-ads-bar').style.display='block';
-  }
-
   // Campaign Performance removed — info tersedia di ADS DETAIL PER MINGGU
 
   // ── Weekly aggregation (Sabtu–Jumat) ──────────────
