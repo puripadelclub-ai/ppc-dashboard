@@ -28,6 +28,8 @@ LEAD_ACTION_TYPES = {
     "onsite_conversion.messaging_conversation_started_28d",
     "onsite_conversion.messaging_first_reply",
     "onsite_conversion.post_save",
+    # Traffic / Awareness campaigns
+    "landing_page_views",
     # Pixel conversions
     "offsite_conversion.fb_pixel_purchase",
     "offsite_conversion.fb_pixel_complete_registration",
