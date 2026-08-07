@@ -1227,7 +1227,7 @@ function renderHome() {
     const roas = getBlendedRoas();
     const roasPt = roas>=3?30:roas>=2?20:roas>=1?10:0;
     const ret = sf(s.retention_rate);
-    const retPt = ret>=70?25:ret>=50?15:ret>=30?8:0;
+    const retPt = ret>=70?25:ret>=50?15:ret>=30?8:ret>=15?3:0;
     const revM=si(s.revenue_this_month), revL=si(s.revenue_last_month);
     let momPct=null, momPt=0;
     if(revL>0){ momPct=(revM-revL)/revL*100; momPt=momPct>=10?25:momPct>=0?15:5; } else momPt=10;
@@ -2943,7 +2943,7 @@ function calcScore(s) {
   const roas = getBlendedRoas();
   if(roas>=3) score+=30; else if(roas>=2) score+=20; else if(roas>=1) score+=10;
   const ret = sf(s.retention_rate);
-  if(ret>=70) score+=25; else if(ret>=50) score+=15; else if(ret>=30) score+=8;
+  if(ret>=70) score+=25; else if(ret>=50) score+=15; else if(ret>=30) score+=8; else if(ret>=15) score+=3;
   const revM = si(s.revenue_this_month), revL = si(s.revenue_last_month);
   if(revL>0){const mom=(revM-revL)/revL; if(mom>=0.1)score+=25; else if(mom>=0)score+=15; else score+=5;} else score+=10;
   const spend = getCurrentMonthAdSpend()||si(s.total_ads_budget), rev = si(s.revenue_this_month);
