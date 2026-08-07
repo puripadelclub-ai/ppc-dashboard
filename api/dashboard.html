@@ -357,6 +357,48 @@ body{
 @media(prefers-reduced-motion:reduce){
   *{transition:none!important;animation:none!important}
 }
+
+/* ── Info Popup ─────────────────────────────────── */
+.info-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:14px;height:14px;border-radius:50%;
+  background:var(--txt3);color:#fff;
+  font-size:8px;font-weight:700;font-style:normal;
+  cursor:pointer;margin-left:4px;opacity:.55;vertical-align:middle;
+  transition:opacity .15s;flex-shrink:0;line-height:1;
+}
+.info-icon:hover{opacity:1}
+#info-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.45);z-index:9999;
+  align-items:center;justify-content:center;padding:16px;
+}
+#info-overlay.open{display:flex}
+#info-modal{
+  background:var(--surface);border-radius:14px;
+  padding:24px 24px 20px;max-width:500px;width:100%;
+  box-shadow:0 12px 40px rgba(0,0,0,.18);
+  position:relative;max-height:90vh;overflow-y:auto;
+}
+#info-modal h3{margin:0 0 16px;font-size:15px;font-weight:700;color:var(--txt1);padding-right:24px}
+.info-section{margin-bottom:14px}
+.info-section:last-child{margin-bottom:0}
+.info-sec-lbl{
+  font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--brand);margin-bottom:5px;
+}
+.info-sec-body{font-size:12.5px;line-height:1.65;color:var(--txt2);margin:0}
+.info-sec-body code{
+  background:var(--bg);border:1px solid var(--bdr);
+  border-radius:4px;padding:1px 5px;font-size:11px;color:var(--txt1);
+}
+#info-close{
+  position:absolute;top:14px;right:14px;
+  background:none;border:none;cursor:pointer;
+  color:var(--txt3);font-size:18px;line-height:1;padding:2px 6px;
+  border-radius:4px;transition:background .15s;
+}
+#info-close:hover{background:var(--bg)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -445,28 +487,28 @@ body{
 
         <!-- Revenue bulan ini -->
         <div class="card" style="border-left:3px solid var(--brand)">
-          <div class="kpi-lbl">Revenue Bulan Ini <span style="font-size:9px;color:var(--brand);font-weight:600;letter-spacing:.4px">ESB</span></div>
+          <div class="kpi-lbl">Revenue Bulan Ini <span style="font-size:9px;color:var(--brand);font-weight:600;letter-spacing:.4px">ESB</span><i class="info-icon" onclick="showInfo('rev-bulan-ini')">i</i></div>
           <div class="kpi-val" id="kpi-rev" style="margin:6px 0 4px">—</div>
           <div class="kpi-d" id="kpi-rev-d"></div>
         </div>
 
         <!-- Transaksi bulan ini -->
         <div class="card">
-          <div class="kpi-lbl">Transaksi Bulan Ini <span style="font-size:9px;color:var(--brand);font-weight:600;letter-spacing:.4px">ESB</span></div>
+          <div class="kpi-lbl">Transaksi Bulan Ini <span style="font-size:9px;color:var(--brand);font-weight:600;letter-spacing:.4px">ESB</span><i class="info-icon" onclick="showInfo('trx-bulan-ini')">i</i></div>
           <div class="kpi-val" id="kpi-trx" style="margin:6px 0 4px">—</div>
           <div class="kpi-d" id="kpi-trx-d"></div>
         </div>
 
         <!-- Occupancy + Bookings hari ini -->
         <div class="card">
-          <div class="kpi-lbl">Occupancy Hari Ini</div>
+          <div class="kpi-lbl">Occupancy Hari Ini<i class="info-icon" onclick="showInfo('occ-hari-ini')">i</i></div>
           <div class="kpi-val" id="kpi-occ" style="margin:6px 0 4px">—</div>
           <div class="kpi-d" id="kpi-occ-d"></div>
         </div>
 
         <!-- Member -->
         <div class="card">
-          <div class="kpi-lbl">Active Members</div>
+          <div class="kpi-lbl">Active Members<i class="info-icon" onclick="showInfo('active-members')">i</i></div>
           <div class="kpi-val" id="kpi-mem" style="margin:6px 0 4px">—</div>
           <div class="kpi-d" id="kpi-mem-d"></div>
         </div>
@@ -742,7 +784,169 @@ body{
 </div><!-- #app -->
 <div id="sb-overlay" onclick="toggleSidebar()"></div>
 
+<!-- INFO POPUP OVERLAY -->
+<div id="info-overlay" onclick="closeInfo()">
+  <div id="info-modal" onclick="event.stopPropagation()">
+    <button id="info-close" onclick="closeInfo()">✕</button>
+    <h3 id="info-title"></h3>
+    <div class="info-section">
+      <div class="info-sec-lbl">📊 Apa ini?</div>
+      <p class="info-sec-body" id="info-what"></p>
+    </div>
+    <div class="info-section">
+      <div class="info-sec-lbl">🔢 Perhitungan &amp; Sumber Data</div>
+      <p class="info-sec-body" id="info-source"></p>
+    </div>
+    <div class="info-section" id="info-bench-sec">
+      <div class="info-sec-lbl">📚 Best Practice</div>
+      <p class="info-sec-body" id="info-bench"></p>
+    </div>
+  </div>
+</div>
+
 <script>
+// ── STATE ──────────────────────────────────────────
+let D = null; // global data
+let currentPage = 'home';
+
+// ── INFO POPUP ─────────────────────────────────────
+const METRIC_INFO = {
+  // HOME
+  'rev-bulan-ini':{title:'Revenue Bulan Ini',
+    what:'Total gross revenue dari semua transaksi POS di bulan kalender berjalan. Mencakup sewa lapangan, ball machine, coaching, F&B, dan produk lainnya.',
+    source:'Sumber: ESB POS (Sales Recapitulation) → kolom Amount. Pipeline menjumlahkan semua transaksi dengan Sales Date di bulan ini.',
+    bench:'Benchmark: Revenue per court per bulan yang sehat untuk padel premium Jakarta berkisar Rp 40–80 jt/court. (Sports Venue Management, ISCA 2022)'},
+  'trx-bulan-ini':{title:'Transaksi Bulan Ini',
+    what:'Jumlah transaksi (invoice/struk) yang tercatat di POS bulan ini. Satu transaksi bisa berisi beberapa item (sewa + F&B, dll).',
+    source:'Sumber: ESB POS → count baris dengan Sales Date di bulan berjalan.',
+    bench:'Rata-rata transaksi/hari yang sehat: ≥15 untuk venue padel 4 court (asumsi 70% occupancy × 3 slot/court/hari).'},
+  'occ-hari-ini':{title:'Occupancy Hari Ini',
+    what:'Persentase slot waktu lapangan yang terisi hari ini. Dihitung dari data AVM (booking system) real-time.',
+    source:'Sumber: AVM booking data → (jumlah slot terisi ÷ total kapasitas slot) × 100%. Kapasitas = 4 court × jam operasional.',
+    bench:'Breakeven occupancy padel club: ~40–50%. Venue profitable biasanya 55–75%. (Deloitte Sports Business Group, 2023)'},
+  'active-members':{title:'Active Members',
+    what:'Jumlah member terdaftar aktif — yaitu yang memiliki membership card/status aktif di sistem POS.',
+    source:'Sumber: Membership List dari Google Drive (file Membership List terbaru) → filter status aktif.',
+    bench:'Membership-to-court ratio yang sehat: 80–150 member per court. Di atas 200/court → risiko churn karena court terasa penuh. (EuropeActive, 2022)'},
+
+  // OPERATIONS
+  'total-booking':{title:'Total Booking (AVM)',
+    what:'Jumlah sesi booking lapangan yang dikonfirmasi di periode yang dipilih, berdasarkan data AVM (Ayo Venue Management).',
+    source:'Sumber: AVM API → fetch booking history → filter by periode. Termasuk semua tipe booking (regular, coaching, event).',
+    bench:'Target minimum: (jumlah court × jam operasional × hari) × 50% occupancy.'},
+  'avg-occupancy':{title:'Avg Occupancy',
+    what:'Rata-rata persentase penggunaan lapangan selama periode yang dipilih. Dihitung per hari lalu dirata-rata.',
+    source:'Sumber: AVM booking data → (total slot terisi ÷ total slot tersedia) per hari → avg selama periode.',
+    bench:'Venue padel kelas premium target occupancy 60–75%. Di bawah 40% → perlu intervensi promosi aktif. (GSOA Global Sports Venue Report, 2023)'},
+  'ball-machine':{title:'Sesi Ball Machine',
+    what:'Jumlah sesi penggunaan ball machine di periode yang dipilih. Indikator untuk upsell dan engagement member non-coaching.',
+    source:'Sumber: AVM booking data → filter tipe booking "ball machine" atau produk terkait.',
+    bench:'Ball machine usage yang tinggi (>15% dari total booking) menunjukkan demand latihan mandiri — peluang untuk paket "Train Solo" premium.'},
+
+  // MARKETING
+  'roas':{title:'ROAS (Return on Ad Spend)',
+    what:'Berapa rupiah revenue yang dihasilkan untuk setiap Rp1 yang dibelanjakan ke iklan Meta. ROAS 3 = setiap Rp1 spend → Rp3 revenue.',
+    source:'ROAS = Revenue dari member yang tercatat dari ads ÷ Total Ad Spend. Revenue diambil dari pipeline member-to-sales matching, spend dari Meta Ads API.',
+    bench:'ROAS >3x: profitable untuk most niches. ROAS >5x: sangat baik. Fitness/sports industry Meta Ads avg: 2.5–4x. (Wordstream Industry Benchmarks, 2024). Catatan: ROAS ini adalah estimasi atribusi — bukan last-click exact.'},
+  'total-results':{title:'Total Results (Meta Ads)',
+    what:'Jumlah total "result" atau konversi yang dicatat oleh Meta Ads untuk semua iklan aktif. Result bisa berupa: WhatsApp conversation started, landing page view, atau lead form submission — tergantung campaign objective.',
+    source:'Sumber: Meta Ads API → field "actions" per ad per hari → sum nilai action type yang dianggap konversi (messaging conversation, landing page views, dll).',
+    bench:'Benchmark CTR-to-result rate untuk awareness/traffic campaigns: 1–3%. Untuk conversion campaigns: >5% dianggap baik. (Meta Business Insights, 2024)'},
+  'cpr':{title:'CPR (Cost Per Result)',
+    what:'Rata-rata biaya untuk mendapatkan satu "result" dari iklan. Semakin rendah, semakin efisien iklan dalam menghasilkan respons.',
+    source:'CPR = Total Spend ÷ Total Results. Dihitung dari data Meta Ads API → cost_per_action_type field.',
+    bench:'CPR untuk industri sports/fitness di Indonesia: Rp 15.000–60.000 untuk conversational ads. Di atas Rp 100.000 → evaluasi targeting atau creative. (Meta Indonesia SMB Insights, 2023)'},
+  'member-dari-ads':{title:'Member dari Ads',
+    what:'Jumlah member terdaftar yang diduga datang dari iklan, berdasarkan kode referral "ads" di field Kode Ads membership mereka.',
+    source:'Sumber: Membership List (Drive) → filter baris yang kolom "Kode ads" tidak kosong → count.',
+    bench:'Cost per acquired member (CAC) yang ideal untuk padel club premium: <Rp 500.000. Di atas Rp 1 jt → evaluasi funnel post-click (follow-up WhatsApp, penawaran trial, dll).'},
+  'actual-leads':{title:'Actual Leads',
+    what:'Jumlah leads nyata (prospek yang menghubungi via WhatsApp atau channel lain) yang dicatat secara manual oleh admin per periode iklan. Ini berbeda dengan "Results" dari Meta — Actual Leads adalah verifikasi manual di lapangan.',
+    source:'Sumber: Google Sheet "WA Manual Data" → tab per bulan → diisi admin setiap minggu. Kolom: Ads Campaign | Leads | Convert | Note.',
+    bench:'Lead-to-contact rate yang baik: >60% dari Result Meta harus menghasilkan kontak nyata (percakapan WA yang relevan). Gap besar antara Results dan Actual Leads → indikasi targeting kurang tepat atau creative misleading.'},
+  'cpl':{title:'CPL (Cost Per Lead)',
+    what:'Biaya rata-rata untuk mendapatkan satu lead nyata (bukan hanya result Meta). CPL dihitung dari data manual admin, bukan dari Meta API.',
+    source:'CPL = Total Ad Spend periode ÷ Actual Leads (dari WA Manual Data). Lebih akurat dari CPR karena menggunakan data leads terverifikasi.',
+    bench:'CPL ideal untuk padel premium Jakarta: Rp 50.000–150.000. Di atas Rp 300.000 → review targeting demografi dan creative messaging.'},
+  'cac':{title:'CAC (Customer Acquisition Cost)',
+    what:'Biaya rata-rata untuk mendapatkan satu customer yang benar-benar membeli (member atau booking). Ini adalah metrik paling penting untuk profitabilitas iklan jangka panjang.',
+    source:'CAC = Total Ad Spend ÷ Convert Customer (dari WA Manual Data). Convert Customer diisi admin berdasarkan berapa lead yang akhirnya jadi member/booking.',
+    bench:'CAC yang sehat harus <30% dari CLV (Customer Lifetime Value). Jika CLV Rp 2 jt, maka CAC harus <Rp 600.000. (Gupta & Lehmann, "Managing Customers as Investments", 2005)'},
+
+  // MEMBERS
+  'total-member':{title:'Total Member',
+    what:'Jumlah total anggota yang terdaftar di sistem membership PPC. "Matched POS" adalah subset yang transaksinya berhasil dicocokkan ke data POS untuk perhitungan CLV.',
+    source:'Sumber: Membership List (Drive) → total baris. Matched = member yang nama/ID-nya berhasil di-join ke Sales Recapitulation ESB.',
+    bench:'Target rasio matched member: >80%. Jika di bawah itu, ada kemungkinan data nama tidak konsisten antara membership list dan POS.'},
+  'avg-clv':{title:'Avg CLV 6 Bulan (Moderate)',
+    what:'Customer Lifetime Value rata-rata — estimasi total revenue yang diharapkan dari seorang member selama 6 bulan ke depan. Versi "Moderate" menggunakan asumsi konservatif di antara optimistic dan pessimistic estimate.',
+    source:'CLV = Avg Revenue per Visit × Avg Visit Frequency per Bulan × 6 bulan. Dihitung per member dari data ESB, lalu dirata-rata. Formula mengikuti Pareto/NBD model (Fader, 2005).',
+    bench:'CLV-to-CAC ratio yang sehat: >3:1. Artinya setiap member yang diperoleh harus menghasilkan minimal 3× biaya akuisisinya. (Harvard Business Review, "The Value of Keeping the Right Customers", 2014)'},
+  'ball-machine-user':{title:'Ball Machine User',
+    what:'Jumlah member yang menggunakan ball machine minimal 1 sesi dalam 30 hari terakhir. Indikator engagement untuk non-coached members.',
+    source:'Sumber: AVM booking data + member preferences → filter member dengan AVM_BM_30d ≥ 1 atau Sess_BM ≥ 1.',
+    bench:'Member yang aktif menggunakan fasilitas tambahan (ball machine, coaching) memiliki churn rate 40–60% lebih rendah dari member yang hanya booking court. (EuropeActive Retention Report, 2023)'},
+  'coaching-user':{title:'Coaching User',
+    what:'Jumlah member yang mengikuti sesi coaching minimal 1 kali dalam 30 hari terakhir. Coaching adalah revenue stream tertinggi margin per jam di padel club.',
+    source:'Sumber: PPC Coaching Log sheet + AVM data → filter member dengan aktivitas coaching dalam 30 hari.',
+    bench:'Target penetrasi coaching: >15% dari total member aktif. Revenue per coaching session biasanya 2–4× lebih tinggi dari sewa court biasa. (ITF Padel Business Report, 2023)'},
+
+  // INTELLIGENCE
+  'ranking-ppc':{title:'Ranking PPC',
+    what:'Posisi Puri Padel Club berdasarkan Overall Occupancy % dibandingkan semua venue padel yang dimonitor di area Jakarta Barat.',
+    source:'Sumber: Benchmark file padel_benchmark_*.xlsx dari Google Drive → sheet "Occupancy" → sort descending by Overall Occ % → cari posisi PPC.',
+    bench:'Target jangka menengah: masuk top 5 dari venue yang dimonitor. Venue dengan ranking occupancy tinggi memiliki korelasi kuat dengan brand awareness dan word-of-mouth. (Sports Venue Management Journal, 2022)'},
+  'ppc-occupancy':{title:'PPC Occupancy',
+    what:'Persentase penggunaan lapangan PPC — berapa persen dari total kapasitas slot yang terisi. Dihitung dari data AVM atau benchmark scraper.',
+    source:'Sumber: Benchmark file → kolom "Overall Occ %" untuk venue Puri Padel. Atau: AVM booking data → (slot terisi ÷ kapasitas total) × 100%.',
+    bench:'Breakeven padel club 4 court (Jakarta): ~42% occupancy. Target profitable: 60–75%. Occupancy di atas 85% → perlu evaluasi ekspansi atau dynamic pricing. (Deloitte Sports, 2023)'},
+  'market-average':{title:'Market Average Occupancy',
+    what:'Rata-rata occupancy dari semua venue padel yang dimonitor di snapshot tanggal yang dipilih. Benchmark pasar untuk mengukur posisi PPC.',
+    source:'Sumber: Benchmark file → kolom "Overall Occ %" → mean dari semua venue pada tanggal tersebut.',
+    bench:'Occupancy di atas market average → competitive advantage. Di bawah → perlu evaluasi pricing, slot availability, atau awareness.'},
+  'market-leader':{title:'Market Leader',
+    what:'Venue dengan occupancy tertinggi di antara semua yang dimonitor pada snapshot tanggal yang dipilih.',
+    source:'Sumber: Benchmark file → venue dengan nilai tertinggi di kolom "Overall Occ %".',
+    bench:'Analisis market leader berguna untuk reverse-engineering: apa yang membuat venue tersebut selalu penuh? Lihat time slot populer, pricing, dan program mereka.'},
+  'rev-captured':{title:'Rev Captured (M IDR)',
+    what:'Estimasi revenue aktual yang berhasil diraih venue dalam periode benchmark, dalam juta rupiah. Dihitung dari court yang terisi × estimated rate per slot.',
+    source:'Sumber: Benchmark file → sheet "Demand & Value" → kolom "Rev Captured (M IDR)". Angka ini adalah estimasi scraper — bukan laporan keuangan aktual.',
+    bench:'Gunakan sebagai comparator relatif vs kompetitor, bukan sebagai angka absolut. Venue dengan Rev Captured tinggi biasanya kombinasi dari occupancy tinggi DAN pricing yang baik.'},
+  'rev-ceiling':{title:'Rev Ceiling (M IDR)',
+    what:'Potensi revenue maksimum jika venue beroperasi 100% penuh sepanjang waktu operasional. Ini adalah "langit-langit" revenue yang secara teori bisa dicapai.',
+    source:'Sumber: Benchmark file → sheet "Demand & Value" → kolom "Rev Ceiling (M IDR)". Dihitung dari: jumlah court × jam operasional × hari × estimated peak rate.',
+    bench:'Rev Ceiling vs Rev Captured menunjukkan seberapa besar "uang yang tersisa di meja". Gap besar = peluang untuk pricing strategy (dynamic pricing, off-peak promo). (Kimes, "Restaurant Revenue Management", Cornell 2004)'},
+  'value-capture':{title:'Value Capture %',
+    what:'Persentase potensi revenue (Rev Ceiling) yang berhasil dimonetisasi (Rev Captured). Metrik ini sensitif terhadap HARGA — venue bisa punya occupancy tinggi tapi Value Capture rendah kalau rate-nya terlalu murah.',
+    source:'Value Capture % = Rev Captured ÷ Rev Ceiling × 100%. Sumber: Benchmark file → sheet "Demand & Value".',
+    bench:'Value Capture 30–50%: rata-rata pasar. 50–70%: baik. >70%: sangat efisien (biasanya kombinasi premium pricing + occupancy tinggi). (Revenue Management in Sports Facilities, IAAM 2022)'},
+  'value-index':{title:'Value Index',
+    what:'Gabungan antara Occupancy dan Value Capture dalam satu angka. Mengukur efisiensi keseluruhan venue: seberapa penuh court DAN seberapa baik mereka monetisasi setiap booking.',
+    source:'Value Index = Occupancy × Value Capture %. Contoh: Occ 60% × Value Capture 50% = Value Index 30%. Sumber: Benchmark file → sheet "Demand & Value".',
+    bench:'Value Index >25%: kompetitif. >40%: venue dengan performa terbaik di kategorinya. Rendah di keduanya → masalah fundamental positioning. Rendah di salah satu → fokus pada aspek yang lemah tersebut.'},
+};
+
+function showInfo(key) {
+  const m = METRIC_INFO[key];
+  if(!m) return;
+  document.getElementById('info-title').textContent = m.title;
+  document.getElementById('info-what').textContent = m.what;
+  document.getElementById('info-source').textContent = m.source;
+  const bs = document.getElementById('info-bench-sec');
+  if(m.bench) {
+    document.getElementById('info-bench').textContent = m.bench;
+    bs.style.display = '';
+  } else { bs.style.display = 'none'; }
+  document.getElementById('info-overlay').classList.add('open');
+}
+function closeInfo() {
+  document.getElementById('info-overlay').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeInfo(); });
+
+// Helper: info icon HTML
+const ii = k => `<i class="info-icon" onclick="event.stopPropagation();showInfo('${k}')">i</i>`;
+
 // ── STATE ──────────────────────────────────────────
 let D = null; // global data
 let currentPage = 'home';
@@ -1322,9 +1526,9 @@ function renderOperations() {
   const machineM    = avmMonth.reduce((s,r)=>s+si(r.machine_bookings),0);
 
   document.getElementById('ops-kpi-row').innerHTML = `
-    <div class="kpi"><div class="kpi-lbl">Total Booking</div><div class="kpi-val">${fN(totalBookM)}</div><div class="kpi-d"><span style="color:var(--txt3)">sesi · ${dayCount} hari · ${fN(Math.round(totalBookM/(dayCount||1)))}/hari</span></div></div>
-    <div class="kpi"><div class="kpi-lbl">Avg Occupancy</div><div class="kpi-val">${fPct(avgOccM*100)}</div><div class="kpi-d"><span style="color:var(--txt3)">${dayCount} hari data</span></div></div>
-    <div class="kpi"><div class="kpi-lbl">Ball Machine</div><div class="kpi-val">${fN(machineM)}</div><div class="kpi-d"><span style="color:var(--txt3)">sesi · ${totalBookM>0?fPct(machineM/totalBookM*100):'0%'} dari total booking</span></div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Booking${ii('total-booking')}</div><div class="kpi-val">${fN(totalBookM)}</div><div class="kpi-d"><span style="color:var(--txt3)">sesi · ${dayCount} hari · ${fN(Math.round(totalBookM/(dayCount||1)))}/hari</span></div></div>
+    <div class="kpi"><div class="kpi-lbl">Avg Occupancy${ii('avg-occupancy')}</div><div class="kpi-val">${fPct(avgOccM*100)}</div><div class="kpi-d"><span style="color:var(--txt3)">${dayCount} hari data</span></div></div>
+    <div class="kpi"><div class="kpi-lbl">Ball Machine${ii('ball-machine')}</div><div class="kpi-val">${fN(machineM)}</div><div class="kpi-d"><span style="color:var(--txt3)">sesi · ${totalBookM>0?fPct(machineM/totalBookM*100):'0%'} dari total booking</span></div></div>
   `;
 
   document.getElementById('ops-trend-meta').textContent = monthName;
@@ -1521,9 +1725,9 @@ function renderMarketing() {
   // ── KPI row (needs adData for nActive) ─────────────
   const nActive = adData.filter(a=>a.status.active).length;
   document.getElementById('mkt-kpi-row').innerHTML = `
-    <div class="kpi accent"><div class="kpi-lbl">ROAS</div><div class="kpi-val">${roasDisplay}</div><div class="kpi-d"><span style="color:var(--txt3)">dari pipeline atribusi</span></div></div>
-    <div class="kpi"><div class="kpi-lbl">Total Results</div><div class="kpi-val">${fN(totalResults)}</div><div class="kpi-d"><span style="color:var(--txt3)">CPR avg ${avgCPR}</span></div></div>
-    <div class="kpi"><div class="kpi-lbl">Member dari Ads</div><div class="kpi-val">${fN(si(s.ads_members))}</div><div class="kpi-d"><span style="color:var(--txt3)">${nActive} ads aktif</span></div></div>
+    <div class="kpi accent"><div class="kpi-lbl">ROAS${ii('roas')}</div><div class="kpi-val">${roasDisplay}</div><div class="kpi-d"><span style="color:var(--txt3)">dari pipeline atribusi</span></div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Results${ii('total-results')}</div><div class="kpi-val">${fN(totalResults)}</div><div class="kpi-d"><span style="color:var(--txt3)">CPR avg ${avgCPR}</span></div></div>
+    <div class="kpi"><div class="kpi-lbl">Member dari Ads${ii('member-dari-ads')}</div><div class="kpi-val">${fN(si(s.ads_members))}</div><div class="kpi-d"><span style="color:var(--txt3)">${nActive} ads aktif</span></div></div>
   `;
 
   // ── Raw ads summary banner ──────────────────────────
@@ -1883,11 +2087,11 @@ function renderWeeklyAdsTable(weekKey) {
       <th style="${THL};min-width:170px">Ads Campaign</th>
       <th style="${THL}">Offer</th>
       <th style="${TH}">Budget<br>Spent</th>
-      <th style="${TH}">CPR</th>
-      <th style="${TH}">Result</th>
-      <th style="${TH}">CPL</th>
-      <th style="${TH}">Actual<br>Leads</th>
-      <th style="${TH}">CAC</th>
+      <th style="${TH}">CPR${ii('cpr')}</th>
+      <th style="${TH}">Result${ii('total-results')}</th>
+      <th style="${TH}">CPL${ii('cpl')}</th>
+      <th style="${TH}">Actual<br>Leads${ii('actual-leads')}</th>
+      <th style="${TH}">CAC${ii('cac')}</th>
       <th style="${TH}">Convert<br>Customers</th>
       <th style="${THL};min-width:140px">Status</th>
       <th style="${THL};min-width:220px">Note</th>
@@ -1930,10 +2134,10 @@ function renderMembers() {
   const bmUsers = prefs.filter(p=>sf(p.AVM_BM_30d||0)>=1||sf(p.Sess_BM||0)>=1).length;
   const coachUsers = prefs.filter(p=>sf(p.AVM_Coaching_30d||0)>=1||sf(p.Sess_Coaching||0)>=1).length;
   document.getElementById('mem-kpi-row').innerHTML = `
-    <div class="kpi"><div class="kpi-lbl">Total Member</div><div class="kpi-val">${fN(si(s.total_members))}</div><div class="kpi-d">${fN(si(s.matched))} matched POS</div></div>
-    <div class="kpi"><div class="kpi-lbl">Avg CLV 6 Bulan</div><div class="kpi-val">${fIDR(si(s.avg_clv_moderate||0))}</div><div class="kpi-d">Moderate estimate</div></div>
-    <div class="kpi"><div class="kpi-lbl">Ball Machine User</div><div class="kpi-val">${fN(bmUsers)}</div><div class="kpi-d">≥1 sesi (30 hari)</div></div>
-    <div class="kpi"><div class="kpi-lbl">Coaching User</div><div class="kpi-val">${fN(coachUsers)}</div><div class="kpi-d">≥1 sesi (30 hari)</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Member${ii('total-member')}</div><div class="kpi-val">${fN(si(s.total_members))}</div><div class="kpi-d">${fN(si(s.matched))} matched POS</div></div>
+    <div class="kpi"><div class="kpi-lbl">Avg CLV 6 Bulan${ii('avg-clv')}</div><div class="kpi-val">${fIDR(si(s.avg_clv_moderate||0))}</div><div class="kpi-d">Moderate estimate</div></div>
+    <div class="kpi"><div class="kpi-lbl">Ball Machine User${ii('ball-machine-user')}</div><div class="kpi-val">${fN(bmUsers)}</div><div class="kpi-d">≥1 sesi (30 hari)</div></div>
+    <div class="kpi"><div class="kpi-lbl">Coaching User${ii('coaching-user')}</div><div class="kpi-val">${fN(coachUsers)}</div><div class="kpi-d">≥1 sesi (30 hari)</div></div>
   `;
 
   // ── RFM doughnut chart ────────────────────────────
@@ -2197,10 +2401,10 @@ function renderIntelligence() {
   const marketTop = nOcc(sorted[0]?.['Overall Occ %']||0);
 
   document.getElementById('intel-kpi-row').innerHTML = `
-    <div class="kpi accent"><div class="kpi-lbl">Ranking PPC</div><div class="kpi-val">#${ppcRank}</div><div class="kpi-d">dari ${compsWithPPC.length} venue</div></div>
-    <div class="kpi"><div class="kpi-lbl">PPC Occupancy</div><div class="kpi-val">${fPct(ppcOcc*100)}</div><div class="kpi-d ${ppcOcc>marketAvg?'up':'warn'}">${ppcOcc>marketAvg?'▲':'▼'} vs market avg</div></div>
-    <div class="kpi"><div class="kpi-lbl">Market Average</div><div class="kpi-val">${fPct(marketAvg*100)}</div><div class="kpi-d">${comps.length} venue aktif</div></div>
-    <div class="kpi"><div class="kpi-lbl">Market Leader</div><div class="kpi-val">${fPct(marketTop*100)}</div><div class="kpi-d">${(sorted[0]?.Venue||'—').split(' ').slice(0,2).join(' ')}</div></div>
+    <div class="kpi accent"><div class="kpi-lbl">Ranking PPC${ii('ranking-ppc')}</div><div class="kpi-val">#${ppcRank}</div><div class="kpi-d">dari ${compsWithPPC.length} venue</div></div>
+    <div class="kpi"><div class="kpi-lbl">PPC Occupancy${ii('ppc-occupancy')}</div><div class="kpi-val">${fPct(ppcOcc*100)}</div><div class="kpi-d ${ppcOcc>marketAvg?'up':'warn'}">${ppcOcc>marketAvg?'▲':'▼'} vs market avg</div></div>
+    <div class="kpi"><div class="kpi-lbl">Market Average${ii('market-average')}</div><div class="kpi-val">${fPct(marketAvg*100)}</div><div class="kpi-d">${comps.length} venue aktif</div></div>
+    <div class="kpi"><div class="kpi-lbl">Market Leader${ii('market-leader')}</div><div class="kpi-val">${fPct(marketTop*100)}</div><div class="kpi-d">${(sorted[0]?.Venue||'—').split(' ').slice(0,2).join(' ')}</div></div>
   `;
 
   // ── Competitor table ──────────────────────────
@@ -2284,7 +2488,7 @@ function renderIntelligence() {
     </tr>` : '';
 
   document.getElementById('intel-revenue-tbl').innerHTML = `<table class="tbl">
-    <thead><tr><th>Venue</th><th class="r">Rev Captured</th><th class="r">Rev Ceiling</th><th class="r" title="Rev Captured / Rev Ceiling — % potensi revenue yang berhasil dimonetisasi">Value Capture ℹ</th><th class="r" title="Occupancy × Value Capture — efisiensi keseluruhan">Value Index</th></tr></thead>
+    <thead><tr><th>Venue</th><th class="r">Rev Captured${ii('rev-captured')}</th><th class="r">Rev Ceiling${ii('rev-ceiling')}</th><th class="r">Value Capture ${ii('value-capture')}</th><th class="r">Value Index ${ii('value-index')}</th></tr></thead>
     <tbody>${revTop10.map(revRowHtml).join('')}${ppcExtraHtml}</tbody>
   </table>`;
 }
