@@ -1240,11 +1240,9 @@ function renderHome() {
                 :`<span class="dn">▼ ${fPct(Math.abs(revMoM))} vs bulan lalu</span>`)
     : '<span style="color:var(--txt3)">Bulan pertama</span>';
 
-  // Transactions bulan ini — dari product_detail (ESB) current month
+  // Transactions bulan ini — dari summary (dihitung pipeline dari ESB baris order bulan ini)
   const prods = D.product_detail || [];
-  const thisMon = todayStr.slice(0,7); // "YYYY-MM"
-  // Gunakan summary jika ada, fallback ke product_detail all-time
-  const totalTrxEsb = si(s.total_transactions_this_month) || prods.reduce((a,r)=>a+si(r.Total_Transactions),0);
+  const totalTrxEsb = si(s.total_transactions_this_month);
   const avgTrxVal   = si(s.avg_transaction_value) || (totalTrxEsb>0?(rev/totalTrxEsb):0);
   document.getElementById('kpi-trx').textContent = fN(totalTrxEsb)||'—';
   document.getElementById('kpi-trx-d').innerHTML = avgTrxVal>0

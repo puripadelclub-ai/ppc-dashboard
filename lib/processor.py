@@ -579,13 +579,20 @@ def calculate_campaigns(fd, df_ads, df_leads=None):
 # 9. SUMMARY KPIs
 # ─────────────────────────────────────────────
 
-def calculate_summary(fd, rev_monthly, df_ads):
+def calculate_summary(fd, rev_monthly, df_ads, df_sales=None):
     total_members  = len(fd)
     matched        = fd["Matched"].sum()
     total_spending = fd["total_spending"].sum()
 
     current_month = TODAY.to_period("M").strftime("%Y-%m")
     last_month    = (TODAY - pd.DateOffset(months=1)).to_period("M").strftime("%Y-%m")
+
+    # Hitung baris order (line items) ESB di bulan ini
+    trx_this_month = 0
+    if df_sales is not None and not df_sales.empty and "Sales Date" in df_sales.columns:
+        _df_s = df_sales.copy()
+        _df_s["_ym"] = pd.to_datetime(_df_s["Sales Date"], errors="coerce").dt.to_period("M").astype(str)
+        trx_this_month = int((_df_s["_ym"] == current_month).sum())
 
     # Gunakan copy untuk lookup agar tidak mutate rev_monthly yang akan ditulis ke Sheets
     _rev = rev_monthly.copy()
@@ -613,8 +620,9 @@ def calculate_summary(fd, rev_monthly, df_ads):
         "Revenue_MoM_Pct":      rev_delta,
         "Total_Ads_Budget":     int(total_budget),
         "Overall_ROAS":         overall_roas,
-        "ADS_Campaign_Members": int(ads_members),
-        "Last_Updated":         TODAY.strftime("%Y-%m-%d"),
+        "ADS_Campaign_Members":           int(ads_members),
+        "Total_Transactions_This_Month":  trx_this_month,
+        "Last_Updated":                   TODAY.strftime("%Y-%m-%d"),
     }])
 
 

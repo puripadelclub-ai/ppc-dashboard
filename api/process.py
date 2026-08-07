@@ -229,8 +229,9 @@ def dashboard_data():
                 "total_ads_budget":    si(summary.get("Total_Ads_Budget", 0)),
                 "overall_roas":        sf(summary.get("Overall_ROAS", 0)),
                 "ads_members":         si(summary.get("ADS_Campaign_Members", 0)),
-                "total_spending":      si(summary.get("Total_Spending", 0)),
-                "retention_rate":      latest_retention,
+                "total_spending":                si(summary.get("Total_Spending", 0)),
+                "total_transactions_this_month": si(summary.get("Total_Transactions_This_Month", 0)),
+                "retention_rate":               latest_retention,
                 "avg_clv_moderate":    avg_clv,
             },
             "revenue":      revenue_rows,
@@ -612,7 +613,7 @@ def run_pipeline():
     df_campaigns = calculate_campaigns(fd, df_ads, df_leads)
 
     log.append("Calculating summary KPIs...")
-    df_summary = calculate_summary(fd, rev_monthly, df_ads)
+    df_summary = calculate_summary(fd, rev_monthly, df_ads, df_sales=df_sales)
 
     # ── 3. TULIS KE SHEETS ─────────────────────────────
     log.append("Writing to Google Sheets...")
