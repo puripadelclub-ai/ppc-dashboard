@@ -1443,11 +1443,12 @@ function renderUsageSummary() {
     .reduce((s,r)=>s+sf(r.Total_Revenue),0);
 
   // Booking type definitions (AVM codes → label + ESB mapping)
+  // memberBenefit:true → sesi ini selalu free di AVM karena sudah termasuk benefit keanggotaan
   const usageDef = [
     { codes:['REGULAR','CO','FT'], label:'Court Rent',             icon:'🏓', esbCat:'COURT RENT' },
-    { codes:['BP1'],               label:'Ball Machine Baru (BP1)',icon:'🎾', esbCodes:['BP1'] },
-    { codes:['BP2'],               label:'Ball Machine Lama (BP2)',icon:'🎾', esbCodes:['BP2'] },
-    { codes:['BP'],                label:'Ball Machine',           icon:'🎾', esbCat:'BALL MACHINE' },
+    { codes:['BP1'],               label:'Ball Machine Baru (BP1)',icon:'🎾', esbCodes:['BP1'], memberBenefit:true },
+    { codes:['BP2'],               label:'Ball Machine Lama (BP2)',icon:'🎾', esbCodes:['BP2'], memberBenefit:true },
+    { codes:['BP'],                label:'Ball Machine',           icon:'🎾', esbCat:'BALL MACHINE', memberBenefit:true },
     { codes:['CBA'],               label:'Coaching',               icon:'👨‍🏫', esbCat:'COACHING PROGRAM' },
     { codes:['R'],                 label:'Reclub Aktif',           icon:'♻️', esbCat:'MEMBERSHIP PROGRAM' },
     { codes:['RX'],                label:'Reclub Tidak Aktif',     icon:'⏸️', esbCat:'MEMBERSHIP PROGRAM' },
@@ -1467,6 +1468,7 @@ function renderUsageSummary() {
   const totFree = totAll - totPaid;
   const totRev  = rows.reduce((s,r)=>s+r.rev, 0);
 
+  const benefitTag = `<span style="font-size:9px;font-weight:600;color:#059669;background:#d1fae5;border-radius:3px;padding:1px 4px;margin-left:4px;vertical-align:middle">benefit</span>`;
   document.getElementById('ops-usage-tbl').innerHTML = rows.length
     ? `<table class="tbl">
         <thead><tr>
@@ -1476,11 +1478,11 @@ function renderUsageSummary() {
           <th class="r">Free</th>
           <th class="r">Revenue <span style="font-weight:400;font-size:9px;color:var(--txt3)">(ESB)</span></th>
         </tr></thead>
-        <tbody>${rows.map(r=>`<tr>
-          <td>${r.icon} ${r.label}</td>
+        <tbody>${rows.map(r=>`<tr${r.memberBenefit?' style="background:rgba(5,150,105,.04)"':''}>
+          <td>${r.icon} ${r.label}${r.memberBenefit?benefitTag:''}</td>
           <td class="r mono"><b>${r.total}</b></td>
-          <td class="r mono">${r.paid>0?r.paid:'—'}</td>
-          <td class="r mono">${r.free>0?r.free:'—'}</td>
+          <td class="r mono">${r.memberBenefit?`<span style="color:var(--txt3);font-size:10px">—</span>`:r.paid>0?r.paid:'—'}</td>
+          <td class="r mono">${r.free>0?`<span style="color:${r.memberBenefit?'#059669':'inherit'}">${r.free}</span>`:'—'}</td>
           <td class="r mono">${r.rev>0?fIDR(r.rev):'—'}</td>
         </tr>`).join('')}
         <tr style="border-top:2px solid var(--border);font-weight:700;background:var(--bg)">
@@ -1491,8 +1493,10 @@ function renderUsageSummary() {
           <td class="r mono">${fIDR(totRev)}</td>
         </tr></tbody>
       </table>
-      <div style="font-size:10px;color:var(--txt3);padding:5px 0 2px">
-        Sesi/Paid/Free = AVM periode filter &nbsp;·&nbsp; Revenue = ESB semua periode
+      <div style="font-size:10px;color:var(--txt3);padding:6px 0 2px;line-height:1.5">
+        Sesi/Paid/Free = AVM periode filter &nbsp;·&nbsp; Revenue = ESB semua periode<br>
+        <span style="color:#059669">●</span> <b>benefit</b> = Ball Machine selalu free di AVM karena termasuk dalam hak akses member.
+        Dalam 1 sesi booking, court tercatat <i>paid</i> dan ball machine tercatat <i>free</i> secara terpisah.
       </div>`
     : `<div style="color:var(--txt3);padding:16px;font-size:13px">Tidak ada data untuk periode ini</div>`;
 }
