@@ -2177,36 +2177,98 @@ function renderWeeklyAdsTable(weekKey) {
       if(results>=5&&cpr>0&&cpr<150000&&(cpr<=prevCpr||!prevCpr)) status='WINNER';
       else if(results>=3&&results>prevResults&&cpr>0&&(cpr<prevCpr||!prevCpr)) status='WINNER';
     }
-    let statusNote='';
-    if(status==='MONITOR'&&converts===0&&leads!==null&&leads>0){
-      statusNote=` (${leads} leads, 0 convert)`;
-    }
+    const statusNote=''; // badge tetap bersih — info ada di kolom Note
 
-    // Note generation
+    // ── Note generation: What happened → Why it matters → What to do ──
     const noteParts=[];
+
+    // Partial week disclaimer
     if(isPartial){
       const sd=meta.satD, td=parseLocal(todayStr);
       const ddiff=Math.round((td-sd)/(864e5))+1;
-      const sdStr=`${sd.getDate()} ${MN[sd.getMonth()]}`;
-      const tdStr=`${td.getDate()} ${MN[td.getMonth()]}`;
-      noteParts.push(`Partial week (${sdStr}–${tdStr}, ${ddiff} hari)`);
+      noteParts.push(`Partial week (${sd.getDate()} ${MN[sd.getMonth()]}–${td.getDate()} ${MN[td.getMonth()]}, ${ddiff} hari)`);
     }
-    if(leads!==null){
-      const cvRate=leads>0?((converts||0)/leads*100).toFixed(0):0;
-      noteParts.push(`${leads} leads, ${converts||0} convert (${cvRate}%)`);
-      if(converts>0&&prevResults>0){const conv2=prevData[name]?.converts||0; if(converts<conv2) noteParts.push('convert rate turun vs minggu lalu.');}
-    } else if(results>0){
+
+    // Helper: CPR trend label
+    const cprTrend=()=>{
+      if(!(prevCpr>0&&cpr>0)) return '';
+      const pct=(cpr-prevCpr)/prevCpr*100;
+      const p=Math.abs(pct).toFixed(0);
+      const prev=weekMeta[prevKey]?.label||'minggu lalu';
+      if(pct>100) return `⚠️ CPR melonjak +${p}% (Rp${Math.round(cpr/1000)}rb vs Rp${Math.round(prevCpr/1000)}rb di ${prev}).`;
+      if(pct>30)  return `CPR naik ${p}% (Rp${Math.round(cpr/1000)}rb vs Rp${Math.round(prevCpr/1000)}rb di ${prev}).`;
+      if(pct>0)   return `CPR naik tipis ${p}% — masih oke.`;
+      return `CPR turun ${p}% (Rp${Math.round(cpr/1000)}rb vs Rp${Math.round(prevCpr/1000)}rb) — efisiensi membaik.`;
+    };
+
+    if(status==='KILLED'){
+      const prevStr=prevSpend>0?` (terakhir spend Rp${fN(Math.round(prevSpend))})`:'.';
+      noteParts.push(`Tidak aktif minggu ini${prevStr}. Sebelum reaktivasi: review performa terakhir & pastikan audience masih relevan.`);
+
+    } else if(status==='BARU'){
+      if(converts!==null&&converts>0){
+        const cvRate=leads>0?(converts/leads*100).toFixed(0):100;
+        const cacStr=cac>0?` CAC Rp${fN(Math.round(cac))}.`:'';
+        noteParts.push(`🎉 Campaign baru: ${converts} convert dari ${leads} leads (${cvRate}% rate).${cacStr} Jangan ubah setting apapun di learning phase — siapkan scale budget minggu depan.`);
+      } else if(converts!==null&&leads>0){
+        noteParts.push(`Campaign baru, ${leads} leads masuk, 0 convert. Follow up leads segera — respon WA <5 menit meningkatkan konversi hingga 21×. Jangan ubah budget/targeting di learning phase (3–5 hari).`);
+      } else if(results>0){
+        noteParts.push(`Learning phase Meta Ads. ${results} results dari Meta tapi belum ada actual lead tercatat — pastikan WA/form aktif & notifikasi menyala.`);
+      } else {
+        noteParts.push(`Learning phase Meta Ads (3–5 hari pertama). Data masih kosong — normal untuk campaign baru. Jangan ubah budget atau targeting dulu.`);
+      }
+
+    } else if(status==='WINNER'&&converts!==null&&converts>0){
+      // WINNER dengan bukti actual convert
+      const cvRate=leads>0?(converts/leads*100).toFixed(0):100;
+      const cacStr=cac>0?` CAC Rp${fN(Math.round(cac))}.`:'';
+      noteParts.push(`✅ ${converts} convert dari ${leads} leads (${cvRate}% convert rate).${cacStr}`);
+      const ct=cprTrend(); if(ct) noteParts.push(ct);
+      noteParts.push(`Scale budget +20–30% — pertahankan creative & targeting yang sama.`);
+
+    } else if(status==='WINNER'){
+      // WINNER tanpa data aktual (proxy Meta results)
       noteParts.push(`${results} results dari Meta Ads.`);
+      const ct=cprTrend(); if(ct) noteParts.push(ct);
+      noteParts.push(`Scale budget bertahap +20–30%. Segera konfirmasi di actual_leads apakah ada konversi nyata sebelum scale besar-besaran.`);
+
+    } else {
+      // MONITOR — breakdown berdasarkan kombinasi data
+      if(leads!==null&&leads>0&&converts===0){
+        noteParts.push(`${leads} leads masuk, 0 convert (0%).`);
+        const ct=cprTrend(); if(ct) noteParts.push(ct);
+        const pct=prevCpr>0&&cpr>0?(cpr-prevCpr)/prevCpr*100:0;
+        if(pct>100) noteParts.push(`CPR melonjak & 0 convert — pertimbangkan pause & ganti creative.`);
+        else if(pct>30) noteParts.push(`Evaluasi: (1) kecepatan respon WA (<5 menit), (2) kualitas follow-up script, (3) relevansi offer untuk audience ini.`);
+        else noteParts.push(`Ada leads tapi belum convert — cek follow-up pipeline WA.`);
+
+      } else if(leads!==null&&leads===0&&results>0){
+        noteParts.push(`${results} results di Meta tapi 0 actual lead tercatat.`);
+        noteParts.push(`Cek apakah WA/form aktif & notifikasi menyala. Mungkin ada disconnect antara Meta tracking dan pencatatan manual.`);
+        const ct=cprTrend(); if(ct) noteParts.push(ct);
+
+      } else if(leads!==null&&leads===0){
+        // Has actual data but everything 0
+        if(spend>0&&results===0){
+          if(ctr<1) noteParts.push(`CTR ${ctr.toFixed(2)}% — sangat rendah. Audience mungkin sudah jenuh dengan creative ini. Ganti visual atau copy segera.`);
+          else noteParts.push(`CTR ${ctr.toFixed(2)}% tapi 0 results & 0 leads. Cek pixel/tracking atau coba broadenkan targeting.`);
+        } else if(results>0){
+          noteParts.push(`${results} results Meta, 0 actual lead. Pastikan tracking & form WA berfungsi.`);
+        }
+        const ct=cprTrend(); if(ct) noteParts.push(ct);
+
+      } else {
+        // No actual data (leads===null), not qualifying for WINNER
+        if(results>0){
+          noteParts.push(`${results} results dari Meta.`);
+          const ct=cprTrend(); if(ct) noteParts.push(ct);
+          noteParts.push(`Belum cukup data untuk WINNER — pantau 2–3 hari atau cek actual_leads.`);
+        } else if(spend>0){
+          if(ctr<1) noteParts.push(`CTR rendah (${ctr.toFixed(2)}%) & 0 results — ganti creative atau perluas targeting.`);
+          else noteParts.push(`Ada spend & klik tapi 0 results — cek tracking, atau tunggu 2–3 hari.`);
+        }
+      }
     }
-    if(prevCpr>0&&cpr>0){
-      const t=cpr>prevCpr?'naik':'turun';
-      const p=Math.abs((cpr-prevCpr)/prevCpr*100).toFixed(0);
-      noteParts.push(`CPR ${t} ${p}% (Rp${Math.round(cpr/1000)}rb vs Rp${Math.round(prevCpr/1000)}rb di ${weekMeta[prevKey]?.label||'minggu lalu'}).`);
-    }
-    if(status==='WINNER') noteParts.push('Performa terbaik minggu ini — pertimbangkan scale budget.');
-    else if(spend>0&&results===0&&ctr<1) noteParts.push('CTR rendah & 0 results. Pertimbangkan ganti creative atau matikan.');
-    else if(spend>0&&results===0) noteParts.push('Belum ada results. Beri waktu 2–3 hari lagi.');
-    else if(status==='KILLED') noteParts.push('Tidak aktif minggu ini.');
 
     return {name,offer,spend,results,cpr,cpl,leads,cac,converts,ctr,status,statusNote,note:noteParts.join(' — ')};
   }).sort((a,b)=>b.spend-a.spend);
@@ -2278,7 +2340,7 @@ function renderWeeklyAdsTable(weekKey) {
         <td style="${TD}">${r.converts!==null?r.converts:'—'}</td>
         <td style="${TDL}">
           <span style="${STATUS_STYLE[r.status]||STATUS_STYLE.MONITOR};padding:4px 9px;border-radius:4px;font-size:10.5px;font-weight:700;display:inline-block">
-            ${r.status}${r.statusNote}
+            ${r.status}
           </span>
         </td>
         <td style="${TDL};color:var(--txt2);line-height:1.5;font-size:10.5px">${r.note||'—'}</td>
