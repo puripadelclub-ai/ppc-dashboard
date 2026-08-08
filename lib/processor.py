@@ -33,11 +33,11 @@ def classify_source(kode):
         return "Unclear"
     if "winner reclub" in kl or "1st winner" in kl:
         return "Event/Reclub"
-    # Campaign spesifik — ada angka dan si/vid
+    # Campaign spesifik — ada angka di bagian pertama (contoh: "[028 - SI - Membership]")
     parts = kl.split("-")
     if parts and any(c.isdigit() for c in parts[0].strip()):
         return "ADS Campaign"
-    return "ADS Campaign"
+    return "Other"  # tidak diketahui / tidak cocok pola apapun
 
 
 def extract_offer(campaign_name):
