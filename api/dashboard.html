@@ -866,9 +866,9 @@ const METRIC_INFO = {
     what:'Rata-rata biaya untuk mendapatkan satu "result" dari iklan. Semakin rendah, semakin efisien iklan dalam menghasilkan respons.',
     source:'CPR = Total Spend ÷ Total Results. Dihitung dari data Meta Ads API → cost_per_action_type field.',
     bench:'CPR untuk industri sports/fitness di Indonesia: Rp 15.000–60.000 untuk conversational ads. Di atas Rp 100.000 → evaluasi targeting atau creative. (Meta Indonesia SMB Insights, 2023)'},
-  'member-dari-ads':{title:'Member dari Ads',
-    what:'Jumlah member terdaftar yang diduga datang dari iklan, berdasarkan kode referral "ads" di field Kode Ads membership mereka.',
-    source:'Sumber: Membership List (Drive) → filter baris yang kolom "Kode ads" tidak kosong → count.',
+  'member-dari-ads':{title:'Member via Ads (Kumulatif)',
+    what:'Total member yang pernah bergabung melalui kampanye iklan — dihitung dari field "Kode Ads" di Membership List. Ini adalah angka kumulatif (all-time), bukan hanya dari campaign minggu ini. Angka "X ads aktif" di bawahnya adalah campaign yang punya spend di minggu berjalan — keduanya metrik terpisah.',
+    source:'Sumber: Membership List (Drive) → filter baris yang kolom "Kode Ads" berisi kode campaign (bukan Organic/Walk-in/kosong) → count. Diperbarui setiap pipeline /api/process dijalankan.',
     bench:'Cost per acquired member (CAC) yang ideal untuk padel club premium: <Rp 500.000. Di atas Rp 1 jt → evaluasi funnel post-click (follow-up WhatsApp, penawaran trial, dll).'},
   'actual-leads':{title:'Actual Leads',
     what:'Jumlah leads nyata (prospek yang menghubungi via WhatsApp atau channel lain) yang dicatat secara manual oleh admin per periode iklan. Ini berbeda dengan "Results" dari Meta — Actual Leads adalah verifikasi manual di lapangan.',
@@ -1907,7 +1907,7 @@ function renderMarketing() {
   document.getElementById('mkt-kpi-row').innerHTML = `
     <div class="kpi accent"><div class="kpi-lbl">ROAS${ii('roas')}</div><div class="kpi-val">${roasDisplay}</div><div class="kpi-d"><span style="color:var(--txt3)">${roasSub}</span></div></div>
     <div class="kpi"><div class="kpi-lbl">Total Results${ii('total-results')}</div><div class="kpi-val">${fN(totalResults)}</div><div class="kpi-d"><span style="color:var(--txt3)">CPR avg ${avgCPR}</span></div></div>
-    <div class="kpi"><div class="kpi-lbl">Member dari Ads${ii('member-dari-ads')}</div><div class="kpi-val">${fN(si(s.ads_members))}</div><div class="kpi-d"><span style="color:var(--txt3)">${nActive} ads aktif</span></div></div>
+    <div class="kpi"><div class="kpi-lbl">Member via Ads${ii('member-dari-ads')}</div><div class="kpi-val">${fN(si(s.ads_members))}</div><div class="kpi-d"><span style="color:var(--txt3)">kumulatif · ${nActive} ads aktif minggu ini</span></div></div>
   `;
 
   // ── Raw ads summary banner ──────────────────────────
