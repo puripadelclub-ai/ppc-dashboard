@@ -1395,29 +1395,42 @@ function renderHome() {
       </div>`
     : '<div style="color:var(--txt3);font-size:12px;padding:20px 0;text-align:center">Belum ada data AVM hari ini</div>';
 
-  // ── Row 3: Posisi pasar ─────────────────────────────────────────────
-  const comps = D.competitors||[];
-  const ppcComp = comps.find(r=>(r.Venue||'').includes('Puri Padel'));
-  const sortedComps = [...comps].sort((a,b)=>nOcc(b['Overall Occ %'])-nOcc(a['Overall Occ %']));
-  const rank = ppcComp ? sortedComps.findIndex(r=>r.Venue===ppcComp.Venue)+1 : 0;
-  const marketAvg = comps.length>0?comps.reduce((s,r)=>s+nOcc(r['Overall Occ %']||0),0)/comps.length:0;
-  const ppcOcc = ppcComp ? nOcc(ppcComp['Overall Occ %']||0) : 0;
-  document.getElementById('home-market-pos').innerHTML = comps.length>0?`
+  // ── Row 3: Posisi pasar — gunakan data tanggal terbaru, sama seperti Intelligence page ──
+  const allCompsHome = D.competitors||[];
+  const occHome = D.occupancy||[];
+  // Ambil tanggal terbaru yang tersedia
+  const homeDates = [...new Set(allCompsHome.map(r=>r.date||r.snapshot_date||''))].filter(Boolean).sort().reverse();
+  const homeLatestDate = homeDates[0]||'';
+  const compsLatest = homeLatestDate ? allCompsHome.filter(r=>(r.date||r.snapshot_date||'')===homeLatestDate) : allCompsHome;
+  // Inject PPC dari occupancy jika tidak ada di data kompetitor
+  let compsHome = [...compsLatest];
+  if(!compsLatest.find(r=>(r.Venue||'').includes('Puri Padel')) && occHome.length>0){
+    const ppcOccEntry = occHome.find(o=>o.date===homeLatestDate)||occHome[occHome.length-1]||{};
+    compsHome.push({Venue:'Puri Padel Club','Overall Occ %':ppcOccEntry['Overall Occ %']||0,date:homeLatestDate,_injected:true});
+  }
+  const ppcCompHome = compsHome.find(r=>(r.Venue||'').includes('Puri Padel'));
+  const sortedCompsHome = [...compsHome].sort((a,b)=>nOcc(b['Overall Occ %'])-nOcc(a['Overall Occ %']));
+  const rank = ppcCompHome ? sortedCompsHome.findIndex(r=>(r.Venue||'').includes('Puri Padel'))+1 : 0;
+  // Market average dari kompetitor saja (tidak termasuk PPC yang di-inject)
+  const marketAvgHome = compsLatest.length>0?compsLatest.reduce((s,r)=>s+nOcc(r['Overall Occ %']||0),0)/compsLatest.length:0;
+  const ppcOccHome = ppcCompHome ? nOcc(ppcCompHome['Overall Occ %']||0) : 0;
+  const homeDataLabel = homeLatestDate || '—';
+  document.getElementById('home-market-pos').innerHTML = compsHome.length>0?`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div style="text-align:center;padding:10px;background:var(--brand-lt);border-radius:var(--r-sm)">
         <div style="font-size:26px;font-weight:700;color:var(--brand)">#${rank}</div>
-        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">dari ${comps.length} venue</div>
+        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">dari ${compsHome.length} venue</div>
       </div>
       <div style="text-align:center;padding:10px;background:var(--bg);border-radius:var(--r-sm)">
-        <div style="font-size:26px;font-weight:700;color:var(--txt)">${fPct(ppcOcc*100)}</div>
+        <div style="font-size:26px;font-weight:700;color:var(--txt)">${fPct(ppcOccHome*100)}</div>
         <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">Occupancy PPC</div>
       </div>
     </div>
-    <div class="mini-stat"><div class="mini-stat-lbl">Market average</div><div class="mini-stat-val">${fPct(marketAvg*100)}</div></div>
+    <div class="mini-stat"><div class="mini-stat-lbl">Market average</div><div class="mini-stat-val">${fPct(marketAvgHome*100)}</div></div>
     <div class="mini-stat"><div class="mini-stat-lbl">PPC vs market</div>
-      <div class="mini-stat-val ${ppcOcc>marketAvg?'up':'dn'}">${ppcOcc>marketAvg?'▲':'▼'} ${fPct(Math.abs(ppcOcc-marketAvg)*100)}</div>
+      <div class="mini-stat-val ${ppcOccHome>marketAvgHome?'up':'dn'}">${ppcOccHome>marketAvgHome?'▲':'▼'} ${fPct(Math.abs(ppcOccHome-marketAvgHome)*100)}</div>
     </div>
-    <div class="mini-stat"><div class="mini-stat-lbl">Data per</div><div class="mini-stat-val" style="font-size:11px">${comps[0]?.snapshot_date||'—'}</div></div>
+    <div class="mini-stat"><div class="mini-stat-lbl">Data per</div><div class="mini-stat-val" style="font-size:11px">${homeDataLabel}</div></div>
   `:'<div style="color:var(--txt3);font-size:12px;padding:20px 0;text-align:center">Jalankan pipeline untuk data kompetitor</div>';
 
   // ── Row 3: Member health ─────────────────────────────────────────────
