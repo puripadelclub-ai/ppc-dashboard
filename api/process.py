@@ -44,6 +44,7 @@ from processor import (
 )
 from meta_ads import fetch_ads_insights
 from avm_client import fetch_bookings_range, calculate_avm_summary
+from competitor_client import fetch_all_competitors, accumulate_competitors
 import math
 import pandas as pd
 from collections import Counter
@@ -103,6 +104,79 @@ def fetch_ads():
             "campaigns": campaigns,
             "ads": ads,
             "date_preset": date_preset,
+        })
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        return jsonify({"status": "error", "message": str(e), "trace": tb}), 500
+
+
+@app.route("/api/fetch-competitors", methods=["GET", "POST"])
+def fetch_competitors():
+    """
+    Scrape competitor venue occupancy from Ayo.co.id public API.
+    Accumulates data in TAB_OUT_COMPETITORS — does NOT overwrite history.
+
+    Best called at 07:00 WIB (00:00 UTC) before slots start expiring.
+    Vercel Cron: "0 0 * * *" in vercel.json.
+
+    Query params:
+      date: YYYY-MM-DD (optional, defaults to today Jakarta time)
+    """
+    try:
+        date_str = request.args.get("date", None)
+
+        log = []
+        log.append(f"Fetching competitor occupancy via Ayo API{f' for {date_str}' if date_str else ' (today)'}...")
+
+        # Fetch from Ayo public API
+        df_new = fetch_all_competitors(date_str=date_str)
+        if df_new.empty:
+            return jsonify({"status": "warning", "message": "No competitor data returned", "rows": 0})
+
+        actual_date = df_new["date"].iloc[0]
+        log.append(f"  → {len(df_new)} venues scraped for {actual_date}")
+
+        # Accumulate with existing history in Sheets
+        try:
+            df_existing = read_tab_as_df(TAB_OUT_COMPETITORS)
+            if not df_existing.empty:
+                df_combined = accumulate_competitors(df_new, df_existing)
+                log.append(f"  → Merged with {len(df_existing)} existing rows → {len(df_combined)} total")
+            else:
+                df_combined = df_new
+                log.append("  → No existing data, writing fresh")
+        except Exception as e_read:
+            df_combined = df_new
+            log.append(f"  → Could not read existing data ({e_read}), writing fresh")
+
+        # Write back to Sheets
+        write_df_to_tab(df_combined, TAB_OUT_COMPETITORS)
+        log.append(f"  → Written {len(df_combined)} rows to {TAB_OUT_COMPETITORS}")
+
+        # Build summary per venue
+        venues_summary = []
+        for _, row in df_new.iterrows():
+            occ = row.get("Overall Occ %")
+            venues_summary.append({
+                "venue":       row["Venue"],
+                "area":        row.get("area", ""),
+                "overall_occ": round(float(occ), 4) if occ is not None else None,
+                "morning_occ": row.get("Morning Occ %"),
+                "afternoon_occ": row.get("Afternoon Occ %"),
+                "evening_occ": row.get("Evening Occ %"),
+                "total_slots": int(row.get("total_slots", 0)),
+                "booked_slots": int(row.get("booked_slots", 0)),
+                "error":       row.get("error"),
+            })
+
+        return jsonify({
+            "status":        "success",
+            "date":          actual_date,
+            "venues_scraped": len(df_new),
+            "total_rows":    len(df_combined),
+            "venues":        venues_summary,
+            "log":           log,
         })
 
     except Exception as e:
@@ -696,20 +770,30 @@ def run_pipeline():
         log.append(f"  ⚠️ AVM error: {e}")
 
     # ── 5. OCCUPANCY BENCHMARK ─────────────────────────
-    log.append("Fetching occupancy benchmark from Drive...")
+    # Primary: Ayo.co.id public API scraper (fetch-competitors cron already ran at 07:00)
+    # Fallback: Google Drive benchmark files (manual upload)
+    log.append("Checking competitor occupancy data...")
     try:
-        df_competitors, df_ppc_trend, df_all_history = read_occupancy_benchmark(trend_days=14)
-        # Tulis all-venues history (semua tanggal) ke out_competitors agar dashboard bisa filter by date
-        write_target = df_all_history if not df_all_history.empty else df_competitors
-        if not write_target.empty:
-            write_df_to_tab(write_target, TAB_OUT_COMPETITORS)
-            n_dates = write_target["date"].nunique() if "date" in write_target.columns else 1
-            log.append(f"  → {len(write_target)} venue-day rows ({n_dates} tanggal)")
-        if not df_ppc_trend.empty:
-            write_df_to_tab(df_ppc_trend, TAB_OUT_OCCUPANCY)
-            log.append(f"  → {len(df_ppc_trend)} days of PPC occupancy trend")
+        df_existing_comp = read_tab_as_df(TAB_OUT_COMPETITORS)
+        if not df_existing_comp.empty:
+            log.append(f"  → {len(df_existing_comp)} competitor rows already in Sheets (from Ayo scraper)")
+        else:
+            # Sheets is empty — try Drive fallback
+            log.append("  → No Ayo data yet, trying Drive benchmark fallback...")
+            try:
+                df_comp_drive, df_ppc_trend, df_all_history = read_occupancy_benchmark(trend_days=14)
+                write_target = df_all_history if not df_all_history.empty else df_comp_drive
+                if not write_target.empty:
+                    write_df_to_tab(write_target, TAB_OUT_COMPETITORS)
+                    n_dates = write_target["date"].nunique() if "date" in write_target.columns else 1
+                    log.append(f"  → Drive fallback: {len(write_target)} venue-day rows ({n_dates} dates)")
+                if not df_ppc_trend.empty:
+                    write_df_to_tab(df_ppc_trend, TAB_OUT_OCCUPANCY)
+                    log.append(f"  → {len(df_ppc_trend)} days PPC occupancy trend (from Drive)")
+            except Exception as e_drive:
+                log.append(f"  ⚠️ Drive benchmark also failed: {e_drive}")
     except Exception as e:
-        log.append(f"  ⚠️ Occupancy error: {e}")
+        log.append(f"  ⚠️ Competitor data check error: {e}")
 
     # ── 6. COACHING ANALYTICS ──────────────────────────
     log.append("Reading coaching data from PPC Coaching Log sheet...")

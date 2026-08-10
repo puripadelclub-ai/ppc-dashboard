@@ -6,6 +6,10 @@
       "schedule": "0 0 * * *"
     },
     {
+      "path": "/api/fetch-competitors",
+      "schedule": "0 0 * * *"
+    },
+    {
       "path": "/api/process",
       "schedule": "30 0 * * *"
     }
