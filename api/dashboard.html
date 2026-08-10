@@ -2629,20 +2629,27 @@ function renderIntelligence() {
   // Filter comps untuk tanggal yang dipilih
   const comps = allComps.filter(r=>(r.date||r.snapshot_date||'')=== _intelDate);
 
-  // Inject PPC from occupancy trend if not in competitors data
+  // Inject PPC hanya untuk hari ini atau masa lalu — jangan gunakan data AVM untuk tanggal besok
+  const _todayStr = todayLocal();
   let compsWithPPC = [...comps];
-  if(!comps.find(r=>(r.Venue||'').includes('Puri Padel')) && occ.length>0) {
-    // Cari data PPC dari occupancy trend untuk tanggal yang sama atau terdekat
-    const ppcOccEntry = occ.find(o=>o.date===_intelDate) || occ[occ.length-1] || {};
-    compsWithPPC.push({
-      Venue: 'Puri Padel Club',
-      'Overall Occ %': ppcOccEntry['Overall Occ %']||0,
-      'Morning Occ %': ppcOccEntry['Morning Occ %']||0,
-      'Evening Occ %': ppcOccEntry['Evening Occ %']||0,
-      Courts: 4,
-      date: _intelDate,
-      _injected: true,
-    });
+  if(!comps.find(r=>(r.Venue||'').includes('Puri Padel'))) {
+    if(_intelDate <= _todayStr) {
+      // Hari ini: pakai AVM real-time; masa lalu: pakai D.occupancy
+      let ppcOcc = 0, ppcMorning = 0, ppcEvening = 0;
+      if(_intelDate === _todayStr) {
+        const avmToday = (D.avm||[]).find(r=>r.date===_todayStr) || (D.avm||[]).slice(-1)[0] || {};
+        ppcOcc     = nOcc(avmToday['Overall Occ %']||0);
+        ppcMorning = nOcc(avmToday['Morning Occ %']||0);
+        ppcEvening = nOcc(avmToday['Evening Occ %']||0);
+      } else {
+        const pastEntry = occ.find(o=>o.date===_intelDate) || {};
+        ppcOcc     = nOcc(pastEntry['Overall Occ %']||0);
+        ppcMorning = nOcc(pastEntry['Morning Occ %']||0);
+        ppcEvening = nOcc(pastEntry['Evening Occ %']||0);
+      }
+      compsWithPPC.push({Venue:'Puri Padel Club','Overall Occ %':ppcOcc,'Morning Occ %':ppcMorning,'Evening Occ %':ppcEvening,Courts:4,date:_intelDate,_injected:true});
+    }
+    // Tanggal besok/masa depan: PPC tidak di-inject (data AVM tidak relevan untuk future date)
   }
 
   const ppcRow = compsWithPPC.find(r=>(r.Venue||'').includes('Puri Padel'))||{};
