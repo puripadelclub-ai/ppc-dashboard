@@ -205,23 +205,32 @@ def calculate_occupancy(raw: dict) -> dict:
     }
 
 
-def _revenue_metrics(occ: dict, base_price: int) -> dict:
+def _revenue_metrics(raw: dict, occ: dict) -> dict:
     """
-    Calculate revenue-based metrics from slot counts and venue base price.
+    Calculate revenue metrics directly from Ayo slot prices.
 
-    Formulas (matching old Drive benchmark "Demand & Value" sheet):
-      Rev Ceiling  = total_slots × base_price / 1_000_000
-      Rev Captured = booked_slots × base_price / 1_000_000
-      Value Capture % = Rev Captured / Rev Ceiling  (decimal 0–1)
-      Value Index     = Overall Occ % × Value Capture %  (decimal 0–1)
+    Uses actual `price` per slot from API response — captures peak/off-peak
+    differential automatically without hardcoded base_price assumptions.
 
-    Assumes uniform pricing per slot (Ayo API does not expose peak/off-peak
-    differential pricing per slot in the public endpoint).
+      Rev Ceiling  = Σ price of ALL slots / 1_000_000
+      Rev Captured = Σ price of BOOKED slots (is_available=0) / 1_000_000
+      Value Capture % = Rev Captured / Rev Ceiling
+      Value Index     = Overall Occ % × Value Capture %
+
+    Note: reflects only Ayo-listed slots; does not include walk-in or
+    off-platform bookings.
     """
-    total  = occ.get("total_slots", 0)
-    booked = occ.get("booked_slots", 0)
+    rev_ceiling  = 0.0
+    rev_captured = 0.0
 
-    if total == 0:
+    for field in raw.get("fields", []):
+        for slot in field.get("slots", []):
+            price = slot.get("price", 0) or 0
+            rev_ceiling += price
+            if slot.get("is_available") == 0:
+                rev_captured += price
+
+    if rev_ceiling == 0:
         return {
             "Rev Ceiling (M IDR)":  None,
             "Rev Captured (M IDR)": None,
@@ -229,20 +238,20 @@ def _revenue_metrics(occ: dict, base_price: int) -> dict:
             "Value Index":          None,
         }
 
-    rev_ceiling  = round(total  * base_price / 1_000_000, 3)
-    rev_captured = round(booked * base_price / 1_000_000, 3)
-    value_capture = round(rev_captured / rev_ceiling, 4) if rev_ceiling > 0 else None
+    rev_ceiling_m  = round(rev_ceiling  / 1_000_000, 3)
+    rev_captured_m = round(rev_captured / 1_000_000, 3)
+    value_capture  = round(rev_captured / rev_ceiling, 4)
 
     overall_occ = occ.get("Overall Occ %")
     value_index = (
         round(overall_occ * value_capture, 4)
-        if (overall_occ is not None and value_capture is not None)
+        if overall_occ is not None
         else None
     )
 
     return {
-        "Rev Ceiling (M IDR)":  rev_ceiling,
-        "Rev Captured (M IDR)": rev_captured,
+        "Rev Ceiling (M IDR)":  rev_ceiling_m,
+        "Rev Captured (M IDR)": rev_captured_m,
         "Value Capture %":      value_capture,
         "Value Index":          value_index,
     }
@@ -260,7 +269,7 @@ def fetch_daily_occupancy(venue_id: int, date_str: str) -> dict:
 
     raw = fetch_venue_availability(venue_id, date_str)
     occ = calculate_occupancy(raw)
-    rev = _revenue_metrics(occ, info["base_price"])
+    rev = _revenue_metrics(raw, occ)
 
     # Dynamic court count: use registry value if set, else count from API fields
     courts = info.get("courts") or len(raw.get("fields", [])) or 0
