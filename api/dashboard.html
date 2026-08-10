@@ -1402,11 +1402,11 @@ function renderHome() {
   const homeDates = [...new Set(allCompsHome.map(r=>r.date||r.snapshot_date||''))].filter(Boolean).sort().reverse();
   const homeLatestDate = homeDates[0]||'';
   const compsLatest = homeLatestDate ? allCompsHome.filter(r=>(r.date||r.snapshot_date||'')===homeLatestDate) : allCompsHome;
-  // Inject PPC dari occupancy jika tidak ada di data kompetitor
+  // Inject PPC dari AVM hari ini (bukan D.occupancy/benchmark) supaya konsisten dgn chart
   let compsHome = [...compsLatest];
-  if(!compsLatest.find(r=>(r.Venue||'').includes('Puri Padel')) && occHome.length>0){
-    const ppcOccEntry = occHome.find(o=>o.date===homeLatestDate)||occHome[occHome.length-1]||{};
-    compsHome.push({Venue:'Puri Padel Club','Overall Occ %':ppcOccEntry['Overall Occ %']||0,date:homeLatestDate,_injected:true});
+  if(!compsLatest.find(r=>(r.Venue||'').includes('Puri Padel'))){
+    const ppcAVMOcc = todayAVMrow ? nOcc(todayAVMrow['Overall Occ %']||0) : 0;
+    compsHome.push({Venue:'Puri Padel Club','Overall Occ %':ppcAVMOcc,date:todayStr,_injected:true});
   }
   const ppcCompHome = compsHome.find(r=>(r.Venue||'').includes('Puri Padel'));
   const sortedCompsHome = [...compsHome].sort((a,b)=>nOcc(b['Overall Occ %'])-nOcc(a['Overall Occ %']));
