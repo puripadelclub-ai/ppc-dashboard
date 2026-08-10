@@ -140,15 +140,15 @@ def fetch_competitors():
         run_label = "evening (smart merge)" if is_evening_run else "morning (full snapshot)"
 
         log = []
-        log.append(f"Fetching competitor occupancy via Ayo API ({run_label}){f' for {date_str}' if date_str else ' (today)'}...")
+        log.append(f"Fetching competitor occupancy via Ayo API ({run_label}){f' for {date_str}' if date_str else ' (today + tomorrow)'}...")
 
-        # Fetch from Ayo public API
-        df_new = fetch_all_competitors(date_str=date_str)
+        # Fetch from Ayo public API — today + tomorrow (advance bookings)
+        df_new = fetch_all_competitors(date_str=date_str, include_tomorrow=True)
         if df_new.empty:
             return jsonify({"status": "warning", "message": "No competitor data returned", "rows": 0})
 
-        actual_date = df_new["date"].iloc[0]
-        log.append(f"  → {len(df_new)} venues scraped for {actual_date}")
+        dates_fetched = sorted(df_new["date"].unique())
+        log.append(f"  → {len(df_new)} rows scraped for dates: {', '.join(dates_fetched)}")
 
         # Accumulate with existing history in Sheets
         try:

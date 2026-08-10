@@ -281,56 +281,70 @@ def fetch_daily_occupancy(venue_id: int, date_str: str) -> dict:
     }
 
 
-def fetch_all_competitors(date_str: str = None, max_workers: int = 10) -> pd.DataFrame:
+def fetch_all_competitors(
+    date_str: str = None,
+    include_tomorrow: bool = True,
+    max_workers: int = 10,
+) -> pd.DataFrame:
     """
     Fetch occupancy for all registered competitors in parallel.
 
     Args:
-        date_str:    YYYY-MM-DD (defaults to today in Jakarta time UTC+7)
-        max_workers: parallel HTTP requests — keep ≤4 (polite to Ayo)
+        date_str:         YYYY-MM-DD (defaults to today Jakarta time UTC+7)
+        include_tomorrow: also fetch D+1 (advance bookings visible on Ayo)
+        max_workers:      parallel HTTP requests
 
     Returns:
-        DataFrame with exactly CANONICAL_COLUMNS (no extra columns).
+        DataFrame with exactly CANONICAL_COLUMNS for one or two dates.
         Occ % values are decimals 0–1, matching Drive benchmark format.
     """
+    today_wib = datetime.utcnow() + timedelta(hours=7)
     if date_str is None:
-        date_str = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d")
+        date_str = today_wib.strftime("%Y-%m-%d")
+
+    dates_to_fetch = [date_str]
+    if include_tomorrow:
+        tomorrow_str = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        dates_to_fetch.append(tomorrow_str)
 
     rows = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_map = {
-            executor.submit(fetch_daily_occupancy, vid, date_str): vid
+            executor.submit(fetch_daily_occupancy, vid, d): (vid, d)
             for vid in COMPETITOR_VENUES
+            for d in dates_to_fetch
         }
         for future in as_completed(future_map):
             try:
                 rows.append(future.result())
             except Exception as e:
-                vid = future_map[future]
+                vid, d = future_map[future]
                 name = COMPETITOR_VENUES.get(vid, {}).get("name", str(vid))
-                print(f"  ✗ {name} failed: {e}")
+                print(f"  ✗ {name} ({d}) failed: {e}")
 
     if not rows:
         return pd.DataFrame(columns=CANONICAL_COLUMNS)
 
     df = pd.DataFrame(rows)
 
-    # Sort: Premium first, then Mid, Value
+    # Sort: by date desc, then Premium → Mid → Value
     tier_order = {"Premium": 0, "Mid": 1, "Value": 2, "Unknown": 9}
     venue_tier = {info["name"]: info["price_tier"] for info in COMPETITOR_VENUES.values()}
     df["_tier_rank"] = df["Venue"].map(venue_tier).map(tier_order).fillna(9)
-    df = df.sort_values(["_tier_rank", "Venue"]).reset_index(drop=True)
+    df = df.sort_values(["date", "_tier_rank", "Venue"], ascending=[False, True, True]).reset_index(drop=True)
 
-    # Print summary
-    ok = df[df["_error"].isna() | (df["_error"] == "")].shape[0]
-    print(f"Competitor scrape {date_str}: {ok}/{len(df)} venues OK")
-    for _, row in df.iterrows():
-        occ = row.get("Overall Occ %")
-        occ_str = f"{float(occ):.1%}" if occ is not None else "N/A"
-        icon = "✓" if not row.get("_error") else "✗"
-        print(f"  {icon} {row['Venue']}: {occ_str} "
-              f"({int(row.get('_booked', 0))}/{int(row.get('_total', 0))} slots) | "
-              f"Rev {row.get('Rev Captured (M IDR)', 0):.2f}M / {row.get('Rev Ceiling (M IDR)', 0):.2f}M IDR")
+    # Print summary per date
+    for d in sorted(df["date"].unique(), reverse=True):
+        df_d = df[df["date"] == d]
+        ok = df_d[df_d["_error"].isna() | (df_d["_error"] == "")].shape[0]
+        label = "tomorrow" if d == dates_to_fetch[-1] and len(dates_to_fetch) > 1 else "today"
+        print(f"Competitor scrape {d} ({label}): {ok}/{len(df_d)} venues OK")
+        for _, row in df_d.iterrows():
+            occ = row.get("Overall Occ %")
+            occ_str = f"{float(occ):.1%}" if occ is not None else "N/A"
+            icon = "✓" if not row.get("_error") else "✗"
+            print(f"  {icon} {row['Venue']}: {occ_str} "
+                  f"({int(row.get('_booked', 0))}/{int(row.get('_total', 0))} slots)")
 
     # Drop internal columns before returning
     internal_cols = [c for c in df.columns if c.startswith("_")]
@@ -372,11 +386,16 @@ def accumulate_competitors(
     if df_existing.empty:
         return df_new
 
-    today_dates = set(df_new["date"].dropna().unique())
+    new_dates = set(df_new["date"].dropna().unique())
     date_key = "date" if "date" in df_existing.columns else "snapshot_date"
 
-    # Historical rows (past dates) — always kept unchanged
-    df_hist = df_existing[~df_existing[date_key].isin(today_dates)].copy()
+    # Historical rows (not in new batch) — always kept unchanged
+    df_hist = df_existing[~df_existing[date_key].isin(new_dates)].copy()
+
+    # Identify today vs future dates in the new batch
+    today_wib = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d")
+    today_new    = df_new[df_new["date"] == today_wib]
+    non_today_new = df_new[df_new["date"] != today_wib]   # tomorrow + any future dates
 
     def _normalize(df: pd.DataFrame) -> pd.DataFrame:
         for col in CANONICAL_COLUMNS:
@@ -384,38 +403,37 @@ def accumulate_competitors(
                 df[col] = None
         return df[CANONICAL_COLUMNS].copy()
 
-    if is_evening_run:
-        # ── Evening smart merge ───────────────────────────────────────────
-        # For each venue: keep morning_occ + overall_occ + Rev metrics from
-        # the morning fetch; update only afternoon_occ + evening_occ.
-        df_today_existing = df_existing[df_existing[date_key].isin(today_dates)].copy()
+    if is_evening_run and not today_new.empty:
+        # ── Evening smart merge (today only) ─────────────────────────────
+        # Keep morning_occ + overall_occ + Rev metrics from morning fetch;
+        # update only afternoon_occ + evening_occ.
+        df_today_existing = df_existing[df_existing[date_key] == today_wib].copy()
 
         if not df_today_existing.empty:
             merged_rows = []
-            for _, new_row in df_new.iterrows():
+            for _, new_row in today_new.iterrows():
                 venue = new_row["Venue"]
                 existing = df_today_existing[df_today_existing["Venue"] == venue]
-
                 if not existing.empty:
                     row = existing.iloc[0].to_dict()
-                    # Update only the period columns that evening can see accurately
                     row["Afternoon Occ %"] = new_row.get("Afternoon Occ %")
                     row["Evening Occ %"]   = new_row.get("Evening Occ %")
-                    # overall_occ, morning_occ, Rev metrics → keep from morning fetch
+                    # overall_occ, morning_occ, Rev metrics → kept from morning
                 else:
-                    # No morning row for this venue → use evening data as-is
                     row = new_row.to_dict()
                 merged_rows.append(row)
-
             df_today_merged = pd.DataFrame(merged_rows)
         else:
-            # No morning data in Sheets at all → store evening data as-is
-            df_today_merged = df_new
+            df_today_merged = today_new
 
-        combined = pd.concat([_normalize(df_hist), _normalize(df_today_merged)], ignore_index=True)
+        # Future dates (tomorrow etc.) → always replace, no merge needed
+        combined = pd.concat(
+            [_normalize(df_hist), _normalize(df_today_merged), _normalize(non_today_new)],
+            ignore_index=True,
+        )
 
     else:
-        # ── Morning run: replace today's rows ────────────────────────────
+        # ── Morning run (or no today data): replace all new dates ────────
         combined = pd.concat([_normalize(df_hist), _normalize(df_new)], ignore_index=True)
 
     return (combined
