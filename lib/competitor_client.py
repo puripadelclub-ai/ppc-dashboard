@@ -34,43 +34,53 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Pattern: https://link.ayo.co.id/l/direct?type=venue&venue_id={ID}&...
 
 COMPETITOR_VENUES = {
-    2519: {
-        "name":       "Hachi Padel Puri Indah",
-        "slug":       "hachi-padel-puri-indah-jakarta",
-        "area":       "Puri Indah",
-        "courts":     4,
-        "price_tier": "Premium",
-        "base_price": 288000,
-    },
-    3358: {
-        "name":       "Kaia Padel Reserve",
-        "slug":       "kaia-padel-reserve",
-        "area":       "Kembangan",
-        "courts":     5,
-        "price_tier": "Mid",
-        "base_price": 150000,
-    },
-    1982: {
-        "name":       "Glass House Padel",
-        "slug":       "glass-house-padel",
-        "area":       "Tomang",
-        "courts":     2,
-        "price_tier": "Mid",
-        "base_price": 125000,
-    },
-    1930: {
-        "name":       "Padelgrounds",
-        "slug":       "padelgrounds",
-        "area":       "Jakarta Barat",
-        "courts":     4,
-        "price_tier": "Value",
-        "base_price": 99000,
-    },
-    # Add more venues here:
-    # XXXXX: {
-    #     "name": "Kobana Padel", "slug": "kobana-padel",
-    #     "area": "...", "courts": N, "price_tier": "...", "base_price": 0,
-    # },
+    # ── Jakarta Barat – PPC's primary competitive set ──────────────────────────
+    # courts=0 → counted dynamically from Ayo API fields response
+    # base_price=0 → revenue metrics will be null (not misleading)
+    2519: {"name": "Hachi Padel Puri Indah",          "slug": "hachi-padel-puri-indah-jakarta",       "area": "Puri Indah",     "courts": 4, "price_tier": "Premium", "base_price": 288000},
+    3358: {"name": "Kaia Padel Reserve",               "slug": "kaia-padel-reserve",                   "area": "Kembangan",      "courts": 5, "price_tier": "Mid",     "base_price": 150000},
+    1982: {"name": "Glass House Padel",                "slug": "glass-house-padel",                    "area": "Tomang",         "courts": 2, "price_tier": "Mid",     "base_price": 125000},
+    1930: {"name": "Padelgrounds",                     "slug": "padelgrounds",                         "area": "Jakarta Barat",  "courts": 4, "price_tier": "Value",   "base_price": 99000},
+    1922: {"name": "Kobana Padel",                     "slug": "kobana-padel",                         "area": "Jakarta Barat",  "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    1628: {"name": "Anwa Racquet Privé",               "slug": "anwa-racquet-prive-ex-anwa-tennis-club","area": "Slipi",          "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    2110: {"name": "Hobi Padel Meruya",                "slug": "hobi-padel-meruya",                    "area": "Meruya",         "courts": 0, "price_tier": "Value",   "base_price": 0},
+    2008: {"name": "Sini Padel Court",                 "slug": "sini-padel-court",                     "area": "Jakarta Barat",  "courts": 0, "price_tier": "Value",   "base_price": 0},
+    1113: {"name": "Sunday Padel Meruya",              "slug": "sunday-padel-meruya",                  "area": "Meruya",         "courts": 0, "price_tier": "Value",   "base_price": 0},
+    3274: {"name": "Clubhouse Meruya",                 "slug": "clubhouse-meruya",                     "area": "Meruya",         "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    3565: {"name": "Commune Courts",                   "slug": "commune-courts",                       "area": "Jakarta Barat",  "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    2443: {"name": "Courtyard Padel Club",             "slug": "courtyard-padel-club",                 "area": "Jakarta Barat",  "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    2165: {"name": "HQ Padel & Tennis",                "slug": "hq-padel-tennis",                      "area": "Jakarta Barat",  "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    2711: {"name": "Coco Padel Court Jakarta",         "slug": "coco-padel-court-jakarta",             "area": "Jakarta Barat",  "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    1214: {"name": "Orange Garden Padel Club",         "slug": "orange-garden-padel-club",             "area": "Jakarta Barat",  "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    2667: {"name": "Paddle Padel",                     "slug": "paddle-padel",                         "area": "Jakarta Barat",  "courts": 0, "price_tier": "Value",   "base_price": 0},
+    3261: {"name": "MMT Padel",                        "slug": "mmt-padel",                            "area": "Puri",           "courts": 0, "price_tier": "Value",   "base_price": 0},
+    607:  {"name": "Metro Puri Tennis Indoor",         "slug": "metro-puri-tennis-indoor",             "area": "Puri",           "courts": 0, "price_tier": "Value",   "base_price": 0},
+    1590: {"name": "KSC Racquet Club",                 "slug": "ksc-racquet-club",                     "area": "Jakarta Barat",  "courts": 0, "price_tier": "Value",   "base_price": 0},
+    583:  {"name": "Jungle Tennis",                    "slug": "jungle-tennis",                        "area": "Jakarta Barat",  "courts": 0, "price_tier": "Value",   "base_price": 0},
+    694:  {"name": "Lucky Tennis Indoor",              "slug": "lucky-tennis-indoor",                  "area": "Jakarta Barat",  "courts": 0, "price_tier": "Value",   "base_price": 0},
+    1406: {"name": "Boss Padel Kedoya",                "slug": "boss-padel-kedoya",                    "area": "Kedoya",         "courts": 0, "price_tier": "Value",   "base_price": 0},
+    868:  {"name": "House of Tennis Kedoya",           "slug": "house-of-tennis-kedoya",               "area": "Kedoya",         "courts": 0, "price_tier": "Value",   "base_price": 0},
+    1679: {"name": "IPC Padel Club Kedoya",            "slug": "ipc-padel-club-kedoya",                "area": "Kedoya",         "courts": 0, "price_tier": "Value",   "base_price": 0},
+    2617: {"name": "JC Padel Kedoya",                  "slug": "jc-padel-kedoya",                      "area": "Kedoya",         "courts": 0, "price_tier": "Value",   "base_price": 0},
+
+    # ── Jakarta Utara (Ancol, Bandengan) ───────────────────────────────────────
+    927:  {"name": "Ancol Tennis Warehouse",           "slug": "ancol-tennis-warehouse",               "area": "Ancol",          "courts": 0, "price_tier": "Value",   "base_price": 0},
+    776:  {"name": "BBS KJ Secondary Sports Field",    "slug": "bbs-kj-secondary-sports-field",        "area": "Kebon Jeruk",    "courts": 0, "price_tier": "Value",   "base_price": 0},
+    617:  {"name": "Olympus Tennis Center",            "slug": "olympus-tennis-center",                "area": "Ancol",          "courts": 0, "price_tier": "Value",   "base_price": 0},
+    1336: {"name": "Olympus Prime Bandengan",          "slug": "olympus-prime-sports-center-bandengan","area": "Bandengan",      "courts": 0, "price_tier": "Value",   "base_price": 0},
+
+    # ── Greater Jakarta / Tangerang ────────────────────────────────────────────
+    1678: {"name": "Padel Spot",                       "slug": "padel-spot",                           "area": "Tangerang",      "courts": 0, "price_tier": "Value",   "base_price": 0},
+    1252: {"name": "Padel One Club",                   "slug": "padel-one-club",                       "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    1222: {"name": "Westside Padel",                   "slug": "westside-padel",                       "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    1589: {"name": "River Padel",                      "slug": "river-padel",                          "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    1300: {"name": "The Citadel",                      "slug": "the-citadel",                          "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    2318: {"name": "Vamos Arena Indonesia",            "slug": "vamos-arena-indonesia",                "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    1368: {"name": "Vlocity Arena",                    "slug": "vlocity-arena",                        "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    1832: {"name": "Sky Padel Club",                   "slug": "sky-padel-club",                       "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    1812: {"name": "Terra Padel Court",                "slug": "terra-padel-court",                    "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    2132: {"name": "The Padel Point",                  "slug": "the-padel-point",                      "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
+    3249: {"name": "Ola Padel Club",                   "slug": "ola-padel-club",                       "area": "Tangerang",      "courts": 0, "price_tier": "Mid",     "base_price": 0},
 }
 
 # ── Canonical output columns — must match Drive benchmark format ────────────
@@ -247,11 +257,14 @@ def fetch_daily_occupancy(venue_id: int, date_str: str) -> dict:
     occ = calculate_occupancy(raw)
     rev = _revenue_metrics(occ, info["base_price"])
 
+    # Dynamic court count: use registry value if set, else count from API fields
+    courts = info.get("courts") or len(raw.get("fields", [])) or 0
+
     return {
         # ── Core (canonical) ──────────────────────────────────────────
         "date":                 date_str,
         "Venue":                info["name"],
-        "Courts":               info["courts"],        # capital C
+        "Courts":               courts,                # capital C
         "Overall Occ %":        occ["Overall Occ %"],
         "Morning Occ %":        occ["Morning Occ %"],  # None if fetched mid-day
         "Afternoon Occ %":      occ["Afternoon Occ %"],
@@ -268,7 +281,7 @@ def fetch_daily_occupancy(venue_id: int, date_str: str) -> dict:
     }
 
 
-def fetch_all_competitors(date_str: str = None, max_workers: int = 4) -> pd.DataFrame:
+def fetch_all_competitors(date_str: str = None, max_workers: int = 10) -> pd.DataFrame:
     """
     Fetch occupancy for all registered competitors in parallel.
 
