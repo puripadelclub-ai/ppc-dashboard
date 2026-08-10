@@ -345,15 +345,26 @@ def fetch_all_competitors(date_str: str = None, max_workers: int = 10) -> pd.Dat
     return df
 
 
-def accumulate_competitors(df_new: pd.DataFrame, df_existing: pd.DataFrame) -> pd.DataFrame:
+def accumulate_competitors(
+    df_new: pd.DataFrame,
+    df_existing: pd.DataFrame,
+    is_evening_run: bool = False,
+) -> pd.DataFrame:
     """
     Merge new scrape results with existing historical data.
 
-    Strategy:
-    - Drop today's rows from existing (replaced by fresh data)
-    - Normalize both to CANONICAL_COLUMNS before concat
-    - Keep all historical rows intact
-    - Sort by date descending, then Venue
+    Morning run (is_evening_run=False — default):
+      - Replace today's rows entirely with fresh data
+      - Captures full-day pre-booked slots as baseline
+
+    Evening run (is_evening_run=True):
+      - Smart merge for today's rows: preserve morning_occ from morning fetch,
+        update afternoon_occ + evening_occ from evening fetch
+      - overall_occ kept from morning fetch (consistent full-day baseline)
+      - Rev metrics kept from morning fetch
+      - Historical rows (past dates) always untouched
+
+    Both modes: normalize to CANONICAL_COLUMNS before concat.
     """
     if df_new.empty:
         return df_existing if not df_existing.empty else pd.DataFrame(columns=CANONICAL_COLUMNS)
@@ -361,26 +372,52 @@ def accumulate_competitors(df_new: pd.DataFrame, df_existing: pd.DataFrame) -> p
     if df_existing.empty:
         return df_new
 
-    # Identify today's dates in new data
     today_dates = set(df_new["date"].dropna().unique())
-
-    # Use 'date' or 'snapshot_date' as the date key for old rows
     date_key = "date" if "date" in df_existing.columns else "snapshot_date"
+
+    # Historical rows (past dates) — always kept unchanged
     df_hist = df_existing[~df_existing[date_key].isin(today_dates)].copy()
 
-    # Normalize both to CANONICAL_COLUMNS
-    def _normalize(df):
+    def _normalize(df: pd.DataFrame) -> pd.DataFrame:
         for col in CANONICAL_COLUMNS:
             if col not in df.columns:
                 df[col] = None
         return df[CANONICAL_COLUMNS].copy()
 
-    df_hist_norm = _normalize(df_hist)
-    df_new_norm  = _normalize(df_new)
+    if is_evening_run:
+        # ── Evening smart merge ───────────────────────────────────────────
+        # For each venue: keep morning_occ + overall_occ + Rev metrics from
+        # the morning fetch; update only afternoon_occ + evening_occ.
+        df_today_existing = df_existing[df_existing[date_key].isin(today_dates)].copy()
 
-    combined = pd.concat([df_hist_norm, df_new_norm], ignore_index=True)
-    combined = (combined
-                .sort_values(["date", "Venue"], ascending=[False, True])
-                .reset_index(drop=True))
+        if not df_today_existing.empty:
+            merged_rows = []
+            for _, new_row in df_new.iterrows():
+                venue = new_row["Venue"]
+                existing = df_today_existing[df_today_existing["Venue"] == venue]
 
-    return combined
+                if not existing.empty:
+                    row = existing.iloc[0].to_dict()
+                    # Update only the period columns that evening can see accurately
+                    row["Afternoon Occ %"] = new_row.get("Afternoon Occ %")
+                    row["Evening Occ %"]   = new_row.get("Evening Occ %")
+                    # overall_occ, morning_occ, Rev metrics → keep from morning fetch
+                else:
+                    # No morning row for this venue → use evening data as-is
+                    row = new_row.to_dict()
+                merged_rows.append(row)
+
+            df_today_merged = pd.DataFrame(merged_rows)
+        else:
+            # No morning data in Sheets at all → store evening data as-is
+            df_today_merged = df_new
+
+        combined = pd.concat([_normalize(df_hist), _normalize(df_today_merged)], ignore_index=True)
+
+    else:
+        # ── Morning run: replace today's rows ────────────────────────────
+        combined = pd.concat([_normalize(df_hist), _normalize(df_new)], ignore_index=True)
+
+    return (combined
+            .sort_values(["date", "Venue"], ascending=[False, True])
+            .reset_index(drop=True))

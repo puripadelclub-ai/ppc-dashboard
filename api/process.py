@@ -117,17 +117,30 @@ def fetch_competitors():
     Scrape competitor venue occupancy from Ayo.co.id public API.
     Accumulates data in TAB_OUT_COMPETITORS — does NOT overwrite history.
 
-    Best called at 07:00 WIB (00:00 UTC) before slots start expiring.
-    Vercel Cron: "0 0 * * *" in vercel.json.
+    Runs twice daily via Vercel Cron:
+      Morning: 0 22 * * * (22:00 UTC = 05:00 WIB) — full-day pre-booked snapshot
+      Evening: 0 10 * * * (10:00 UTC = 17:00 WIB) — smart merge, updates afternoon+evening only
 
     Query params:
-      date: YYYY-MM-DD (optional, defaults to today Jakarta time)
+      date:     YYYY-MM-DD (optional, defaults to today Jakarta time)
+      run_type: "morning" | "evening" | "auto" (default: auto-detect from WIB hour)
     """
+    from datetime import datetime as _dt
     try:
         date_str = request.args.get("date", None)
+        run_type = request.args.get("run_type", "auto")
+
+        # Auto-detect morning vs evening from current WIB hour
+        if run_type == "auto":
+            wib_hour = (_dt.utcnow().hour + 7) % 24
+            is_evening_run = wib_hour >= 12
+        else:
+            is_evening_run = (run_type == "evening")
+
+        run_label = "evening (smart merge)" if is_evening_run else "morning (full snapshot)"
 
         log = []
-        log.append(f"Fetching competitor occupancy via Ayo API{f' for {date_str}' if date_str else ' (today)'}...")
+        log.append(f"Fetching competitor occupancy via Ayo API ({run_label}){f' for {date_str}' if date_str else ' (today)'}...")
 
         # Fetch from Ayo public API
         df_new = fetch_all_competitors(date_str=date_str)
@@ -141,8 +154,9 @@ def fetch_competitors():
         try:
             df_existing = read_tab_as_df(TAB_OUT_COMPETITORS)
             if not df_existing.empty:
-                df_combined = accumulate_competitors(df_new, df_existing)
-                log.append(f"  → Merged with {len(df_existing)} existing rows → {len(df_combined)} total")
+                df_combined = accumulate_competitors(df_new, df_existing, is_evening_run=is_evening_run)
+                merge_note = "smart-merged (afternoon+evening updated)" if is_evening_run else "merged"
+                log.append(f"  → {merge_note} with {len(df_existing)} existing rows → {len(df_combined)} total")
             else:
                 df_combined = df_new
                 log.append("  → No existing data, writing fresh")
