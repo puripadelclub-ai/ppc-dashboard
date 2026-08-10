@@ -34,6 +34,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Pattern: https://link.ayo.co.id/l/direct?type=venue&venue_id={ID}&...
 
 COMPETITOR_VENUES = {
+    # ── PPC (owner club) — venue_id dari AVM = 2780, 2 courts listed on Ayo ──
+    # Price: Rp225k/hr day (06:00–18:00), Rp275k/hr evening (18:00+)
+    # Avg harian ~237,500 dipakai sebagai base_price proxy
+    2780: {"name": "Puri Padel Club", "slug": "puri-padel-club", "area": "Puri Indah", "courts": 2, "price_tier": "Premium", "base_price": 237500},
+
     # ── Jakarta Barat – PPC's primary competitive set ──────────────────────────
     # courts=0 → counted dynamically from Ayo API fields response
     # base_price=0 → revenue metrics will be null (not misleading)

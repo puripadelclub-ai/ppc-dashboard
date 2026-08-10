@@ -1402,11 +1402,12 @@ function renderHome() {
   const homeDates = [...new Set(allCompsHome.map(r=>r.date||r.snapshot_date||''))].filter(Boolean).sort().reverse();
   const homeLatestDate = homeDates[0]||'';
   const compsLatest = homeLatestDate ? allCompsHome.filter(r=>(r.date||r.snapshot_date||'')===homeLatestDate) : allCompsHome;
-  // Inject PPC dari AVM hari ini (bukan D.occupancy/benchmark) supaya konsisten dgn chart
+  // PPC kini ada di D.competitors (venue_id 2780 dari Ayo scraper)
+  // Fallback inject dari AVM hanya jika belum ada di data kompetitor
   let compsHome = [...compsLatest];
   if(!compsLatest.find(r=>(r.Venue||'').includes('Puri Padel'))){
     const ppcAVMOcc = todayAVMrow ? nOcc(todayAVMrow['Overall Occ %']||0) : 0;
-    compsHome.push({Venue:'Puri Padel Club','Overall Occ %':ppcAVMOcc,date:todayStr,_injected:true});
+    compsHome.push({Venue:'Puri Padel Club','Overall Occ %':ppcAVMOcc,date:todayStr,_injected:true,_fallback:true});
   }
   const ppcCompHome = compsHome.find(r=>(r.Venue||'').includes('Puri Padel'));
   const sortedCompsHome = [...compsHome].sort((a,b)=>nOcc(b['Overall Occ %'])-nOcc(a['Overall Occ %']));
