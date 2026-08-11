@@ -1443,22 +1443,26 @@ function renderHome() {
       <div class="mini-stat"><div class="mini-stat-lbl">Data per</div><div class="mini-stat-val" style="font-size:10px">${sublabel}</div></div>`;
   }
 
-  // Tab state
-  window._posTab = window._posTab || 'today';
-  function _switchPosTab(t) {
+  // Tab state — store panels + render fn on window so onclick can reach them
+  window._posTab     = window._posTab || 'today';
+  window._posPanels  = {today: _panelToday, yday: _panelYday};
+  window._posLabels  = {today: todayStr + ' (advance)', yday: _ydayStr + ' (final)'};
+  window._renderPosPanel = _renderPosPanel;
+
+  window._switchPosTab = function(t) {
     window._posTab = t;
     const tEl = document.getElementById('pos-tab-today');
     const yEl = document.getElementById('pos-tab-yday');
     const cEl = document.getElementById('pos-content');
     if(!tEl||!yEl||!cEl) return;
-    const activeStyle = 'flex:1;padding:4px 0;border:none;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff';
+    const activeStyle   = 'flex:1;padding:4px 0;border:none;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff';
     const inactiveStyle = 'flex:1;padding:4px 0;border:1px solid var(--border);border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);color:var(--txt2)';
-    tEl.style.cssText = t==='today'?activeStyle:inactiveStyle;
-    yEl.style.cssText = t==='yday'?activeStyle:inactiveStyle;
-    cEl.innerHTML = t==='today'
-      ? _renderPosPanel(_panelToday, 'hari ini', todayStr + ' (advance)')
-      : _renderPosPanel(_panelYday,  'kemarin',  _ydayStr  + ' (final)');
-  }
+    tEl.style.cssText = t==='today' ? activeStyle : inactiveStyle;
+    yEl.style.cssText = t==='yday'  ? activeStyle : inactiveStyle;
+    const panel = window._posPanels[t];
+    const label = t==='today' ? 'hari ini' : 'kemarin';
+    cEl.innerHTML = window._renderPosPanel(panel, label, window._posLabels[t]);
+  };
 
   document.getElementById('home-market-pos').innerHTML = `
     <div style="display:flex;gap:4px;margin-bottom:10px">
