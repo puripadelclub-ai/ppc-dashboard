@@ -1395,44 +1395,79 @@ function renderHome() {
       </div>`
     : '<div style="color:var(--txt3);font-size:12px;padding:20px 0;text-align:center">Belum ada data AVM hari ini</div>';
 
-  // ── Row 3: Posisi pasar — gunakan data tanggal terbaru, sama seperti Intelligence page ──
+  // ── Row 3: Posisi pasar — Hari Ini (advance) + Kemarin (final) ──────────────
   const allCompsHome = D.competitors||[];
-  const occHome = D.occupancy||[];
-  // Ambil tanggal terbaru yang tersedia
-  const homeDates = [...new Set(allCompsHome.map(r=>r.date||r.snapshot_date||''))].filter(Boolean).sort().reverse();
-  const homeLatestDate = homeDates[0]||'';
-  const compsLatest = homeLatestDate ? allCompsHome.filter(r=>(r.date||r.snapshot_date||'')===homeLatestDate) : allCompsHome;
-  // PPC kini ada di D.competitors (venue_id 2780 dari Ayo scraper)
-  // Fallback inject dari AVM hanya jika belum ada di data kompetitor
-  let compsHome = [...compsLatest];
-  if(!compsLatest.find(r=>(r.Venue||'').includes('Puri Padel'))){
-    const ppcAVMOcc = todayAVMrow ? nOcc(todayAVMrow['Overall Occ %']||0) : 0;
-    compsHome.push({Venue:'Puri Padel Club','Overall Occ %':ppcAVMOcc,date:todayStr,_injected:true,_fallback:true});
+
+  // Helper: build market snapshot for a given date
+  function _mktPanel(targetDate) {
+    const comps = allCompsHome.filter(r=>(r.date||r.snapshot_date||'')===targetDate);
+    let rows = [...comps];
+    // Fallback inject PPC from AVM if not in Ayo data (only for today)
+    if(!rows.find(r=>(r.Venue||'').includes('Puri Padel')) && targetDate===todayStr && todayAVMrow) {
+      rows.push({Venue:'Puri Padel Club','Overall Occ %':nOcc(todayAVMrow['Overall Occ %']||0),date:targetDate,_injected:true});
+    }
+    if(!rows.length) return null;
+    const competitors = rows.filter(r=>!(r.Venue||'').includes('Puri Padel'));
+    const sorted = [...rows].sort((a,b)=>nOcc(b['Overall Occ %'])-nOcc(a['Overall Occ %']));
+    const ppcRow  = rows.find(r=>(r.Venue||'').includes('Puri Padel'))||{};
+    const rank    = sorted.findIndex(r=>(r.Venue||'').includes('Puri Padel'))+1;
+    const ppcOcc  = nOcc(ppcRow['Overall Occ %']||0);
+    const mktAvg  = competitors.length ? competitors.reduce((s,r)=>s+nOcc(r['Overall Occ %']||0),0)/competitors.length : 0;
+    return {rank, ppcOcc, mktAvg, total:rows.length};
   }
-  const ppcCompHome = compsHome.find(r=>(r.Venue||'').includes('Puri Padel'));
-  const sortedCompsHome = [...compsHome].sort((a,b)=>nOcc(b['Overall Occ %'])-nOcc(a['Overall Occ %']));
-  const rank = ppcCompHome ? sortedCompsHome.findIndex(r=>(r.Venue||'').includes('Puri Padel'))+1 : 0;
-  // Market average dari kompetitor saja (tidak termasuk PPC yang di-inject)
-  const marketAvgHome = compsLatest.length>0?compsLatest.reduce((s,r)=>s+nOcc(r['Overall Occ %']||0),0)/compsLatest.length:0;
-  const ppcOccHome = ppcCompHome ? nOcc(ppcCompHome['Overall Occ %']||0) : 0;
-  const homeDataLabel = homeLatestDate || '—';
-  document.getElementById('home-market-pos').innerHTML = compsHome.length>0?`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-      <div style="text-align:center;padding:10px;background:var(--brand-lt);border-radius:var(--r-sm)">
-        <div style="font-size:26px;font-weight:700;color:var(--brand)">#${rank}</div>
-        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">dari ${compsHome.length} venue</div>
+
+  // Yesterday string
+  const _ydayStr = (()=>{const d=new Date(todayStr);d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];})();
+
+  const _panelToday = _mktPanel(todayStr);
+  const _panelYday  = _mktPanel(_ydayStr);
+
+  function _renderPosPanel(p, label, sublabel) {
+    if(!p) return `<div style="color:var(--txt3);font-size:11px;padding:14px 0;text-align:center">Belum ada data ${label}</div>`;
+    const diff = Math.abs(p.ppcOcc - p.mktAvg);
+    const updn = p.ppcOcc >= p.mktAvg ? 'up' : 'dn';
+    const arrow = p.ppcOcc >= p.mktAvg ? '▲' : '▼';
+    return `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+        <div style="text-align:center;padding:8px;background:var(--brand-lt);border-radius:var(--r-sm)">
+          <div style="font-size:22px;font-weight:700;color:var(--brand)">#${p.rank}</div>
+          <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">dari ${p.total} venue</div>
+        </div>
+        <div style="text-align:center;padding:8px;background:var(--bg);border-radius:var(--r-sm)">
+          <div style="font-size:22px;font-weight:700;color:var(--txt)">${fPct(p.ppcOcc*100)}</div>
+          <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">Occupancy PPC</div>
+        </div>
       </div>
-      <div style="text-align:center;padding:10px;background:var(--bg);border-radius:var(--r-sm)">
-        <div style="font-size:26px;font-weight:700;color:var(--txt)">${fPct(ppcOccHome*100)}</div>
-        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px">Occupancy PPC</div>
-      </div>
+      <div class="mini-stat"><div class="mini-stat-lbl">Market average</div><div class="mini-stat-val">${fPct(p.mktAvg*100)}</div></div>
+      <div class="mini-stat"><div class="mini-stat-lbl">PPC vs market</div><div class="mini-stat-val ${updn}">${arrow} ${fPct(diff*100)}</div></div>
+      <div class="mini-stat"><div class="mini-stat-lbl">Data per</div><div class="mini-stat-val" style="font-size:10px">${sublabel}</div></div>`;
+  }
+
+  // Tab state
+  window._posTab = window._posTab || 'today';
+  function _switchPosTab(t) {
+    window._posTab = t;
+    const tEl = document.getElementById('pos-tab-today');
+    const yEl = document.getElementById('pos-tab-yday');
+    const cEl = document.getElementById('pos-content');
+    if(!tEl||!yEl||!cEl) return;
+    const activeStyle = 'flex:1;padding:4px 0;border:none;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff';
+    const inactiveStyle = 'flex:1;padding:4px 0;border:1px solid var(--border);border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);color:var(--txt2)';
+    tEl.style.cssText = t==='today'?activeStyle:inactiveStyle;
+    yEl.style.cssText = t==='yday'?activeStyle:inactiveStyle;
+    cEl.innerHTML = t==='today'
+      ? _renderPosPanel(_panelToday, 'hari ini', todayStr + ' (advance)')
+      : _renderPosPanel(_panelYday,  'kemarin',  _ydayStr  + ' (final)');
+  }
+
+  document.getElementById('home-market-pos').innerHTML = `
+    <div style="display:flex;gap:4px;margin-bottom:10px">
+      <button id="pos-tab-today" onclick="_switchPosTab('today')">Hari Ini</button>
+      <button id="pos-tab-yday"  onclick="_switchPosTab('yday')">Kemarin</button>
     </div>
-    <div class="mini-stat"><div class="mini-stat-lbl">Market average</div><div class="mini-stat-val">${fPct(marketAvgHome*100)}</div></div>
-    <div class="mini-stat"><div class="mini-stat-lbl">PPC vs market</div>
-      <div class="mini-stat-val ${ppcOccHome>marketAvgHome?'up':'dn'}">${ppcOccHome>marketAvgHome?'▲':'▼'} ${fPct(Math.abs(ppcOccHome-marketAvgHome)*100)}</div>
-    </div>
-    <div class="mini-stat"><div class="mini-stat-lbl">Data per</div><div class="mini-stat-val" style="font-size:11px">${homeDataLabel}</div></div>
-  `:'<div style="color:var(--txt3);font-size:12px;padding:20px 0;text-align:center">Jalankan pipeline untuk data kompetitor</div>';
+    <div id="pos-content"></div>
+  `;
+  _switchPosTab(window._posTab);
 
   // ── Row 3: Member health ─────────────────────────────────────────────
   const rfmSegs = D.rfm_segments||[];
