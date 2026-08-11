@@ -1395,7 +1395,7 @@ function renderHome() {
       </div>`
     : '<div style="color:var(--txt3);font-size:12px;padding:20px 0;text-align:center">Belum ada data AVM hari ini</div>';
 
-  // ── Row 3: Posisi pasar — Hari Ini (advance) + Kemarin (final) ──────────────
+  // ── Row 3: Posisi pasar — Hari Ini + Besok ──────────────
   const allCompsHome = D.competitors||[];
 
   // Helper: build market snapshot for a given date
@@ -1416,11 +1416,11 @@ function renderHome() {
     return {rank, ppcOcc, mktAvg, total:rows.length};
   }
 
-  // Yesterday string
-  const _ydayStr = (()=>{const d=new Date(todayStr);d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];})();
+  // Tomorrow string
+  const _tmrwStr = (()=>{const d=new Date(todayStr);d.setDate(d.getDate()+1);return d.toISOString().split('T')[0];})();
 
   const _panelToday = _mktPanel(todayStr);
-  const _panelYday  = _mktPanel(_ydayStr);
+  const _panelYday  = _mktPanel(_tmrwStr);
 
   function _renderPosPanel(p, label, sublabel) {
     if(!p) return `<div style="color:var(--txt3);font-size:11px;padding:14px 0;text-align:center">Belum ada data ${label}</div>`;
@@ -1446,7 +1446,7 @@ function renderHome() {
   // Tab state — store panels + render fn on window so onclick can reach them
   window._posTab     = window._posTab || 'today';
   window._posPanels  = {today: _panelToday, yday: _panelYday};
-  window._posLabels  = {today: todayStr + ' (advance)', yday: _ydayStr + ' (final)'};
+  window._posLabels  = {today: todayStr + ' (hari ini)', yday: _tmrwStr + ' (besok)'};
   window._renderPosPanel = _renderPosPanel;
 
   window._switchPosTab = function(t) {
@@ -1467,7 +1467,7 @@ function renderHome() {
   document.getElementById('home-market-pos').innerHTML = `
     <div style="display:flex;gap:4px;margin-bottom:10px">
       <button id="pos-tab-today" onclick="_switchPosTab('today')">Hari Ini</button>
-      <button id="pos-tab-yday"  onclick="_switchPosTab('yday')">Kemarin</button>
+      <button id="pos-tab-yday"  onclick="_switchPosTab('yday')">Besok</button>
     </div>
     <div id="pos-content"></div>
   `;
