@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -149,6 +150,23 @@ body{
 #loading{display:flex;align-items:center;justify-content:center;height:320px;flex-direction:column;gap:14px;color:var(--txt3)}
 .spinner{width:28px;height:28px;border:2.5px solid var(--border-md);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── LOGIN OVERLAY ── */
+#login-overlay{position:fixed;inset:0;background:var(--sb-bg);z-index:9999;display:flex;align-items:center;justify-content:center}
+#login-box{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:40px 36px;width:340px;display:flex;flex-direction:column;gap:16px}
+#login-box h2{color:#fff;font-size:20px;font-weight:800;letter-spacing:-.4px;margin-bottom:4px}
+#login-box p{color:rgba(255,255,255,.45);font-size:12px;margin-top:-12px}
+.login-input{width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);color:#fff;font-size:13px;font-family:inherit;outline:none}
+.login-input::placeholder{color:rgba(255,255,255,.3)}
+.login-input:focus{border-color:var(--sb-accent)}
+#login-btn{width:100%;padding:11px;border-radius:8px;background:var(--sb-accent);color:#fff;font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:inherit;margin-top:4px}
+#login-btn:hover{filter:brightness(1.1)}
+#login-err{color:#f87171;font-size:12px;text-align:center;min-height:16px}
+.sb-user-info{padding:10px 12px;border-top:1px solid rgba(255,255,255,.08);margin-top:8px}
+.sb-user-email{color:rgba(255,255,255,.5);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-user-role{color:var(--sb-accent);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+#btn-logout{width:100%;margin-top:6px;padding:7px;border-radius:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.5);font-size:11px;cursor:pointer;font-family:inherit}
+#btn-logout:hover{background:rgba(255,255,255,.1);color:#fff}
 .page-hd{margin-bottom:20px}
 .page-hd h2{font-size:18px;font-weight:800;color:var(--txt);letter-spacing:-.35px}
 .page-hd p{font-size:12px;color:var(--txt3);margin-top:3px}
@@ -405,6 +423,18 @@ body{
 <body>
 <div id="app">
 
+<!-- LOGIN OVERLAY -->
+<div id="login-overlay">
+  <div id="login-box">
+    <h2>PPC Business OS</h2>
+    <p>Masuk untuk melanjutkan</p>
+    <input class="login-input" id="login-email" type="email" placeholder="Email" autocomplete="email">
+    <input class="login-input" id="login-pass" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button id="login-btn" onclick="doLogin()">Masuk</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
 <!-- SIDEBAR -->
 <nav id="sb">
   <div class="sb-logo">
@@ -421,33 +451,38 @@ body{
   </div>
   <div class="sb-nav">
     <div class="sb-section">Main</div>
-    <div class="nav-item active" data-label="Home" onclick="nav('home')">
+    <div class="nav-item active" data-label="Home" data-page="home" onclick="nav('home')">
       <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <span class="nav-label">Home</span>
     </div>
-    <div class="nav-item" data-label="Operations" onclick="nav('operations')">
+    <div class="nav-item" data-label="Operations" data-page="operations" onclick="nav('operations')">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span class="nav-label">Operations</span>
     </div>
-    <div class="nav-item" data-label="Programs" onclick="nav('programs')">
+    <div class="nav-item" data-label="Programs" data-page="programs" onclick="nav('programs')">
       <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
       <span class="nav-label">Products</span>
     </div>
-    <div class="nav-item" data-label="Marketing" onclick="nav('marketing')">
+    <div class="nav-item" data-label="Marketing" data-page="marketing" onclick="nav('marketing')">
       <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       <span class="nav-label">Marketing</span>
     </div>
-    <div class="nav-item" data-label="Members" onclick="nav('members')">
+    <div class="nav-item" data-label="Members" data-page="members" onclick="nav('members')">
       <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       <span class="nav-label">Members</span>
     </div>
-    <div class="nav-item" data-label="Intelligence" onclick="nav('intelligence')">
+    <div class="nav-item" data-label="Intelligence" data-page="intelligence" onclick="nav('intelligence')">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       <span class="nav-label">Intelligence</span>
     </div>
   </div>
   <div class="sb-foot">
     <p>Better Every Time<br><span id="sb-updated">—</span></p>
+    <div class="sb-user-info" id="sb-user-info" style="display:none">
+      <div class="sb-user-role" id="sb-user-role"></div>
+      <div class="sb-user-email" id="sb-user-email"></div>
+      <button id="btn-logout" onclick="doLogout()">Keluar</button>
+    </div>
   </div>
 </nav>
 
@@ -3027,10 +3062,79 @@ function destroyChart(id) {
   if(CHARTS[id]) { CHARTS[id].destroy(); delete CHARTS[id]; }
 }
 
-// ── INIT ──────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
+// ── SUPABASE AUTH ─────────────────────────────────
+const _SB = supabase.createClient(
+  'https://vdtcrgbrnibyasjjnckw.supabase.co',
+  'sb_publishable_h3DHnVlpekgficXy9lYbTA_A3CHLNzx'
+);
+
+const ROLE_PAGES = {
+  owner:       ['home','operations','programs','marketing','members','intelligence'],
+  marketing:   ['home','marketing','intelligence','members'],
+  operasional: ['home','operations','programs','intelligence'],
+};
+
+function applyRole(role, email) {
+  const allowed = ROLE_PAGES[role] || ROLE_PAGES['marketing'];
+  document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+    el.style.display = allowed.includes(el.dataset.page) ? '' : 'none';
+  });
+  // Show user info in sidebar
+  const infoEl = document.getElementById('sb-user-info');
+  if (infoEl) {
+    infoEl.style.display = '';
+    document.getElementById('sb-user-role').textContent = role;
+    document.getElementById('sb-user-email').textContent = email || '';
+  }
+}
+
+async function doLogin() {
+  const email = (document.getElementById('login-email').value || '').trim();
+  const pass  = (document.getElementById('login-pass').value || '');
+  const errEl = document.getElementById('login-err');
+  const btn   = document.getElementById('login-btn');
+  errEl.textContent = '';
+  btn.textContent = 'Memuat...';
+  btn.disabled = true;
+
+  const { data, error } = await _SB.auth.signInWithPassword({ email, password: pass });
+  btn.textContent = 'Masuk';
+  btn.disabled = false;
+
+  if (error) {
+    errEl.textContent = error.message === 'Invalid login credentials'
+      ? 'Email atau password salah'
+      : error.message;
+    return;
+  }
+
+  const role = data.user?.user_metadata?.role || 'marketing';
+  applyRole(role, data.user?.email);
+  document.getElementById('login-overlay').style.display = 'none';
   nav('home');
   reloadData();
+}
+
+async function doLogout() {
+  await _SB.auth.signOut();
+  location.reload();
+}
+
+async function checkAuth() {
+  const { data: { session } } = await _SB.auth.getSession();
+  if (session) {
+    const role = session.user?.user_metadata?.role || 'marketing';
+    applyRole(role, session.user?.email);
+    document.getElementById('login-overlay').style.display = 'none';
+    nav('home');
+    reloadData();
+  }
+  // No session → login overlay stays visible
+}
+
+// ── INIT ──────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  checkAuth();
 });
 </script>
 </body>
