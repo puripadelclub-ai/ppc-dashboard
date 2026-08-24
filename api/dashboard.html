@@ -428,7 +428,7 @@ body{
   <div id="login-box">
     <h2>PPC Business OS</h2>
     <p>Masuk untuk melanjutkan</p>
-    <input class="login-input" id="login-email" type="email" placeholder="Email" autocomplete="email">
+    <input class="login-input" id="login-email" type="text" placeholder="Email atau Nomor HP" autocomplete="username">
     <input class="login-input" id="login-pass" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     <button id="login-btn" onclick="doLogin()">Masuk</button>
     <div id="login-err"></div>
@@ -3072,6 +3072,7 @@ const ROLE_PAGES = {
   owner:       ['home','operations','programs','marketing','members','intelligence'],
   marketing:   ['home','marketing','intelligence','members'],
   operasional: ['home','operations','programs','intelligence'],
+  member:      ['member-portal'],
 };
 
 function applyRole(role, email) {
@@ -3088,8 +3089,19 @@ function applyRole(role, email) {
   }
 }
 
+function resolveEmail(input) {
+  // Kalau input adalah nomor HP (angka, mulai 0 atau 62) → convert ke email
+  const p = input.replace(/[-\s]/g, '');
+  if (/^(0|62)\d{8,11}$/.test(p)) {
+    const norm = p.startsWith('62') ? '0' + p.slice(2) : p;
+    return `${norm}@puripadelclub.com`;
+  }
+  return input; // pakai as-is (email biasa)
+}
+
 async function doLogin() {
-  const email = (document.getElementById('login-email').value || '').trim();
+  const raw   = (document.getElementById('login-email').value || '').trim();
+  const email = resolveEmail(raw);
   const pass  = (document.getElementById('login-pass').value || '');
   const errEl = document.getElementById('login-err');
   const btn   = document.getElementById('login-btn');
