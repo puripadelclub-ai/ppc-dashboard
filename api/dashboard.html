@@ -475,6 +475,10 @@ body{
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       <span class="nav-label">Intelligence</span>
     </div>
+    <div class="nav-item" data-label="My Membership" data-page="member-portal" onclick="nav('member-portal')">
+      <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+      <span class="nav-label">My Membership</span>
+    </div>
   </div>
   <div class="sb-foot">
     <p>Better Every Time<br><span id="sb-updated">—</span></p>
@@ -739,6 +743,27 @@ body{
     </div>
 
     <!-- INTELLIGENCE -->
+    <div class="page" id="page-member-portal">
+      <div class="page-hd">
+        <h2>Member Portal</h2>
+        <p>Informasi keanggotaan Anda</p>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;min-height:320px">
+        <div style="text-align:center;max-width:380px">
+          <div style="font-size:48px;margin-bottom:16px">🎾</div>
+          <h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:8px">Sedang dalam pengembangan</h3>
+          <p style="color:var(--txt2);font-size:13px;line-height:1.6">
+            Halaman member portal sedang kami siapkan.<br>
+            Segera hadir — terima kasih atas kesabarannya!
+          </p>
+          <div style="margin-top:24px;padding:14px 18px;background:var(--brand-lt);border-radius:var(--r);border:1px solid var(--brand-md)">
+            <p style="color:var(--brand);font-size:12px;font-weight:600">INFORMASI</p>
+            <p style="color:var(--txt2);font-size:12px;margin-top:4px">Untuk pertanyaan tentang keanggotaan, hubungi staff PPC di lokasi atau via WhatsApp.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-intelligence">
       <div class="page-hd">
         <h2>Intelligence</h2>
@@ -1112,7 +1137,8 @@ const CHARTS = {};
 
 const PAGE_TITLES = {
   home:'Home', operations:'Operations', marketing:'Marketing',
-  members:'Members', intelligence:'Intelligence', programs:'Products'
+  members:'Members', intelligence:'Intelligence', programs:'Products',
+  'member-portal':'My Membership'
 };
 
 // ── DATE HELPERS (timezone-safe) ─────────────────
@@ -3123,8 +3149,8 @@ async function doLogin() {
   const role = data.user?.user_metadata?.role || 'marketing';
   applyRole(role, data.user?.email);
   document.getElementById('login-overlay').style.display = 'none';
-  nav('home');
-  reloadData();
+  if (role === 'member') { nav('member-portal'); }
+  else { nav('home'); reloadData(); }
 }
 
 async function doLogout() {
@@ -3138,8 +3164,8 @@ async function checkAuth() {
     const role = session.user?.user_metadata?.role || 'marketing';
     applyRole(role, session.user?.email);
     document.getElementById('login-overlay').style.display = 'none';
-    nav('home');
-    reloadData();
+    if (role === 'member') { nav('member-portal'); }
+    else { nav('home'); reloadData(); }
   }
   // No session → login overlay stays visible
 }
