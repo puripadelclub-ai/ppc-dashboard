@@ -49,16 +49,16 @@ def upsert(table: str, rows: list[dict], on_conflict: str = "id") -> dict:
         return {"inserted": 0, "error": None}
 
     resp = _requests.post(
-            _url(table),
-            headers={**_headers(), "Prefer": f"resolution=merge-duplicates,return=representation"},
-            params={"on_conflict": on_conflict},
-            json=rows,
-            timeout=30,
-        )
-        if resp.status_code not in (200, 201):
-            return {"inserted": 0, "error": f"HTTP {resp.status_code}: {resp.text[:300]}"}
-        data = resp.json()
-        return {"inserted": len(data) if isinstance(data, list) else 1, "error": None}
+        _url(table),
+        headers={**_headers(), "Prefer": f"resolution=merge-duplicates,return=representation"},
+        params={"on_conflict": on_conflict},
+        json=rows,
+        timeout=30,
+    )
+    if resp.status_code not in (200, 201):
+        return {"inserted": 0, "error": f"HTTP {resp.status_code}: {resp.text[:300]}"}
+    data = resp.json()
+    return {"inserted": len(data) if isinstance(data, list) else 1, "error": None}
 
 
 def select(table: str, filters: dict = None, limit: int = 1000) -> list[dict]:
@@ -72,9 +72,9 @@ def select(table: str, filters: dict = None, limit: int = 1000) -> list[dict]:
             params[k] = f"eq.{v}"
 
     resp = _requests.get(_url(table), headers=headers, params=params, timeout=30)
-        if resp.status_code != 200:
-            return []
-        return resp.json()
+    if resp.status_code != 200:
+        return []
+    return resp.json()
 
 
 # ---------------------------------------------------------------------------
