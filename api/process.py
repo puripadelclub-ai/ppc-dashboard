@@ -1074,6 +1074,152 @@ def run_pipeline():
     except Exception as e:
         log.append(f"  ⚠️ Preferences error: {e}")
 
+    # ── 9. SUPABASE SYNC: MEMBERS (business profile) ──────────────
+    log.append("Syncing member profiles to Supabase members table...")
+    try:
+        import re as _re, io as _io
+        import requests as _req_mem
+
+        from supabase_client import (
+            upsert_members, log_start as _ls_m, log_complete as _lc_m,
+        )
+
+        SHEET_ID_MEM = "1MAlR1WG7184GTCBmCTPUcX4OZKd09H1gx_0aSTKjt4k"
+        csv_url = (
+            f"https://docs.google.com/spreadsheets/d/{SHEET_ID_MEM}"
+            f"/export?format=csv&gid=0"
+        )
+        resp_m = _req_mem.get(csv_url, timeout=30)
+        resp_m.raise_for_status()
+
+        df_sheet = pd.read_csv(_io.StringIO(resp_m.text), header=0)
+        df_sheet.columns = df_sheet.columns.str.strip()
+        df_sheet = df_sheet.dropna(how="all")
+
+        def _norm_phone(raw) -> str | None:
+            if not raw:
+                return None
+            p = _re.sub(r"[-\s.\(\)]", "", str(raw).strip())
+            if p.startswith("62"):
+                p = "0" + p[2:]
+            elif not p.startswith("0") and p.isdigit():
+                p = "0" + p
+            if not p.isdigit() or not p.startswith("0") or not (10 <= len(p) <= 13):
+                return None
+            return p
+
+        log_id_m = _ls_m("MEMBERS", "sync_member_profiles")
+        mem_rows = []
+        for _, row in df_sheet.iterrows():
+            name      = str(row.get("Member Name", "") or "").strip()
+            phone_raw = str(row.get("Phone Number", "") or "").strip()
+            if not name or not phone_raw:
+                continue
+            phone = _norm_phone(phone_raw)
+            if not phone:
+                continue
+            join_raw = str(row.get("Join Date", "") or "").strip()
+            # Normalise date string — keep only first 10 chars (YYYY-MM-DD)
+            join_date = join_raw[:10] if join_raw and join_raw not in ("nan", "None", "") else None
+
+            mem_rows.append({
+                "phone":              phone,
+                "name":               name,
+                "member_code":        str(row.get("Member Code", "") or "").strip() or None,
+                "email":              f"{phone}@puripadelclub.com",
+                "join_date":          join_date,
+                "membership_type":    str(row.get("Membership Type", "") or "").strip() or None,
+                "acquisition_source": str(row.get("Source", "") or "").strip() or None,
+                "kode_ads":           str(
+                    row.get("Kode ads", "") or row.get("Kode Ads", "") or ""
+                ).strip() or None,
+            })
+
+        # Batch upsert (500 per call, sama seperti pattern yg sudah ada)
+        mem_total = 0
+        for i in range(0, len(mem_rows), 500):
+            batch = mem_rows[i : i + 500]
+            res_m = upsert_members(batch)
+            mem_total += res_m.get("inserted", 0)
+            if res_m.get("error"):
+                log.append(f"  ⚠️ members batch {i//500+1} error: {res_m['error'][:120]}")
+                break
+
+        _lc_m(log_id_m, "success", {"rows_inserted": mem_total})
+        log.append(
+            f"  → Supabase members: {mem_total} upserted "
+            f"({len(mem_rows)} valid dari {len(df_sheet)} baris)"
+        )
+    except Exception as e_mem:
+        log.append(f"  ⚠️ Supabase members sync (non-fatal): {e_mem}")
+
+    # ── 10. SUPABASE SYNC: TRANSACTIONS (ESB revenue) ─────────────
+    log.append("Syncing ESB transactions to Supabase transactions table...")
+    try:
+        from supabase_client import (
+            upsert_transactions, make_row_hash,
+            log_start as _ls_t, log_complete as _lc_t,
+        )
+
+        _date_min = str(df_sales["Sales Date"].min())[:10]
+        _date_max = str(df_sales["Sales Date"].max())[:10]
+        log_id_t = _ls_t("ESB", "sync_transactions",
+                          date_start=_date_min, date_end=_date_max)
+
+        # Map ESB columns — ESB "Sales Recapitulation" header baris 10
+        # Kolom kunci: Sales Date, Loyalty Member Name, Bill No,
+        #              Menu, Menu Category, Qty, Price, Total, Payment Method
+        seen_hashes: dict = {}
+        for _, r in df_sales.iterrows():
+            sale_date   = str(r.get("Sales Date",  "") or "")[:10]
+            member_name = str(r.get("Loyalty Member Name", "") or "").strip()
+            product     = str(r.get("Menu",   "") or r.get("Product",  "") or "").strip()
+            category    = str(r.get("Menu Category", "") or r.get("Category", "") or "").strip()
+            bill_no     = str(r.get("Bill No", "") or r.get("Bill Number", "") or "").strip()
+            qty_raw     = r.get("Qty",  r.get("Quantity", 1))
+            price_raw   = r.get("Price", r.get("Unit Price", 0))
+            total_raw   = r.get("Total", r.get("Amount", r.get("Subtotal", 0)))
+            pay_method  = str(r.get("Payment Method", "") or r.get("Payment", "") or "").strip()
+
+            rh = make_row_hash(sale_date, bill_no, member_name, product, qty_raw, total_raw)
+            if rh in seen_hashes:
+                continue  # dedup within batch
+
+            seen_hashes[rh] = {
+                "row_hash":       rh,
+                "sale_date":      sale_date or None,
+                "member_name":    member_name or None,
+                "product_name":   product or None,
+                "category":       category or None,
+                "qty":            int(float(qty_raw or 1)),
+                "unit_price":     int(float(price_raw or 0)),
+                "total_price":    int(float(total_raw or 0)),
+                "payment_method": pay_method or None,
+                "source":         "ESB",
+            }
+
+        tx_rows  = list(seen_hashes.values())
+        tx_total = 0
+        tx_err   = None
+        for i in range(0, len(tx_rows), 500):
+            batch = tx_rows[i : i + 500]
+            res_t = upsert_transactions(batch)
+            tx_total += res_t.get("inserted", 0)
+            if res_t.get("error"):
+                tx_err = res_t["error"]
+                log.append(f"  ⚠️ transactions batch {i//500+1} error: {tx_err[:120]}")
+                break
+
+        _lc_t(log_id_t, "success" if not tx_err else "error",
+              {"rows_fetched": len(df_sales), "rows_inserted": tx_total},
+              error=tx_err)
+        log.append(
+            f"  → Supabase transactions: {tx_total} upserted "
+            f"({len(tx_rows)} unique dari {len(df_sales)} ESB rows)"
+        )
+    except Exception as e_tx:
+        log.append(f"  ⚠️ Supabase transactions sync (non-fatal): {e_tx}")
+
     log.append("✅ All done!")
     return log
 
