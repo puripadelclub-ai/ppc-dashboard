@@ -96,6 +96,72 @@ def fetch_ads():
 
         write_df_to_tab(df_to_write, TAB_RAW_ADS)
 
+        # ── Supabase sync: campaigns + campaign_daily ──────────────────────
+        sb_result = {}
+        try:
+            from supabase_client import (
+                upsert_campaigns, upsert_campaign_daily,
+                log_start, log_complete, parse_campaign_name,
+            )
+            log_id = log_start("META_ADS", "fetch_ads_insights",
+                               date_start=df_to_write["Date"].min(),
+                               date_end=df_to_write["Date"].max())
+
+            # Build campaigns rows (deduplicated by Campaign ID)
+            seen_campaign_ids = set()
+            campaign_rows = []
+            for _, row in df_ads.iterrows():
+                cid = str(row.get("Campaign ID", "") or "")
+                if not cid or cid in seen_campaign_ids:
+                    continue
+                seen_campaign_ids.add(cid)
+                parsed = parse_campaign_name(row.get("Campaign Name", ""))
+                campaign_rows.append({
+                    "campaign_id":   cid,
+                    "campaign_name": row.get("Campaign Name", ""),
+                    "campaign_num":  parsed["num"],
+                    "campaign_type": parsed["type"],
+                    "offer_name":    parsed["offer"],
+                    "batch":         parsed["batch"],
+                    "status":        "ACTIVE",
+                })
+            res_c = upsert_campaigns(campaign_rows) if campaign_rows else {"inserted": 0}
+
+            # Build campaign_daily rows (aggregate per campaign per day)
+            daily_df = df_to_write.groupby(["Campaign ID", "Campaign Name", "Date"], as_index=False).agg(
+                spend=("Spend", "sum"),
+                impressions=("Impressions", "sum"),
+                reach=("Reach", "sum"),
+                clicks=("Clicks", "sum"),
+                results=("Results", "sum"),
+            )
+            daily_rows = []
+            for _, r in daily_df.iterrows():
+                cid = str(r.get("Campaign ID", "") or "")
+                if not cid:
+                    continue
+                daily_rows.append({
+                    "campaign_meta_id": cid,
+                    "report_date":      str(r["Date"]),
+                    "spend":            int(r["spend"]),
+                    "impressions":      int(r["impressions"]),
+                    "reach":            int(r["reach"]),
+                    "clicks":           int(r["clicks"]),
+                    "results":          int(r["results"]),
+                })
+            res_d = upsert_campaign_daily(daily_rows) if daily_rows else {"inserted": 0}
+
+            log_complete(log_id, "success", {
+                "rows_fetched": len(df_ads),
+                "rows_inserted": res_c["inserted"] + res_d["inserted"],
+            })
+            sb_result = {
+                "campaigns_upserted": res_c["inserted"],
+                "daily_rows_upserted": res_d["inserted"],
+            }
+        except Exception as e_sb:
+            sb_result = {"supabase_warning": str(e_sb)}
+
         campaigns = df_ads["Campaign Name"].unique().tolist()
         ads = df_ads["Ad Name"].unique().tolist() if "Ad Name" in df_ads.columns else []
         return jsonify({
@@ -104,6 +170,7 @@ def fetch_ads():
             "campaigns": campaigns,
             "ads": ads,
             "date_preset": date_preset,
+            "supabase": sb_result,
         })
 
     except Exception as e:
@@ -776,6 +843,76 @@ def run_pipeline():
             if not df_avm_summary.empty:
                 write_df_to_tab(df_avm_summary, TAB_OUT_AVM)
                 log.append(f"  → {len(df_avm_summary)} days of AVM summary")
+
+            # ── Supabase sync: bookings + daily_summaries ──────────────────
+            try:
+                from supabase_client import (
+                    upsert_bookings, upsert_daily_summary,
+                    log_start, log_complete,
+                )
+                sb_log_id = log_start(
+                    "AVM", "sync_bookings",
+                    date_start=df_avm_export["date"].min(),
+                    date_end=df_avm_export["date"].max(),
+                )
+                # Upsert raw bookings (dedup by avm_id)
+                booking_rows = []
+                for _, r in df_avm_export.iterrows():
+                    avm_id = str(r.get("avm_id", "") or "")
+                    if not avm_id:
+                        continue
+                    # Map court name → court_id (Court 1=1, Court 2=2)
+                    court_name = str(r.get("court", ""))
+                    court_id = 1 if "1" in court_name else (2 if "2" in court_name else None)
+                    booking_rows.append({
+                        "avm_id":           avm_id,
+                        "booking_date":     str(r["date"]),
+                        "court_id":         court_id,
+                        "court_name":       court_name,
+                        "start_time":       str(r.get("start_time", "") or ""),
+                        "end_time":         str(r.get("end_time", "") or ""),
+                        "period":           str(r.get("period", "") or ""),
+                        "booking_code":     str(r.get("booking_code", "") or ""),
+                        "booking_type":     str(r.get("booking_type", "") or ""),
+                        "customer_name":    str(r.get("customer_name", "") or ""),
+                        "gross_amount":     int(float(r.get("total_price", 0) or 0)),
+                        "payment_method":   str(r.get("payment_method", "") or ""),
+                        "reservation_type": str(r.get("reservation_type", "") or ""),
+                        "final_status":     str(r.get("final_status", "") or ""),
+                    })
+                res_b = upsert_bookings(booking_rows) if booking_rows else {"inserted": 0, "error": None}
+
+                # Upsert daily_summaries from avm_summary
+                ds_inserted = 0
+                for _, s in df_avm_summary.iterrows():
+                    row = {
+                        "summary_date":          str(s["date"]),
+                        "total_bookings":         int(s.get("total_bookings", 0)),
+                        "regular_bookings":        int(s.get("regular_bookings", 0)),
+                        "machine_bookings":        int(s.get("machine_bookings", 0)),
+                        "coaching_bookings":       int(s.get("coaching_bookings", 0)),
+                        "complimentary_bookings":  int(s.get("complimentary_bookings", 0)),
+                        "booked_hours":            float(s.get("Booked Hrs", 0)),
+                        "total_hours":             int(s.get("Total Hrs", 32)),
+                        "occupancy_pct":           float(s.get("Overall Occ %", 0)),
+                        "morning_occ_pct":         float(s.get("Morning Occ %", 0)),
+                        "afternoon_occ_pct":       float(s.get("Afternoon Occ %", 0)),
+                        "evening_occ_pct":         float(s.get("Evening Occ %", 0)),
+                    }
+                    res = upsert_daily_summary(row)
+                    if res.get("inserted"):
+                        ds_inserted += 1
+
+                log_complete(sb_log_id, "success", {
+                    "rows_fetched":  len(booking_rows),
+                    "rows_inserted": res_b.get("inserted", 0),
+                })
+                log.append(
+                    f"  → Supabase: {res_b.get('inserted', 0)} bookings, "
+                    f"{ds_inserted} daily_summaries upserted"
+                )
+            except Exception as e_sb:
+                log.append(f"  ℹ️ Supabase AVM sync (non-fatal): {e_sb}")
         else:
             log.append("  → No AVM data returned (check AVM_MOBILE_TOKEN)")
     except ValueError as e:

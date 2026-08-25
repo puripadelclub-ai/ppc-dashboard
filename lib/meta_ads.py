@@ -107,6 +107,7 @@ def fetch_ads_insights(date_preset: str = "last_90d") -> pd.DataFrame:
         "fields": ",".join([
             "ad_name",
             "adset_name",
+            "campaign_id",
             "campaign_name",
             "date_start",
             "spend",
@@ -142,6 +143,7 @@ def fetch_ads_insights(date_preset: str = "last_90d") -> pd.DataFrame:
             rows.append({
                 "Ad Name":         item.get("ad_name", ""),
                 "Adset Name":      item.get("adset_name", ""),
+                "Campaign ID":     item.get("campaign_id", ""),
                 "Campaign Name":   item.get("campaign_name", ""),
                 "Date":            item.get("date_start", ""),
                 "Spend":           float(item.get("spend", 0) or 0),
