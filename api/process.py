@@ -96,68 +96,44 @@ def fetch_ads():
 
         write_df_to_tab(df_to_write, TAB_RAW_ADS)
 
-        # ── Supabase sync: campaigns + campaign_daily ──────────────────────
+        # ── Supabase sync: ads_daily (per ad per hari) ─────────────────────
         sb_result = {}
         try:
             from supabase_client import (
-                upsert_campaigns, upsert_campaign_daily,
-                log_start, log_complete, parse_campaign_name,
+                upsert_ads_daily, log_start, log_complete,
             )
             log_id = log_start("META_ADS", "fetch_ads_insights",
                                date_start=df_to_write["Date"].min(),
                                date_end=df_to_write["Date"].max())
 
-            # Build campaigns rows (deduplicated by Campaign ID)
-            seen_campaign_ids = set()
-            campaign_rows = []
-            for _, row in df_ads.iterrows():
-                cid = str(row.get("Campaign ID", "") or "")
-                if not cid or cid in seen_campaign_ids:
+            # Satu baris per ad per hari — dedup key: ad_name + report_date
+            ads_rows = []
+            for _, row in df_to_write.iterrows():
+                ad_name = str(row.get("Ad Name", "") or "").strip()
+                if not ad_name:
                     continue
-                seen_campaign_ids.add(cid)
-                parsed = parse_campaign_name(row.get("Campaign Name", ""))
-                campaign_rows.append({
-                    "campaign_id":   cid,
-                    "campaign_name": row.get("Campaign Name", ""),
-                    "campaign_num":  parsed["num"],
-                    "campaign_type": parsed["type"],
-                    "offer_name":    parsed["offer"],
-                    "batch":         parsed["batch"],
-                    "status":        "ACTIVE",
+                ads_rows.append({
+                    "ad_name":          ad_name,
+                    "adset_name":       str(row.get("Adset Name", "") or ""),
+                    "campaign_meta_id": str(row.get("Campaign ID", "") or ""),
+                    "campaign_name":    str(row.get("Campaign Name", "") or ""),
+                    "report_date":      str(row["Date"]),
+                    "spend":            int(float(row.get("Spend", 0) or 0)),
+                    "impressions":      int(float(row.get("Impressions", 0) or 0)),
+                    "reach":            int(float(row.get("Reach", 0) or 0)),
+                    "clicks":           int(float(row.get("Clicks", 0) or 0)),
+                    "results":          int(float(row.get("Results", 0) or 0)),
                 })
-            res_c = upsert_campaigns(campaign_rows) if campaign_rows else {"inserted": 0}
 
-            # Build campaign_daily rows (aggregate per campaign per day)
-            daily_df = df_to_write.groupby(["Campaign ID", "Campaign Name", "Date"], as_index=False).agg(
-                spend=("Spend", "sum"),
-                impressions=("Impressions", "sum"),
-                reach=("Reach", "sum"),
-                clicks=("Clicks", "sum"),
-                results=("Results", "sum"),
-            )
-            daily_rows = []
-            for _, r in daily_df.iterrows():
-                cid = str(r.get("Campaign ID", "") or "")
-                if not cid:
-                    continue
-                daily_rows.append({
-                    "campaign_meta_id": cid,
-                    "report_date":      str(r["Date"]),
-                    "spend":            int(r["spend"]),
-                    "impressions":      int(r["impressions"]),
-                    "reach":            int(r["reach"]),
-                    "clicks":           int(r["clicks"]),
-                    "results":          int(r["results"]),
-                })
-            res_d = upsert_campaign_daily(daily_rows) if daily_rows else {"inserted": 0}
+            res_d = upsert_ads_daily(ads_rows) if ads_rows else {"inserted": 0, "error": None}
 
             log_complete(log_id, "success", {
-                "rows_fetched": len(df_ads),
-                "rows_inserted": res_c["inserted"] + res_d["inserted"],
+                "rows_fetched":  len(df_ads),
+                "rows_inserted": res_d.get("inserted", 0),
             })
             sb_result = {
-                "campaigns_upserted": res_c["inserted"],
-                "daily_rows_upserted": res_d["inserted"],
+                "ads_daily_upserted": res_d.get("inserted", 0),
+                "error": res_d.get("error"),
             }
         except Exception as e_sb:
             sb_result = {"supabase_warning": str(e_sb)}
@@ -165,12 +141,11 @@ def fetch_ads():
         campaigns = df_ads["Campaign Name"].unique().tolist()
         ads = df_ads["Ad Name"].unique().tolist() if "Ad Name" in df_ads.columns else []
         return jsonify({
-            "status": "success",
-            "rows": len(df_ads),
-            "campaigns": campaigns,
-            "ads": ads,
+            "status":      "success",
+            "rows":        len(df_ads),
+            "ads":         ads,
             "date_preset": date_preset,
-            "supabase": sb_result,
+            "supabase":    sb_result,
         })
 
     except Exception as e:

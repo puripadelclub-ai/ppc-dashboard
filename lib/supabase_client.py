@@ -192,6 +192,11 @@ def upsert_campaign_daily(rows: list[dict]) -> dict:
     return upsert("campaign_daily", rows, on_conflict="campaign_meta_id,report_date")
 
 
+def upsert_ads_daily(rows: list[dict]) -> dict:
+    """Upsert per-ad daily metrics. Dedup key: ad_name + report_date."""
+    return upsert("ads_daily", rows, on_conflict="ad_name,report_date")
+
+
 def upsert_transactions(rows: list[dict]) -> dict:
     return upsert("transactions", rows, on_conflict="row_hash")
 
