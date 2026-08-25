@@ -2079,19 +2079,22 @@ function renderMarketing() {
 
 // ── OFFER EXTRACTION (global) ─────────────────────────
 function extractOffer(name) {
-  // Format: [XXX - TYPE - OFFER - Batch DD.MM] → ambil segmen ke-3
-  const m = (name||'').match(/\[\d+\s*-\s*\w+\s*-\s*(.+?)\s*-\s*Batch/i);
+  // Format: [NUM - TYPE - OFFER NAME - (Batch )?DD.MM] atau [NUM - TYPE - OFFER - Batch DD.MM]
+  // Tangkap segmen ke-3, berhenti sebelum "- Batch" atau "- DD.MM" (angka)
+  const m = (name||'').match(/\[\d+\s*-\s*\S+\s*-\s*(.+?)\s*-\s*(?:Batch\s*)?\d/i);
   if(m) {
     const offer = m[1].trim();
-    // Normalise casing ke Title Case
     return offer.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
   }
   // Fallback untuk nama non-standar
   const n = (name||'').toLowerCase();
-  if(n.includes('coaching'))    return 'Coaching';
+  if(n.includes('student trial'))   return 'Student Trial';
+  if(n.includes('student package')) return 'Student Package';
+  if(n.includes('coaching'))        return 'Coaching';
   if(n.includes('ball machine')||n.includes(' bm ')) return 'Ball Machine';
-  if(n.includes('awareness'))   return 'Awareness';
-  if(n.includes('membership'))  return 'Membership';
+  if(n.includes('upgrade membership')) return 'Upgrade Membership';
+  if(n.includes('awareness'))       return 'Awareness';
+  if(n.includes('membership'))      return 'Membership';
   return 'Lainnya';
 }
 
@@ -2249,10 +2252,19 @@ function renderWeeklyAdsTable(weekKey) {
 
   // Offer extraction from ad name
   function extractOffer(name){
-    const n=name.toLowerCase();
-    if(n.includes('coaching')) return 'Coaching';
+    const m = (name||'').match(/\[\d+\s*-\s*\S+\s*-\s*(.+?)\s*-\s*(?:Batch\s*)?\d/i);
+    if(m) {
+      const o = m[1].trim();
+      return o.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    }
+    const n = (name||'').toLowerCase();
+    if(n.includes('student trial'))   return 'Student Trial';
+    if(n.includes('student package')) return 'Student Package';
+    if(n.includes('coaching'))        return 'Coaching';
     if(n.includes('ball machine')||n.includes(' bm ')) return 'Ball Machine';
-    if(n.includes('membership')||/\bsi\b/.test(n)||/^\[0/.test(name)) return 'Membership';
+    if(n.includes('upgrade membership')) return 'Upgrade Membership';
+    if(n.includes('membership'))      return 'Membership';
+    if(n.includes('awareness'))       return 'Awareness';
     return 'Other';
   }
 
