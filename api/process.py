@@ -1139,6 +1139,18 @@ def run_pipeline():
                 ).strip() or None,
             })
 
+        # Deduplicate by member_code (table has unique constraint)
+        seen_codes: dict = {}
+        deduped_rows = []
+        for mr in mem_rows:
+            code = mr.get("member_code")
+            if code and code in seen_codes:
+                continue  # skip duplikat member_code
+            deduped_rows.append(mr)
+            if code:
+                seen_codes[code] = True
+        mem_rows = deduped_rows
+
         # Batch upsert (500 per call, sama seperti pattern yg sudah ada)
         mem_total = 0
         for i in range(0, len(mem_rows), 500):
@@ -1198,16 +1210,15 @@ def run_pipeline():
                 continue  # dedup within batch
 
             seen_hashes[rh] = {
-                "row_hash":       rh,
-                "sale_date":      sale_date or None,
-                "member_name":    member_name or None,
-                "product_name":   product or None,
-                "category":       category or None,
-                "qty":            _si(qty_raw, 1),
-                "unit_price":     _si(price_raw, 0),
-                "total_price":    _si(total_raw, 0),
-                "payment_method": pay_method or None,
-                "source":         "ESB",
+                "row_hash":         rh,
+                "transaction_date": sale_date or None,  # kolom: transaction_date (NOT NULL)
+                "customer_name":    member_name or None, # kolom: customer_name
+                "product_name":     product or None,
+                "category":         category or None,
+                "gross_amount":     _si(total_raw, 0),  # kolom: gross_amount
+                "payment_method":   pay_method or None,
+                "source":           "ESB",
+                # TIDAK kirim: net_amount (generated column), qty, unit_price
             }
 
         tx_rows  = list(seen_hashes.values())
