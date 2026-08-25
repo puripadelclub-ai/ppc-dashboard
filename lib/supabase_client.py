@@ -6,12 +6,11 @@ Digunakan oleh semua pipeline: AVM, ESB, Meta Ads, Members.
 
 import os
 import hashlib
-import json
 import re
 from datetime import datetime, timezone
 from typing import Optional
 
-import httpx
+import requests as _requests
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
@@ -49,12 +48,12 @@ def upsert(table: str, rows: list[dict], on_conflict: str = "id") -> dict:
     if not rows:
         return {"inserted": 0, "error": None}
 
-    with httpx.Client(timeout=30) as client:
-        resp = client.post(
+    resp = _requests.post(
             _url(table),
             headers={**_headers(), "Prefer": f"resolution=merge-duplicates,return=representation"},
             params={"on_conflict": on_conflict},
             json=rows,
+            timeout=30,
         )
         if resp.status_code not in (200, 201):
             return {"inserted": 0, "error": f"HTTP {resp.status_code}: {resp.text[:300]}"}
@@ -72,8 +71,7 @@ def select(table: str, filters: dict = None, limit: int = 1000) -> list[dict]:
         for k, v in filters.items():
             params[k] = f"eq.{v}"
 
-    with httpx.Client(timeout=30) as client:
-        resp = client.get(_url(table), headers=headers, params=params)
+    resp = _requests.get(_url(table), headers=headers, params=params, timeout=30)
         if resp.status_code != 200:
             return []
         return resp.json()
@@ -96,15 +94,10 @@ def log_start(source: str, job_name: str, date_start=None, date_end=None) -> Opt
     if date_end:
         row["date_range_end"] = str(date_end)
 
-    with httpx.Client(timeout=15) as client:
-        resp = client.post(
-            _url("sync_logs"),
-            headers=_headers(),
-            json=row,
-        )
-        if resp.status_code in (200, 201):
-            data = resp.json()
-            return data[0]["id"] if isinstance(data, list) else data.get("id")
+    resp = _requests.post(_url("sync_logs"), headers=_headers(), json=row, timeout=15)
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        return data[0]["id"] if isinstance(data, list) else data.get("id")
     return None
 
 
@@ -121,13 +114,13 @@ def log_complete(log_id: str, status: str, counts: dict = None, error: str = Non
     if error:
         patch["error_message"] = error[:1000]
 
-    with httpx.Client(timeout=15) as client:
-        client.patch(
-            _url("sync_logs"),
-            headers={**_headers(), "Prefer": "return=minimal"},
-            params={"id": f"eq.{log_id}"},
-            json=patch,
-        )
+    _requests.patch(
+        _url("sync_logs"),
+        headers={**_headers(), "Prefer": "return=minimal"},
+        params={"id": f"eq.{log_id}"},
+        json=patch,
+        timeout=15,
+    )
 
 
 # ---------------------------------------------------------------------------
