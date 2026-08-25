@@ -1109,27 +1109,34 @@ def run_pipeline():
             return p
 
         log_id_m = _ls_m("MEMBERS", "sync_member_profiles")
-        mem_rows = []
+        # Dedup by phone (conflict key, 21000 prevention) AND member_code (unique constraint)
+        seen_phones: dict = {}   # phone → row (first occurrence wins)
+        seen_codes: set  = set() # member_codes already taken
+
         for _, row in df_sheet.iterrows():
             name      = str(row.get("Member Name", "") or "").strip()
             phone_raw = str(row.get("Phone Number", "") or "").strip()
             if not name or not phone_raw:
                 continue
             phone = _norm_phone(phone_raw)
-            if not phone:
-                continue
+            if not phone or phone in seen_phones:
+                continue  # invalid phone OR duplicate phone
+
             join_raw = str(row.get("Join Date", "") or "").strip()
-            # Parse date (Google Sheets sering DD/MM/YYYY) → YYYY-MM-DD untuk PostgreSQL
             try:
                 _jd = pd.to_datetime(join_raw, dayfirst=True, errors="coerce")
                 join_date = None if pd.isna(_jd) else _jd.strftime("%Y-%m-%d")
             except Exception:
                 join_date = None
 
-            mem_rows.append({
+            code = str(row.get("Member Code", "") or "").strip() or None
+            if code and code in seen_codes:
+                code = None   # clear agar tidak tabrak unique constraint
+
+            seen_phones[phone] = {
                 "phone":              phone,
                 "name":               name,
-                "member_code":        str(row.get("Member Code", "") or "").strip() or None,
+                "member_code":        code,
                 "email":              f"{phone}@puripadelclub.com",
                 "join_date":          join_date,
                 "membership_type":    str(row.get("Membership Type", "") or "").strip() or None,
@@ -1137,19 +1144,11 @@ def run_pipeline():
                 "kode_ads":           str(
                     row.get("Kode ads", "") or row.get("Kode Ads", "") or ""
                 ).strip() or None,
-            })
-
-        # Deduplicate by member_code (table has unique constraint)
-        seen_codes: dict = {}
-        deduped_rows = []
-        for mr in mem_rows:
-            code = mr.get("member_code")
-            if code and code in seen_codes:
-                continue  # skip duplikat member_code
-            deduped_rows.append(mr)
+            }
             if code:
-                seen_codes[code] = True
-        mem_rows = deduped_rows
+                seen_codes.add(code)
+
+        mem_rows = list(seen_phones.values())
 
         # Batch upsert (500 per call, sama seperti pattern yg sudah ada)
         mem_total = 0
