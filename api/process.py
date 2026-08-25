@@ -885,9 +885,12 @@ def run_pipeline():
                     "rows_fetched":  len(booking_rows),
                     "rows_inserted": res_b.get("inserted", 0),
                 })
+                b_err = res_b.get("error")
                 log.append(
-                    f"  → Supabase: {res_b.get('inserted', 0)} bookings, "
-                    f"{ds_inserted} daily_summaries upserted"
+                    f"  → Supabase: {res_b.get('inserted', 0)} bookings "
+                    f"({'ERR: ' + str(b_err)[:120] if b_err else 'ok'}), "
+                    f"{ds_inserted} daily_summaries upserted | "
+                    f"booking_rows={len(booking_rows)}"
                 )
             except Exception as e_sb:
                 log.append(f"  ℹ️ Supabase AVM sync (non-fatal): {e_sb}")
