@@ -1194,7 +1194,11 @@ def run_pipeline():
         #              Menu, Menu Category, Qty, Price, Total, Payment Method
         seen_hashes: dict = {}
         for _, r in df_sales.iterrows():
-            sale_date   = str(r.get("Sales Date",  "") or "")[:10]
+            _sd_raw = r.get("Sales Date", "")
+            # Skip baris tanpa tanggal valid (NaT, NaN, None, blank)
+            if pd.isna(_sd_raw) or str(_sd_raw).lower() in ("nat", "nan", "none", ""):
+                continue
+            sale_date   = str(_sd_raw)[:10]
             member_name = str(r.get("Loyalty Member Name", "") or "").strip()
             product     = str(r.get("Menu",   "") or r.get("Product",  "") or "").strip()
             category    = str(r.get("Menu Category", "") or r.get("Category", "") or "").strip()
