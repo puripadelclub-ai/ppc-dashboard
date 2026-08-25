@@ -1119,8 +1119,12 @@ def run_pipeline():
             if not phone:
                 continue
             join_raw = str(row.get("Join Date", "") or "").strip()
-            # Normalise date string — keep only first 10 chars (YYYY-MM-DD)
-            join_date = join_raw[:10] if join_raw and join_raw not in ("nan", "None", "") else None
+            # Parse date (Google Sheets sering DD/MM/YYYY) → YYYY-MM-DD untuk PostgreSQL
+            try:
+                _jd = pd.to_datetime(join_raw, dayfirst=True, errors="coerce")
+                join_date = None if pd.isna(_jd) else _jd.strftime("%Y-%m-%d")
+            except Exception:
+                join_date = None
 
             mem_rows.append({
                 "phone":              phone,
@@ -1166,6 +1170,14 @@ def run_pipeline():
         log_id_t = _ls_t("ESB", "sync_transactions",
                           date_start=_date_min, date_end=_date_max)
 
+        # Helper: safe int conversion (handles NaN, None, empty string)
+        def _si(v, default=0) -> int:
+            try:
+                f = float(v)
+                return default if f != f else int(f)  # f!=f → NaN check
+            except Exception:
+                return default
+
         # Map ESB columns — ESB "Sales Recapitulation" header baris 10
         # Kolom kunci: Sales Date, Loyalty Member Name, Bill No,
         #              Menu, Menu Category, Qty, Price, Total, Payment Method
@@ -1191,9 +1203,9 @@ def run_pipeline():
                 "member_name":    member_name or None,
                 "product_name":   product or None,
                 "category":       category or None,
-                "qty":            int(float(qty_raw or 1)),
-                "unit_price":     int(float(price_raw or 0)),
-                "total_price":    int(float(total_raw or 0)),
+                "qty":            _si(qty_raw, 1),
+                "unit_price":     _si(price_raw, 0),
+                "total_price":    _si(total_raw, 0),
                 "payment_method": pay_method or None,
                 "source":         "ESB",
             }
