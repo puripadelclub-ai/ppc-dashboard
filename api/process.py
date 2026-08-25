@@ -832,17 +832,22 @@ def run_pipeline():
                 )
                 # Upsert raw bookings (dedup by avm_id)
                 import hashlib as _hl
-                booking_rows = []
+                seen_ids = {}  # dedup dict: avm_id → row (last-write-wins)
                 for _, r in df_avm_export.iterrows():
                     avm_id = str(r.get("avm_id", "") or "").strip()
                     # Jika AVM tidak return id, buat synthetic key dari composite fields
+                    # Sertakan end_time agar slot berbeda durasi tidak bentrok
                     if not avm_id or avm_id in ("0", "nan"):
-                        raw_key = f"{r.get('date','')}|{r.get('court','')}|{r.get('start_time','')}|{r.get('customer_name','')}"
-                        avm_id = "syn_" + _hl.md5(raw_key.encode()).hexdigest()[:12]
+                        raw_key = (
+                            f"{r.get('date','')}|{r.get('court','')}|"
+                            f"{r.get('start_time','')}|{r.get('end_time','')}|"
+                            f"{r.get('customer_name','')}"
+                        )
+                        avm_id = "syn_" + _hl.md5(raw_key.encode()).hexdigest()[:16]
                     # Map court name → court_id (Court 1=1, Court 2=2)
                     court_name = str(r.get("court", ""))
                     court_id = 1 if "1" in court_name else (2 if "2" in court_name else None)
-                    booking_rows.append({
+                    seen_ids[avm_id] = {
                         "avm_id":           avm_id,
                         "booking_date":     str(r["date"]),
                         "court_id":         court_id,
@@ -857,7 +862,8 @@ def run_pipeline():
                         "payment_method":   str(r.get("payment_method", "") or ""),
                         "reservation_type": str(r.get("reservation_type", "") or ""),
                         "final_status":     str(r.get("final_status", "") or ""),
-                    })
+                    }
+                booking_rows = list(seen_ids.values())
                 res_b = upsert_bookings(booking_rows) if booking_rows else {"inserted": 0, "error": None}
 
                 # Upsert daily_summaries from avm_summary
