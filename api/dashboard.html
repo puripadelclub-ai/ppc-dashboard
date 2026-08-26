@@ -603,22 +603,14 @@ body{
         </div>
       </div>
 
-      <!-- Row 2: Revenue trend (2/3) + Kategori ESB (1/3) -->
-      <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px">
+      <!-- Row 2: Revenue trend (full width) -->
+      <div style="margin-bottom:12px">
         <div class="card">
           <div class="card-hd">
             <span class="card-hd-lbl">Revenue Trend 6 Bulan</span>
             <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600">ESB</span>
           </div>
-          <div class="chart-wrap"><canvas id="chart-rev"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-hd">
-            <span class="card-hd-lbl">Revenue per Kategori</span>
-            <span id="home-cat-period" style="font-size:10px;color:var(--txt3);margin-right:4px"></span>
-            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600">ESB</span>
-          </div>
-          <div id="home-cat-breakdown"></div>
+          <div class="chart-wrap-lg"><canvas id="chart-rev"></canvas></div>
         </div>
       </div>
 
@@ -1459,39 +1451,75 @@ function renderFunnel() {
   if (!el) return;
   if (pl && SB.period) pl.textContent = `· ${SB.period.label}`;
 
-  // Conversion rate color: <8% red, 8-12% amber, ≥12% green
-  const crColor = f.conv_rate < 8 ? 'var(--red)' : f.conv_rate < 12 ? 'var(--amber)' : 'var(--green)';
+  // Conversion rate: <8% red, 8–12% amber, ≥12% green
+  const crHex   = f.conv_rate < 8 ? '#DC2626' : f.conv_rate < 12 ? '#D97706' : '#059669';
+  const crBg    = f.conv_rate < 8 ? 'rgba(220,38,38,.1)' : f.conv_rate < 12 ? 'rgba(217,119,6,.1)' : 'rgba(5,150,105,.1)';
+  const crLabel = f.conv_rate < 8 ? '⚠ Di bawah 8%' : f.conv_rate < 12 ? '● Perlu ditingkatkan' : '✓ Konversi baik';
 
-  const steps = [
-    { label: 'Ad Spend',      value: 'Rp' + (f.spend/1000).toFixed(0) + 'k', bar: 100,                                  color: 'var(--brand)' },
-    { label: 'Results (Lead)',value: f.results.toLocaleString('id-ID'),        bar: f.spend>0 ? Math.min(100, f.results/(f.spend/4000)*2) : 0, color: '#0891B2' },
-    { label: 'New Members',   value: f.new_members.toLocaleString('id-ID'),   bar: f.results>0 ? Math.min(100, f.new_members/f.results*100*4) : 0, color: 'var(--green)' },
-  ];
+  const fmtRp = v => v >= 1e6 ? 'Rp' + (v/1e6).toFixed(1) + 'jt' : 'Rp' + Math.round(v/1000) + 'k';
 
-  el.innerHTML = steps.map(s => `
-    <div style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-size:11px;color:var(--txt2)">${s.label}</span>
-        <span style="font-size:13px;font-weight:700;color:${s.color}">${s.value}</span>
+  // Funnel: 3 trapezoid-like stages, each narrower via increasing margin
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:0;margin-top:6px">
+
+      <!-- Stage 1: Ad Spend – full width -->
+      <div style="background:linear-gradient(135deg,#034842,#047857);border-radius:7px 7px 0 0;
+                  padding:13px 16px;display:flex;justify-content:space-between;align-items:center;min-height:54px">
+        <div>
+          <div style="color:rgba(255,255,255,.55);font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">Ad Spend</div>
+          <div style="color:#fff;font-size:21px;font-weight:700;letter-spacing:-.4px;line-height:1">${fmtRp(f.spend)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:rgba(255,255,255,.5);font-size:9px;margin-bottom:2px">Cost per Result</div>
+          <div style="color:rgba(255,255,255,.9);font-size:14px;font-weight:600">${fmtRp(f.cpr)}</div>
+        </div>
       </div>
-      <div style="height:5px;background:var(--bg);border-radius:3px">
-        <div style="height:100%;width:${s.bar}%;background:${s.color};border-radius:3px"></div>
+
+      <!-- Connector 1→2 -->
+      <div style="display:flex;height:22px">
+        <div style="width:10%;background:rgba(3,72,66,.07)"></div>
+        <div style="flex:1;background:rgba(3,72,66,.04);display:flex;align-items:center;justify-content:center">
+          <span style="font-size:9px;color:var(--txt3)">↓ &nbsp; ${f.results.toLocaleString('id-ID')} leads dari iklan</span>
+        </div>
+        <div style="width:10%;background:rgba(3,72,66,.07)"></div>
       </div>
-    </div>
-  `).join('') + `
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
-      <div>
-        <div style="font-size:15px;font-weight:700;color:var(--txt)">Rp${f.cpr>0?(f.cpr/1000).toFixed(0)+'k':'—'}</div>
-        <div style="font-size:9px;color:var(--txt3);margin-top:1px">Cost/Result</div>
+
+      <!-- Stage 2: Results / Leads – 80% width -->
+      <div style="margin:0 10%;background:linear-gradient(135deg,#047857,#059669);
+                  padding:12px 16px;display:flex;justify-content:space-between;align-items:center;min-height:50px">
+        <div>
+          <div style="color:rgba(255,255,255,.55);font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">Results / Leads</div>
+          <div style="color:#fff;font-size:21px;font-weight:700;letter-spacing:-.4px;line-height:1">${f.results.toLocaleString('id-ID')}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:rgba(255,255,255,.5);font-size:9px;margin-bottom:2px">DM / klik / form</div>
+          <div style="color:rgba(255,255,255,.85);font-size:11px;font-weight:500">dari Meta Ads</div>
+        </div>
       </div>
-      <div>
-        <div style="font-size:15px;font-weight:700;color:${crColor}">${f.conv_rate}%</div>
-        <div style="font-size:9px;color:var(--txt3);margin-top:1px">Lead→Member</div>
+
+      <!-- Connector 2→3: colored by conv rate -->
+      <div style="margin:0 10%;display:flex;height:22px">
+        <div style="width:${10/0.8}%;background:${crBg}"></div>
+        <div style="flex:1;background:${crBg};border-left:2px solid ${crHex};border-right:2px solid ${crHex};
+                    display:flex;align-items:center;justify-content:center">
+          <span style="font-size:9px;color:${crHex};font-weight:600">↓ &nbsp; ${f.conv_rate}% lead → member</span>
+        </div>
+        <div style="width:${10/0.8}%;background:${crBg}"></div>
       </div>
-      <div>
-        <div style="font-size:15px;font-weight:700;color:var(--txt)">${f.results>0?Math.round(f.results/f.new_members||0):'—'}</div>
-        <div style="font-size:9px;color:var(--txt3);margin-top:1px">Lead per Member</div>
+
+      <!-- Stage 3: New Members – 60% width, colored by performance -->
+      <div style="margin:0 22%;background:linear-gradient(135deg,${crHex},${crHex}cc);border-radius:0 0 7px 7px;
+                  padding:12px 14px;display:flex;justify-content:space-between;align-items:center;min-height:48px">
+        <div>
+          <div style="color:rgba(255,255,255,.55);font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px">New Members</div>
+          <div style="color:#fff;font-size:21px;font-weight:700;letter-spacing:-.4px;line-height:1">${f.new_members}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:rgba(255,255,255,.65);font-size:9px;margin-bottom:2px">${f.results > 0 && f.new_members > 0 ? Math.round(f.results/f.new_members) : '—'} lead/member</div>
+          <div style="color:rgba(255,255,255,.9);font-size:10px;font-weight:600">${crLabel}</div>
+        </div>
       </div>
+
     </div>
   `;
 }
@@ -1691,29 +1719,7 @@ function renderHome() {
     }
   });
 
-  // ── Row 2: Revenue per kategori ESB (dari product_detail) ───────────
-  const catRevMap = {};
-  prods.forEach(r=>{
-    const c = r['Menu_Category']||'Other';
-    catRevMap[c] = (catRevMap[c]||0) + si(r['Total_Revenue']);
-  });
-  const catArr = Object.entries(catRevMap).sort((a,b)=>b[1]-a[1]);
-  const catTotal = catArr.reduce((s,e)=>s+e[1],0);
-  const CAT_COLORS = ['#034842','#2da870','#5bbf9c','#f59e0b','#3b82f6','#8b5cf6','#ef4444','#ec4899'];
-  document.getElementById('home-cat-breakdown').innerHTML = catTotal>0
-    ? catArr.slice(0,7).map(([c,v],i)=>{
-        const pct = (v/catTotal*100).toFixed(1);
-        return `<div style="margin-bottom:9px">
-          <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px">
-            <span style="color:var(--txt);font-weight:500">${c}</span>
-            <span style="color:var(--txt2)">${fIDR(v)} <span style="color:var(--txt3)">(${pct}%)</span></span>
-          </div>
-          <div style="height:5px;background:#eee;border-radius:3px;overflow:hidden">
-            <div style="width:${pct}%;height:100%;background:${CAT_COLORS[i%CAT_COLORS.length]};border-radius:3px"></div>
-          </div>
-        </div>`;
-      }).join('')
-    : '<div style="color:var(--txt3);font-size:12px;padding:20px 0;text-align:center">Jalankan pipeline untuk data ESB</div>';
+  // ── Revenue per kategori ESB: removed (digantikan Supabase version) ──
 
   // Category period label: compute from First_Date / Last_Date in product_detail
   const pDates = prods.filter(r=>r.First_Date&&r.Last_Date);
