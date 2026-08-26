@@ -63,17 +63,20 @@ def normalize_phone(raw) -> str | None:
 # ── Read sheet via Sheets API (public) ────────────────────
 def read_members_from_sheet() -> list[dict]:
     """
-    Baca member list dari Google Sheets menggunakan Sheets API v4.
-    Sheet harus di-share 'Anyone with the link can view'.
+    Baca member list via CSV export (tidak perlu credentials).
+    Sheet harus di-share 'Anyone with link can view'.
     """
-    import gspread
-    from sheets_client import get_gc
+    import pandas as pd
+    import io
 
-    gc = get_gc()
-    sh = gc.open_by_key(SHEET_ID)
-    ws = sh.get_worksheet(0)
-    rows = ws.get_all_records(head=2)   # baris ke-2 adalah header
-    return rows
+    csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+    resp = requests.get(csv_url, timeout=30)
+    resp.raise_for_status()
+
+    df = pd.read_csv(io.StringIO(resp.text), header=0)  # baris pertama = header
+    df.columns = df.columns.str.strip()
+    df = df.dropna(how="all")
+    return df.to_dict(orient="records")
 
 
 # ── Supabase admin: create user ────────────────────────────
@@ -124,7 +127,10 @@ def main():
         print(f"❌  Gagal baca sheet: {e}")
         sys.exit(1)
 
-    print(f"    {len(rows)} baris ditemukan\n")
+    print(f"    {len(rows)} baris ditemukan")
+    if rows:
+        print(f"    Kolom: {list(rows[0].keys())}")
+        print(f"    Contoh baris 1: {rows[0]}\n")
 
     ok = skip = fail = 0
     skipped_list = []

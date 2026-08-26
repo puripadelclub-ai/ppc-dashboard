@@ -784,6 +784,233 @@ def sync_health():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route("/api/supabase-data", methods=["GET"])
+def supabase_data():
+    """
+    Supabase-backed KPI data dengan date range filtering.
+    Digunakan Sprint 4 Executive Dashboard untuk Target vs Actual per KPI.
+
+    Query params:
+      period: bulan_ini (default) | 30d | 7d | today | ytd
+    """
+    try:
+        import requests as _rh
+        from datetime import date as _date, timedelta as _td
+        import math as _math
+
+        _sb_url = os.environ.get("SUPABASE_URL", "")
+        _sb_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+        _hd = {"apikey": _sb_key, "Authorization": f"Bearer {_sb_key}"}
+
+        # ── Targets (per bulan) ──────────────────────────────────
+        TARGETS = {
+            "revenue":     145_000_000,   # Rp145jt/bulan (realistis)
+            "occupancy":   55.0,           # 55% rata-rata
+            "new_members": 50,             # 50 member baru/bulan
+        }
+
+        # ── Parse date range ─────────────────────────────────────
+        period = request.args.get("period", "bulan_ini")
+        today  = _date.today()
+
+        if period == "today":
+            d_from, d_to = today, today
+        elif period == "7d":
+            d_from, d_to = today - _td(days=6), today
+        elif period == "30d":
+            d_from, d_to = today - _td(days=29), today
+        elif period == "ytd":
+            d_from, d_to = _date(today.year, 1, 1), today
+        else:  # bulan_ini
+            d_from = _date(today.year, today.month, 1)
+            d_to   = today
+
+        # Previous period (same duration)
+        n_days    = (d_to - d_from).days + 1
+        prev_to   = d_from - _td(days=1)
+        prev_from = prev_to - _td(days=n_days - 1)
+
+        # Scale cumulative targets to period length (occupancy is avg, skip)
+        days_in_month = 30
+        scale = n_days / days_in_month
+        scaled_rev = int(TARGETS["revenue"] * scale)
+        scaled_mem = int(TARGETS["new_members"] * scale)
+
+        def _sb(table, cols, date_col, d0, d1):
+            """Pull rows from Supabase via PostgREST with date range filter."""
+            params = [
+                ("select", cols),
+                (date_col, f"gte.{d0}"),
+                (date_col, f"lte.{d1}"),
+                ("limit",  "10000"),
+            ]
+            r = _rh.get(
+                f"{_sb_url}/rest/v1/{table}",
+                headers=_hd, params=params, timeout=15,
+            )
+            return r.json() if r.status_code == 200 else []
+
+        def _sf(v, d=0.0):
+            try:
+                f = float(v)
+                return d if (f != f or _math.isinf(f)) else f
+            except Exception:
+                return d
+
+        # ── Fetch current period ──────────────────────────────────
+        tx_cur   = _sb("transactions",    "transaction_date,category,gross_amount",
+                        "transaction_date", d_from, d_to)
+        ds_cur   = _sb("daily_summaries", "summary_date,occupancy_pct",
+                        "summary_date",    d_from, d_to)
+        mem_cur  = _sb("members",         "join_date",
+                        "join_date",       d_from, d_to)
+        ads_cur  = _sb("ads_daily",       "report_date,spend,results",
+                        "report_date",     d_from, d_to)
+
+        # ── Fetch previous period (for comparison) ────────────────
+        tx_prv   = _sb("transactions",    "gross_amount",
+                        "transaction_date", prev_from, prev_to)
+        ds_prv   = _sb("daily_summaries", "occupancy_pct",
+                        "summary_date",    prev_from, prev_to)
+        mem_prv  = _sb("members",         "join_date",
+                        "join_date",       prev_from, prev_to)
+
+        # ── Heatmap: last 30d bookings (day × hour grid) ─────────
+        heat_from = today - _td(days=29)
+        bk_heat  = _sb("bookings", "booking_date,start_time,booking_code",
+                        "booking_date", heat_from, today)
+
+        # ── Aggregate revenue ─────────────────────────────────────
+        rev_cur = sum(_sf(r.get("gross_amount")) for r in tx_cur)
+        rev_prv = sum(_sf(r.get("gross_amount")) for r in tx_prv)
+
+        # ── Aggregate occupancy ───────────────────────────────────
+        occ_vals = [_sf(r.get("occupancy_pct")) * 100 for r in ds_cur
+                    if r.get("occupancy_pct") is not None]
+        occ_cur  = round(sum(occ_vals) / len(occ_vals), 1) if occ_vals else 0.0
+        occ_prv_v = [_sf(r.get("occupancy_pct")) * 100 for r in ds_prv
+                     if r.get("occupancy_pct") is not None]
+        occ_prv  = round(sum(occ_prv_v) / len(occ_prv_v), 1) if occ_prv_v else 0.0
+
+        # ── New members ───────────────────────────────────────────
+        mem_cur_n = len(mem_cur)
+        mem_prv_n = len(mem_prv)
+
+        # ── Ads & conversion funnel ───────────────────────────────
+        ads_spend   = sum(int(_sf(r.get("spend")))   for r in ads_cur)
+        ads_results = sum(int(_sf(r.get("results"))) for r in ads_cur)
+        cpr         = round(ads_spend / ads_results) if ads_results > 0 else 0
+        conv_rate   = round(mem_cur_n / ads_results * 100, 1) if ads_results > 0 else 0.0
+
+        # ── Revenue by category ───────────────────────────────────
+        cat_totals: dict = {}
+        for r in tx_cur:
+            cat = str(r.get("category") or "Lainnya").strip() or "Lainnya"
+            cat_totals[cat] = cat_totals.get(cat, 0) + _sf(r.get("gross_amount"))
+        rev_by_cat = sorted(
+            [{"category": k, "total": int(v),
+              "pct": round(v / rev_cur * 100, 1) if rev_cur else 0}
+             for k, v in cat_totals.items()],
+            key=lambda x: -x["total"],
+        )
+
+        # ── Revenue daily trend ───────────────────────────────────
+        daily_rev: dict = {}
+        for r in tx_cur:
+            d = str(r.get("transaction_date", ""))[:10]
+            if d:
+                daily_rev[d] = daily_rev.get(d, 0) + _sf(r.get("gross_amount"))
+        rev_daily = [{"date": k, "revenue": int(v)}
+                     for k, v in sorted(daily_rev.items())]
+
+        # ── Occupancy heatmap (weekday × hour) ───────────────────
+        heatmap_grid: dict = {}
+        for r in bk_heat:
+            bd = r.get("booking_date", "")
+            st = str(r.get("start_time", "") or "")
+            if not bd or not st or len(st) < 2:
+                continue
+            try:
+                from datetime import datetime as _dt2
+                wd  = _dt2.strptime(str(bd)[:10], "%Y-%m-%d").weekday()  # 0=Mon
+                hr  = int(st[:2])
+                key = (wd, hr)
+                heatmap_grid[key] = heatmap_grid.get(key, 0) + 1
+            except Exception:
+                continue
+        heatmap = [{"day": k[0], "hour": k[1], "count": v}
+                   for k, v in heatmap_grid.items()]
+
+        # ── vs_prev helper ────────────────────────────────────────
+        def _vs(cur, prv):
+            if prv == 0:
+                return None
+            return round((cur - prv) / prv * 100, 1)
+
+        def _pct(val, target):
+            return round(val / target * 100, 1) if target else 0
+
+        # ── Period label ──────────────────────────────────────────
+        MONTHS_ID = ["Jan","Feb","Mar","Apr","Mei","Jun",
+                     "Jul","Agu","Sep","Okt","Nov","Des"]
+        if period == "bulan_ini":
+            period_label = f"{MONTHS_ID[today.month-1]} {today.year}"
+        elif period == "today":
+            period_label = "Hari Ini"
+        elif period == "7d":
+            period_label = "7 Hari Terakhir"
+        elif period == "30d":
+            period_label = "30 Hari Terakhir"
+        elif period == "ytd":
+            period_label = f"YTD {today.year}"
+        else:
+            period_label = f"{d_from} – {d_to}"
+
+        return jsonify({
+            "period": {
+                "from": str(d_from), "to": str(d_to),
+                "label": period_label, "days": n_days,
+            },
+            "kpis": {
+                "revenue": {
+                    "value":         int(rev_cur),
+                    "prev_value":    int(rev_prv),
+                    "target":        scaled_rev,
+                    "pct_of_target": _pct(rev_cur, scaled_rev),
+                    "vs_prev_pct":   _vs(rev_cur, rev_prv),
+                },
+                "occupancy": {
+                    "value":         occ_cur,
+                    "prev_value":    occ_prv,
+                    "target":        TARGETS["occupancy"],
+                    "pct_of_target": _pct(occ_cur, TARGETS["occupancy"]),
+                    "vs_prev_pct":   _vs(occ_cur, occ_prv),
+                },
+                "new_members": {
+                    "value":         mem_cur_n,
+                    "prev_value":    mem_prv_n,
+                    "target":        scaled_mem,
+                    "pct_of_target": _pct(mem_cur_n, scaled_mem),
+                    "vs_prev_pct":   _vs(mem_cur_n, mem_prv_n),
+                },
+            },
+            "funnel": {
+                "spend":       int(ads_spend),
+                "results":     int(ads_results),
+                "new_members": mem_cur_n,
+                "cpr":         int(cpr),
+                "conv_rate":   conv_rate,
+            },
+            "revenue_by_category": rev_by_cat,
+            "revenue_daily":       rev_daily,
+            "heatmap":             heatmap,
+        })
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        return jsonify({"status": "error", "message": str(e), "trace": tb}), 500
+
+
 def run_pipeline():
     """
     Main pipeline:

@@ -417,6 +417,31 @@ body{
   border-radius:4px;transition:background .15s;
 }
 #info-close:hover{background:var(--bg)}
+
+/* ── Sprint 4: Date Filter ──────────────────────────── */
+.df-btn{
+  padding:5px 13px;border:1px solid var(--border);border-radius:16px;
+  background:var(--surface);color:var(--txt2);font-size:11px;font-weight:500;
+  cursor:pointer;transition:all .15s;line-height:1.4;
+}
+.df-btn:hover{border-color:var(--brand);color:var(--brand)}
+.df-btn.active{
+  background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600;
+}
+
+/* ── Sprint 4: KPI Progress Bar ─────────────────────── */
+.kpi-prog-bar{
+  height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin:7px 0 4px;
+}
+.kpi-prog-fill{height:100%;border-radius:3px;transition:width .45s ease}
+
+/* ── Sprint 4: Heatmap ───────────────────────────────── */
+.hm-cell{
+  width:26px;height:22px;border-radius:3px;display:flex;align-items:center;
+  justify-content:center;font-size:9px;font-weight:600;cursor:default;
+  transition:opacity .1s;
+}
+.hm-cell:hover{opacity:.8}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -521,6 +546,31 @@ body{
         </div>
       </div>
 
+      <!-- Date Filter Tabs -->
+      <div id="date-filter" style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+        <button class="df-btn active" onclick="setDateFilter('bulan_ini')">Bulan Ini</button>
+        <button class="df-btn" onclick="setDateFilter('7d')">7 Hari</button>
+        <button class="df-btn" onclick="setDateFilter('30d')">30 Hari</button>
+        <button class="df-btn" onclick="setDateFilter('ytd')">YTD</button>
+        <span id="df-period-label" style="font-size:11px;color:var(--txt3);margin-left:4px"></span>
+      </div>
+
+      <!-- Row 0: KPI Target vs Actual (Supabase-backed) -->
+      <div id="kpi-progress-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
+        <div class="card" id="kpi-prog-revenue" style="border-left:3px solid var(--brand)">
+          <div class="kpi-lbl" style="margin-bottom:4px">Revenue <span class="badge-green" style="font-size:9px;padding:1px 5px;border-radius:4px;margin-left:2px">vs Target</span></div>
+          <div style="font-size:10px;color:var(--txt3)">Memuat...</div>
+        </div>
+        <div class="card" id="kpi-prog-occ">
+          <div class="kpi-lbl" style="margin-bottom:4px">Occupancy <span class="badge-green" style="font-size:9px;padding:1px 5px;border-radius:4px;margin-left:2px">vs Target</span></div>
+          <div style="font-size:10px;color:var(--txt3)">Memuat...</div>
+        </div>
+        <div class="card" id="kpi-prog-mem">
+          <div class="kpi-lbl" style="margin-bottom:4px">New Members <span class="badge-green" style="font-size:9px;padding:1px 5px;border-radius:4px;margin-left:2px">vs Target</span></div>
+          <div style="font-size:10px;color:var(--txt3)">Memuat...</div>
+        </div>
+      </div>
+
       <!-- Row 1: 4 big financial KPIs (ESB) -->
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
 
@@ -569,6 +619,25 @@ body{
             <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600">ESB</span>
           </div>
           <div id="home-cat-breakdown"></div>
+        </div>
+      </div>
+
+      <!-- Row 2.5: Conversion Funnel (Supabase-backed) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-hd-lbl">Conversion Funnel</span>
+            <span id="funnel-period-lbl" style="font-size:10px;color:var(--txt3);margin-left:4px"></span>
+          </div>
+          <div id="kpi-funnel-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-hd-lbl">Revenue per Kategori</span>
+            <span id="sb-cat-period" style="font-size:10px;color:var(--txt3);margin-left:4px"></span>
+            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
+          </div>
+          <div id="sb-cat-breakdown"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
         </div>
       </div>
 
@@ -624,6 +693,18 @@ body{
       <div class="card mb">
         <div class="card-hd"><span class="card-hd-lbl">Occupancy Trend</span><span class="card-meta" id="ops-trend-meta"></span></div>
         <div class="chart-wrap-lg"><canvas id="chart-occ-trend"></canvas></div>
+      </div>
+
+      <!-- Occupancy Heatmap: Jam × Hari (Sprint 4) -->
+      <div class="card mb">
+        <div class="card-hd">
+          <span class="card-hd-lbl">Occupancy Heatmap</span>
+          <span style="font-size:10px;color:var(--txt3);margin-left:4px">· 30 hari terakhir · per jam × hari</span>
+          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
+        </div>
+        <div id="ops-heatmap" style="overflow-x:auto">
+          <span style="font-size:11px;color:var(--txt3)">Memuat...</span>
+        </div>
       </div>
 
       <div class="card mb" style="padding:0;overflow:hidden">
@@ -1274,6 +1355,143 @@ async function fetchSyncHealth() {
   }
 }
 
+// ── SPRINT 4: SUPABASE KPI + DATE FILTER ──────────
+let SB = null;
+let currentPeriod = 'bulan_ini';
+
+function setDateFilter(period) {
+  currentPeriod = period;
+  document.querySelectorAll('.df-btn').forEach(b => {
+    const isActive = b.getAttribute('onclick') === `setDateFilter('${period}')`;
+    b.classList.toggle('active', isActive);
+  });
+  fetchSupabaseKPIs(period);
+}
+
+async function fetchSupabaseKPIs(period) {
+  try {
+    const res = await fetch(`/api/supabase-data?period=${period}`);
+    if (!res.ok) return;
+    SB = await res.json();
+    renderKPIProgress();
+    renderFunnel();
+    renderSBCategoryBreakdown();
+  } catch(e) {
+    console.warn('Supabase KPI fetch failed:', e);
+  }
+}
+
+function renderKPIProgress() {
+  if (!SB || !SB.kpis) return;
+  const lbl = document.getElementById('df-period-label');
+  if (lbl) lbl.textContent = SB.period ? `· ${SB.period.label}` : '';
+
+  function fmtRp(v) {
+    if (v >= 1e9)  return 'Rp' + (v/1e9).toFixed(1) + 'M';
+    if (v >= 1e6)  return 'Rp' + (v/1e6).toFixed(0) + 'jt';
+    return 'Rp' + v.toLocaleString('id-ID');
+  }
+  function fmtOcc(v) { return v.toFixed(1) + '%'; }
+  function fmtNum(v) { return v.toString(); }
+
+  function drawCard(id, label, kpi, fmtFn, unit) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const pct     = Math.min(kpi.pct_of_target || 0, 100);
+    const barColor = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
+    const pctColor = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
+    const vs       = kpi.vs_prev_pct;
+    const vsHtml   = vs !== null && vs !== undefined
+      ? `<span style="color:${vs >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600;margin-left:8px">${vs >= 0 ? '↑' : '↓'}${Math.abs(vs)}% vs periode lalu</span>`
+      : '';
+    const borderCol = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
+    el.style.borderLeft = `3px solid ${borderCol}`;
+    el.innerHTML = `
+      <div class="kpi-lbl" style="margin-bottom:2px">${label} <span id="${id}-badge" style="font-size:9px;padding:1px 5px;border-radius:4px;background:${pct>=100?'var(--green-bg)':'var(--amber-bg)'};color:${pctColor}">vs Target</span></div>
+      <div style="font-size:22px;font-weight:700;color:var(--txt);letter-spacing:-.3px;margin-top:4px">${fmtFn(kpi.value)}</div>
+      <div style="font-size:10px;color:var(--txt3);margin-top:2px">Target: <strong>${fmtFn(kpi.target)}</strong>${unit ? ' ' + unit : ''}${vsHtml}</div>
+      <div class="kpi-prog-bar"><div class="kpi-prog-fill" style="width:${pct}%;background:${barColor}"></div></div>
+      <div style="font-size:10px;color:${pctColor};font-weight:600">${kpi.pct_of_target}% dari target</div>
+    `;
+  }
+
+  drawCard('kpi-prog-revenue', 'Revenue', SB.kpis.revenue, fmtRp, '');
+  drawCard('kpi-prog-occ',     'Occupancy', SB.kpis.occupancy, fmtOcc, '(rata-rata)');
+  drawCard('kpi-prog-mem',     'New Members', SB.kpis.new_members, fmtNum, 'member baru');
+}
+
+function renderFunnel() {
+  if (!SB || !SB.funnel) return;
+  const f  = SB.funnel;
+  const el = document.getElementById('kpi-funnel-body');
+  const pl = document.getElementById('funnel-period-lbl');
+  if (!el) return;
+  if (pl && SB.period) pl.textContent = `· ${SB.period.label}`;
+
+  // Conversion rate color: <8% red, 8-12% amber, ≥12% green
+  const crColor = f.conv_rate < 8 ? 'var(--red)' : f.conv_rate < 12 ? 'var(--amber)' : 'var(--green)';
+
+  const steps = [
+    { label: 'Ad Spend',      value: 'Rp' + (f.spend/1000).toFixed(0) + 'k', bar: 100,                                  color: 'var(--brand)' },
+    { label: 'Results (Lead)',value: f.results.toLocaleString('id-ID'),        bar: f.spend>0 ? Math.min(100, f.results/(f.spend/4000)*2) : 0, color: '#0891B2' },
+    { label: 'New Members',   value: f.new_members.toLocaleString('id-ID'),   bar: f.results>0 ? Math.min(100, f.new_members/f.results*100*4) : 0, color: 'var(--green)' },
+  ];
+
+  el.innerHTML = steps.map(s => `
+    <div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:11px;color:var(--txt2)">${s.label}</span>
+        <span style="font-size:13px;font-weight:700;color:${s.color}">${s.value}</span>
+      </div>
+      <div style="height:5px;background:var(--bg);border-radius:3px">
+        <div style="height:100%;width:${s.bar}%;background:${s.color};border-radius:3px"></div>
+      </div>
+    </div>
+  `).join('') + `
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:var(--txt)">Rp${f.cpr>0?(f.cpr/1000).toFixed(0)+'k':'—'}</div>
+        <div style="font-size:9px;color:var(--txt3);margin-top:1px">Cost/Result</div>
+      </div>
+      <div>
+        <div style="font-size:15px;font-weight:700;color:${crColor}">${f.conv_rate}%</div>
+        <div style="font-size:9px;color:var(--txt3);margin-top:1px">Lead→Member</div>
+      </div>
+      <div>
+        <div style="font-size:15px;font-weight:700;color:var(--txt)">${f.results>0?Math.round(f.results/f.new_members||0):'—'}</div>
+        <div style="font-size:9px;color:var(--txt3);margin-top:1px">Lead per Member</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSBCategoryBreakdown() {
+  if (!SB || !SB.revenue_by_category) return;
+  const el = document.getElementById('sb-cat-breakdown');
+  const pl = document.getElementById('sb-cat-period');
+  if (!el) return;
+  if (pl && SB.period) pl.textContent = `· ${SB.period.label}`;
+
+  const cats = SB.revenue_by_category.slice(0, 6);
+  if (!cats.length) { el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Tidak ada data</span>'; return; }
+  const maxVal = cats[0].total || 1;
+
+  el.innerHTML = cats.map(c => {
+    const barW = Math.round(c.total / maxVal * 100);
+    const fmtd = c.total >= 1e6 ? 'Rp' + (c.total/1e6).toFixed(0) + 'jt' : 'Rp' + c.total.toLocaleString('id-ID');
+    return `
+      <div style="margin-bottom:9px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+          <span style="color:var(--txt2);font-weight:500">${c.category}</span>
+          <span style="color:var(--txt);font-weight:600">${fmtd} <span style="color:var(--txt3);font-weight:400">(${c.pct}%)</span></span>
+        </div>
+        <div style="height:4px;background:var(--bg);border-radius:2px">
+          <div style="height:100%;width:${barW}%;background:var(--brand);border-radius:2px"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
 // ── LOAD DATA ─────────────────────────────────────
 async function reloadData() {
   document.getElementById('loading').style.display='flex';
@@ -1288,7 +1506,8 @@ async function reloadData() {
     const tbMeta = document.getElementById('tb-meta');
     if(tbMeta) tbMeta.textContent = meta.generated_at ? 'Update: '+meta.generated_at : '';
     document.getElementById('sb-updated').textContent = meta.last_updated || '—';
-    fetchSyncHealth(); // load health panel setelah data utama ready
+    fetchSyncHealth();               // load health panel setelah data utama ready
+    fetchSupabaseKPIs(currentPeriod); // Sprint 4: load Target vs Actual KPIs
   } catch(e) {
     document.getElementById('loading').innerHTML='<div style="color:var(--red);text-align:center"><b>Gagal memuat data</b><br><span style="font-size:11px;color:var(--txt2)">Jalankan /api/process dulu</span></div>';
   }
@@ -1717,6 +1936,78 @@ function renderUsageSummary() {
     : `<div style="color:var(--txt3);padding:16px;font-size:13px">Tidak ada data untuk periode ini</div>`;
 }
 
+// ── OCCUPANCY HEATMAP (Sprint 4, from Supabase) ───────────────────────
+function renderOccupancyHeatmap() {
+  const el = document.getElementById('ops-heatmap');
+  if (!el) return;
+  if (!SB || !SB.heatmap || !SB.heatmap.length) {
+    el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Tidak ada data heatmap — jalankan pipeline dulu</span>';
+    return;
+  }
+
+  const DAYS  = ['Sen','Sel','Rab','Kam','Jum','Sab','Min']; // 0=Mon…6=Sun
+  const HOURS = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]; // 06:00–22:00
+
+  // Build grid: grid[wd][hr] = count
+  const grid = {};
+  let maxCount = 0;
+  for (const r of SB.heatmap) {
+    const wd = r.day;
+    const hr = r.hour;
+    if (wd < 0 || wd > 6 || hr < 6 || hr > 22) continue;
+    if (!grid[wd]) grid[wd] = {};
+    grid[wd][hr] = (grid[wd][hr] || 0) + r.count;
+    if (grid[wd][hr] > maxCount) maxCount = grid[wd][hr];
+  }
+  if (maxCount === 0) { el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Data kosong</span>'; return; }
+
+  // Color: white → amber → brand (heat intensity)
+  function cellColor(count) {
+    if (!count) return 'var(--bg)';
+    const ratio = count / maxCount;
+    if (ratio < 0.33) return 'rgba(180,83,9,0.18)';
+    if (ratio < 0.66) return 'rgba(180,83,9,0.45)';
+    return 'var(--brand)';
+  }
+  function textColor(count) {
+    if (!count) return 'var(--txt3)';
+    return count / maxCount >= 0.66 ? '#fff' : 'var(--txt2)';
+  }
+
+  let html = `<table style="border-collapse:separate;border-spacing:2px;font-size:10px;margin-top:4px">`;
+  // Header row: hours
+  html += '<tr><th style="color:var(--txt3);font-size:9px;font-weight:500;min-width:28px;text-align:left;padding-right:4px"></th>';
+  for (const hr of HOURS) {
+    html += `<th style="color:var(--txt3);font-size:9px;font-weight:400;text-align:center;min-width:26px">${hr}:00</th>`;
+  }
+  html += '</tr>';
+
+  // Data rows: days
+  for (let wd = 0; wd < 7; wd++) {
+    html += `<tr><td style="color:var(--txt2);font-size:10px;font-weight:600;padding-right:6px;white-space:nowrap">${DAYS[wd]}</td>`;
+    for (const hr of HOURS) {
+      const count = (grid[wd] && grid[wd][hr]) || 0;
+      const bg    = cellColor(count);
+      const tc    = textColor(count);
+      const lbl   = count > 0 ? count : '';
+      html += `<td title="${DAYS[wd]} ${hr}:00 — ${count} booking"><div class="hm-cell" style="background:${bg};color:${tc}">${lbl}</div></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+  // Legend
+  html += `<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:10px;color:var(--txt3)">
+    <span>Rendah</span>
+    <div style="width:14px;height:8px;border-radius:2px;background:rgba(180,83,9,0.18)"></div>
+    <div style="width:14px;height:8px;border-radius:2px;background:rgba(180,83,9,0.45)"></div>
+    <div style="width:14px;height:8px;border-radius:2px;background:var(--brand)"></div>
+    <span>Tinggi</span>
+    <span style="margin-left:8px">(angka = jumlah booking)</span>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
 // ── HOURLY WEEK TABLE (global, called from week selector) ─────────────
 function renderHourlyWeekTable(weekKey) {
   if (!weekKey || !D) return;
@@ -1913,6 +2204,9 @@ function renderOperations() {
         }).join('')}</tbody>
       </table>`
     : '<div style="color:var(--txt3);padding:16px;font-size:13px">Tidak ada data bulan ini</div>';
+
+  // ── Occupancy Heatmap (Sprint 4, from Supabase) ──
+  renderOccupancyHeatmap();
 }
 
 // ── MARKETING ─────────────────────────────────────
