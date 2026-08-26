@@ -124,9 +124,10 @@ body{
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 #topbar{
   background:linear-gradient(to bottom,#ffffff,#fdfcfa);
-  border-bottom:1px solid rgba(0,0,0,.09);
+  border-bottom:1px solid rgba(0,0,0,.08);
   padding:11px 24px;display:flex;align-items:center;gap:12px;
-  box-shadow:0 1px 0 rgba(0,0,0,.04)
+  position:relative;
+  box-shadow:0 1px 0 rgba(0,0,0,.04),0 2px 0 rgba(3,72,66,.08)
 }
 .tb-title{font-size:14px;font-weight:700;color:var(--txt);flex:1;letter-spacing:-.2px}
 .tb-meta{font-size:11px;color:var(--txt3)}
@@ -176,10 +177,16 @@ body{
 .card{
   background:var(--surface);border-radius:var(--r);
   padding:20px 22px;box-shadow:var(--shadow);
-  border:1px solid rgba(0,0,0,.055);
-  transition:box-shadow .2s,transform .2s
+  border:1px solid rgba(0,0,0,.06);
+  transition:box-shadow .25s,transform .22s,border-color .22s,background .22s
 }
-.card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.card:hover{
+  box-shadow:var(--shadow-md);transform:translateY(-2px);
+  border-color:transparent;
+  background:
+    linear-gradient(var(--surface),var(--surface)) padding-box,
+    linear-gradient(135deg,rgba(3,72,66,.22) 0%,rgba(125,211,192,.12) 100%) border-box;
+}
 .card-hd{
   font-size:11px;font-weight:600;color:var(--txt2);
   margin-bottom:14px;letter-spacing:.1px;
@@ -379,15 +386,6 @@ body{
 }
 
 /* ── Info Popup ─────────────────────────────────── */
-.info-icon{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:14px;height:14px;border-radius:50%;
-  background:var(--txt3);color:#fff;
-  font-size:8px;font-weight:700;font-style:normal;
-  cursor:pointer;margin-left:4px;opacity:.55;vertical-align:middle;
-  transition:opacity .15s;flex-shrink:0;line-height:1;
-}
-.info-icon:hover{opacity:1}
 #info-overlay{
   display:none;position:fixed;inset:0;
   background:rgba(0,0,0,.45);z-index:9999;
@@ -442,11 +440,30 @@ body{
 /* ── Section Eyebrow ─────────────────────────────────── */
 .section-eyebrow{
   font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
-  color:var(--txt3);font-weight:700;margin-bottom:11px;margin-top:6px;
-  display:flex;align-items:center;gap:10px;
+  color:var(--txt3);font-weight:700;margin-bottom:11px;margin-top:8px;
+  display:flex;align-items:center;gap:8px;
+}
+.section-eyebrow::before{
+  content:'';width:5px;height:5px;border-radius:50%;
+  background:var(--brand);flex-shrink:0;opacity:.6;
 }
 .section-eyebrow::after{
-  content:'';flex:1;height:1px;background:var(--border);
+  content:'';flex:1;height:1px;
+  background:linear-gradient(to right,rgba(3,72,66,.15),transparent);
+}
+
+/* ── Info icon upgrade ───────────────────────────────── */
+.info-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:15px;height:15px;border-radius:50%;
+  background:rgba(0,0,0,.06);color:var(--txt3);
+  font-size:9px;font-weight:700;font-style:normal;cursor:pointer;
+  border:1px solid rgba(0,0,0,.08);
+  transition:background .15s,color .15s,border-color .15s;
+  flex-shrink:0;line-height:1;
+}
+.info-icon:hover{
+  background:var(--brand);color:#fff;border-color:var(--brand);
 }
 
 /* ── Sprint 4: Heatmap ───────────────────────────────── */
@@ -1436,28 +1453,66 @@ function renderKPIProgress() {
   function fmtOcc(v) { return v.toFixed(1) + '%'; }
   function fmtNum(v) { return v.toString(); }
 
-  const II = (key) => `<i class="info-icon" onclick="event.stopPropagation();showInfo('${key}')">i</i>`;
+  const II = (key) => `<i class="info-icon" onclick="event.stopPropagation();showInfo('${key}')" title="Info">i</i>`;
+
+  // Count-up animation for hero numbers
+  function countUp(elId, endVal, duration, fmtFn) {
+    const el = document.getElementById(elId);
+    if (!el || !endVal || endVal === 0) return;
+    const start = performance.now();
+    const run = (now) => {
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = fmtFn(endVal * eased);
+      if (t < 1) requestAnimationFrame(run);
+      else el.textContent = fmtFn(endVal);
+    };
+    requestAnimationFrame(run);
+  }
 
   function drawCard(id, label, infoKey, kpi, fmtFn, unit, subId) {
     const el = document.getElementById(id);
     if (!el) return;
-    const pct      = Math.min(kpi.pct_of_target || 0, 100);
-    const barColor = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
-    const pctColor = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
-    const vs       = kpi.vs_prev_pct;
-    const vsHtml   = vs !== null && vs !== undefined
-      ? `<span style="color:${vs >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600;margin-left:8px">${vs >= 0 ? '↑' : '↓'}${Math.abs(vs)}% vs periode lalu</span>`
+    const pct    = Math.min(kpi.pct_of_target || 0, 100);
+    // On dark card: vibrant semantic colors
+    const barHex = pct >= 100 ? '#34D399' : pct >= 70 ? '#FBBF24' : '#F87171';
+    const vs     = kpi.vs_prev_pct;
+    const vsHtml = vs !== null && vs !== undefined
+      ? `<span style="color:${vs >= 0 ? '#34D399' : '#F87171'};font-weight:700;margin-left:8px;font-size:10px">${vs >= 0 ? '↑' : '↓'}${Math.abs(vs)}% vs lalu</span>`
       : '';
-    const borderCol = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
-    el.style.borderLeft = `3px solid ${borderCol}`;
+
+    // Dark hero card
+    el.style.cssText = `
+      background:linear-gradient(145deg,#034842 0%,#022F2A 100%);
+      border:1px solid rgba(255,255,255,.07);
+      box-shadow:0 4px 24px rgba(2,47,42,.45),0 1px 4px rgba(0,0,0,.2);
+      border-radius:var(--r);padding:20px 22px;
+      transition:box-shadow .25s,transform .22s;
+    `;
+    const numId = `${id}-num`;
     el.innerHTML = `
-      <div class="kpi-lbl" style="margin-bottom:2px">${label} <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:${pct>=100?'var(--green-bg)':'var(--amber-bg)'};color:${pctColor}">vs Target</span>${II(infoKey)}</div>
-      <div style="font-size:26px;font-weight:800;color:var(--txt);letter-spacing:-.5px;margin-top:4px;font-variant-numeric:tabular-nums">${fmtFn(kpi.value)}</div>
-      <div style="font-size:10px;color:var(--txt3);margin-top:3px">Target: <strong>${fmtFn(kpi.target)}</strong>${unit ? ' ' + unit : ''}${vsHtml}</div>
-      <div class="kpi-prog-bar"><div class="kpi-prog-fill" style="width:${pct}%;background:${barColor}"></div></div>
-      <div style="font-size:10px;color:${pctColor};font-weight:600">${kpi.pct_of_target}% dari target</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:rgba(255,255,255,.45);font-weight:700">${label}</div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:8.5px;padding:2px 7px;border-radius:20px;background:${pct>=100?'rgba(52,211,153,.18)':'rgba(251,191,36,.15)'};color:${barHex};font-weight:600;letter-spacing:.3px">vs Target</span>
+          ${II(infoKey)}
+        </div>
+      </div>
+      <div id="${numId}" style="font-size:30px;font-weight:800;color:#fff;letter-spacing:-.7px;line-height:1.05;font-variant-numeric:tabular-nums;margin-bottom:4px">${fmtFn(kpi.value)}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,.4);margin-bottom:10px">Target: <strong style="color:rgba(255,255,255,.65)">${fmtFn(kpi.target)}</strong>${unit ? ' ' + unit : ''}${vsHtml}</div>
+      <div style="height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-bottom:6px">
+        <div id="${id}-bar" style="height:100%;width:0%;background:${barHex};border-radius:3px;transition:width .7s cubic-bezier(0.23,1,0.32,1)"></div>
+      </div>
+      <div style="font-size:10px;color:${barHex};font-weight:700">${kpi.pct_of_target}% dari target</div>
       ${subId ? `<div id="${subId}"></div>` : ''}
     `;
+    // Animate bar fill after paint
+    requestAnimationFrame(() => {
+      const bar = document.getElementById(`${id}-bar`);
+      if (bar) setTimeout(() => bar.style.width = pct + '%', 50);
+    });
+    // Count-up the number
+    countUp(numId, kpi.value, 900, fmtFn);
   }
 
   drawCard('kpi-prog-revenue', 'Revenue',     'kpi-target-revenue',  SB.kpis.revenue,     fmtRp,  '');
@@ -1475,10 +1530,10 @@ function injectEsbSubstats() {
   const { occPct, totalBookToday, totalMembers } = ESB_SUBSTATS;
   const occSub = document.getElementById('kpi-occ-sub');
   if (occSub) occSub.innerHTML = occPct > 0
-    ? `<div style="font-size:10px;color:var(--txt3);margin-top:5px;padding-top:5px;border-top:1px solid var(--border)">Hari ini: <strong style="color:var(--txt2)">${occPct.toFixed(1)}%</strong> · ${totalBookToday} booking</div>`
+    ? `<div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">Hari ini: <strong style="color:rgba(255,255,255,.65)">${occPct.toFixed(1)}%</strong> · ${totalBookToday} booking</div>`
     : '';
   const memSub = document.getElementById('kpi-mem-sub');
-  if (memSub && totalMembers > 0) memSub.innerHTML = `<div style="font-size:10px;color:var(--txt3);margin-top:5px;padding-top:5px;border-top:1px solid var(--border)">Total aktif: <strong style="color:var(--txt2)">${totalMembers.toLocaleString('id-ID')}</strong> member</div>`;
+  if (memSub && totalMembers > 0) memSub.innerHTML = `<div style="font-size:10px;color:rgba(255,255,255,.38);margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">Total aktif: <strong style="color:rgba(255,255,255,.65)">${totalMembers.toLocaleString('id-ID')}</strong> member</div>`;
 }
 
 function renderFunnel() {
@@ -1743,23 +1798,56 @@ function renderHome() {
   // ── Revenue trend chart ──────────────────────────────────────
   const rev6 = (D.revenue||[]).filter(r=>{const m=r.Month||r.month||'';return m&&m!=='NaT'&&m!=='nan';}).slice(-6);
   destroyChart('chart-rev');
-  CHARTS['chart-rev'] = new Chart(document.getElementById('chart-rev'),{
+  const revCtx = document.getElementById('chart-rev');
+  // Build per-bar gradient (current month = brand, others = lighter)
+  const revPlugin = {
+    id:'revGradient',
+    beforeDatasetsDraw(chart) {
+      const {ctx:c,chartArea:{top,bottom}} = chart;
+      chart.data.datasets[0].backgroundColor = chart.data.datasets[0].data.map((_,i) => {
+        const g = c.createLinearGradient(0,top,0,bottom);
+        if (i === chart.data.datasets[0].data.length - 1) {
+          g.addColorStop(0,'rgba(3,72,66,.95)');
+          g.addColorStop(1,'rgba(3,72,66,.6)');
+        } else {
+          g.addColorStop(0,'rgba(3,72,66,.45)');
+          g.addColorStop(1,'rgba(3,72,66,.2)');
+        }
+        return g;
+      });
+    }
+  };
+  CHARTS['chart-rev'] = new Chart(revCtx,{
     type:'bar',
+    plugins:[revPlugin],
     data:{
       labels: rev6.map(r=>r.Month||r.month||''),
       datasets:[{
         label:'Revenue',
         data: rev6.map(r=>si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0)),
-        backgroundColor: rev6.map((_,i)=> i===rev6.length-1?'#034842':'rgba(3,72,66,.45)'),
-        borderRadius:5
+        backgroundColor:'rgba(3,72,66,.45)',
+        borderRadius:8,
+        borderSkipped:false,
       }]
     },
     options:{
       responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>fIDR(ctx.raw)}}},
+      animation:{duration:900,easing:'easeOutQuart'},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'rgba(2,47,42,.92)',
+          titleColor:'rgba(255,255,255,.6)',
+          bodyColor:'#fff',
+          bodyFont:{size:13,weight:'700'},
+          padding:10,
+          cornerRadius:8,
+          callbacks:{label:ctx=>'  ' + fIDR(ctx.raw)}
+        }
+      },
       scales:{
-        y:{ticks:{callback:v=>fIDR(v),font:{size:10}},grid:{color:'rgba(0,0,0,.04)'}},
-        x:{grid:{display:false},ticks:{font:{size:10}}}
+        y:{ticks:{callback:v=>fIDR(v),font:{size:10},color:'rgba(0,0,0,.35)'},grid:{color:'rgba(0,0,0,.04)'},border:{display:false}},
+        x:{grid:{display:false},ticks:{font:{size:10,weight:'500'},color:'rgba(0,0,0,.45)'},border:{display:false}}
       }
     }
   });
