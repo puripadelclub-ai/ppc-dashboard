@@ -364,14 +364,53 @@ body{
   #sb.collapsed{width:218px!important;left:-224px}
   #sb.collapsed.open{left:0}
   #sb-overlay.active{display:block}
-  #content{padding:14px 14px}
+  #content{padding:14px 12px}
   .two-col,.two-col-wide,.three-col,.four-col{grid-template-columns:1fr!important}
+  #ops-kpi-row,#mkt-kpi-row,#kpi-progress-row{grid-template-columns:1fr 1fr!important}
   .kpi-grid{grid-template-columns:1fr 1fr}
   .chart-wrap{height:150px}
   .chart-wrap-lg{height:180px}
-  #topbar{padding:10px 14px}
-  .tb-btn span{display:none}
+  #topbar{padding:10px 12px}
+  .tb-btn span,.export-pdf-lbl{display:none}
+  /* Greeting row wrap on small screens */
+  #home-greeting-row{flex-wrap:wrap;gap:10px}
+  /* Date filter pills: horizontal scroll instead of wrap */
+  .df-pills{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;scrollbar-width:none}
+  .df-pills::-webkit-scrollbar{display:none}
 }
+@media(max-width:480px){
+  #ops-kpi-row,#mkt-kpi-row,#kpi-progress-row{grid-template-columns:1fr!important}
+}
+
+/* ── Print / PDF Export ─────────────────────────────────── */
+@media print{
+  #sb,#topbar,#sb-overlay,#info-overlay,#loading{display:none!important}
+  #app{display:block!important;height:auto!important}
+  #main{display:block!important;overflow:visible!important}
+  #content{overflow:visible!important;padding:0!important}
+  .page{display:none!important}
+  .page.active{display:block!important}
+  .card,.kpi,.kpi-card{
+    break-inside:avoid;
+    box-shadow:none!important;
+    border:1px solid #ddd!important;
+  }
+  .card:hover{transform:none!important}
+  body,#content{background:#fff!important}
+  .section-eyebrow{break-after:avoid}
+  .chart-wrap,.chart-wrap-lg{break-inside:avoid}
+  @page{margin:1.5cm;size:A4}
+}
+
+/* ── Export button ──────────────────────────────────────── */
+.export-btn{
+  background:none;border:1px solid var(--border-md);border-radius:7px;
+  padding:5px 9px;cursor:pointer;font-size:10.5px;font-weight:600;
+  color:var(--txt2);display:inline-flex;align-items:center;gap:4px;
+  transition:background .15s,color .15s;white-space:nowrap;font-family:inherit;flex-shrink:0
+}
+.export-btn:hover{background:var(--bg);color:var(--txt)}
+.export-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 
 @media(prefers-reduced-motion:reduce){
   *{transition:none!important;animation:none!important}
@@ -541,6 +580,10 @@ body{
       <svg class="icon-arrow" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
     </button>
     <div class="tb-title" id="tb-title">Home</div>
+    <button class="export-btn" onclick="window.print()" title="Export halaman ini sebagai PDF" style="margin-left:auto">
+      <svg viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      <span class="export-pdf-lbl">Export PDF</span>
+    </button>
   </div>
 
   <div id="content">
@@ -552,7 +595,7 @@ body{
     <!-- HOME -->
     <div class="page" id="page-home">
       <!-- Greeting -->
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px">
+      <div id="home-greeting-row" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px">
         <div>
           <h2 id="home-greeting" style="font-size:21px;font-weight:800;letter-spacing:-.4px">Selamat Pagi, PPC 👋</h2>
           <p id="home-date" style="font-size:12px;color:var(--txt3);margin-top:4px;letter-spacing:.1px"></p>
@@ -754,7 +797,7 @@ body{
           <div id="ops-usage-tbl" style="overflow-y:auto;max-height:280px"></div>
         </div>
         <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">Daily Detail</span><span class="card-meta" id="ops-daily-meta"></span></div>
+          <div class="card-hd"><span class="card-hd-lbl">Daily Detail</span><span class="card-meta" id="ops-daily-meta"></span><button class="export-btn" onclick="exportOpsDailyCSV()" style="margin-left:auto"><svg viewBox="0 0 24 24"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>CSV</button></div>
           <div id="ops-daily-tbl" style="overflow-x:auto;max-height:280px;overflow-y:auto"></div>
         </div>
       </div>
@@ -856,6 +899,7 @@ body{
       <div class="card">
         <div class="card-hd">
           <span class="card-hd-lbl">Direktori Member <span class="card-sub" id="mem-dir-count"></span></span>
+          <button class="export-btn" onclick="exportMembersCSV()" style="margin-left:auto"><svg viewBox="0 0 24 24"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>CSV</button>
         </div>
         <div class="search-wrap">
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1323,6 +1367,51 @@ const fPct = v => (parseFloat(v)||0).toFixed(1)+'%';
 const nOcc = v => { const f=sf(v); return f>1 ? f/100 : f; };
 const fN   = v => (parseFloat(v)||0).toLocaleString('id-ID');
 const fRound = v => Math.round(parseFloat(v)||0);
+
+// ── EXPORT HELPERS ──────────────────────────────────
+let OPS_DAILY_ROWS = [];
+
+function exportCSV(rows, headers, filename) {
+  const lines = [headers, ...rows].map(r =>
+    r.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')
+  );
+  const blob = new Blob(['﻿' + lines.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename + '.csv';
+  a.click();
+}
+
+function exportOpsDailyCSV() {
+  if (!OPS_DAILY_ROWS.length) { alert('Data belum tersedia'); return; }
+  exportCSV(
+    OPS_DAILY_ROWS.map(r => [
+      r.date||'',
+      si(r.total_bookings),
+      si(r.regular_bookings),
+      si(r.machine_bookings),
+      si(r.coaching_bookings),
+      (nOcc(r['Overall Occ %']||0)*100).toFixed(1)+'%'
+    ]),
+    ['Tanggal','Total Booking','Reguler','Ball Machine','Coaching','Occupancy %'],
+    'PPC_Ops_Daily'
+  );
+}
+
+function exportMembersCSV() {
+  if (!filteredMembers?.length) { alert('Data member belum tersedia'); return; }
+  exportCSV(
+    filteredMembers.map(m => [
+      m.name_clean||m.Name||'',
+      m.RFM_Segment||'',
+      (m.Pref_Tags||'').replace(/,/g,';'),
+      m.CLV_Moderate||0,
+      m.Last_Visit||''
+    ]),
+    ['Nama','Segment RFM','Preferensi','CLV Moderate','Kunjungan Terakhir'],
+    'PPC_Member_Directory'
+  );
+}
 const sf = v => { const f=parseFloat(v); return isNaN(f)?0:f; };
 const si = v => Math.round(sf(v));
 
@@ -2344,6 +2433,7 @@ function renderOperations() {
   // ── Daily Detail (full month, newest first) ───────
   document.getElementById('ops-daily-meta').textContent = `${dayCount} hari`;
   const dailyRows = [...avmMonth].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  OPS_DAILY_ROWS = dailyRows; // expose for CSV export
   document.getElementById('ops-daily-tbl').innerHTML = dailyRows.length
     ? `<table class="tbl">
         <thead><tr>
