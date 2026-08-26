@@ -541,8 +541,11 @@ body{
           <h2 id="home-greeting" style="font-size:19px;font-weight:700">Selamat Pagi, PPC 👋</h2>
           <p id="home-date" style="font-size:12px;color:var(--txt2);margin-top:3px"></p>
         </div>
-        <div id="home-score-chip" style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:12px;color:var(--txt2)">
-          <span>Skor</span><strong id="home-score-val" style="color:var(--brand);font-size:14px">—</strong>
+        <div id="home-score-chip" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 13px;cursor:pointer">
+          <span id="home-score-dot" style="width:8px;height:8px;border-radius:50%;background:var(--txt3);display:inline-block;flex-shrink:0"></span>
+          <span style="font-size:12px;color:var(--txt2)">Skor</span>
+          <strong id="home-score-val" style="font-size:14px;color:var(--txt)">—</strong>
+          <span style="font-size:11px;color:var(--txt3)">/100</span>
         </div>
       </div>
 
@@ -571,8 +574,8 @@ body{
         </div>
       </div>
 
-      <!-- Row 1: 4 big financial KPIs (ESB) -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+      <!-- Row 1: ESB KPI placeholders (hidden — IDs kept for JS) -->
+      <div style="display:none">
 
         <!-- Revenue bulan ini -->
         <div class="card" style="border-left:3px solid var(--brand)">
@@ -603,18 +606,7 @@ body{
         </div>
       </div>
 
-      <!-- Row 2: Revenue trend (full width) -->
-      <div style="margin-bottom:12px">
-        <div class="card">
-          <div class="card-hd">
-            <span class="card-hd-lbl">Revenue Trend 6 Bulan</span>
-            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600">ESB</span>
-          </div>
-          <div class="chart-wrap-lg"><canvas id="chart-rev"></canvas></div>
-        </div>
-      </div>
-
-      <!-- Row 2.5: Conversion Funnel (Supabase-backed) -->
+      <!-- Row 2: Conversion Funnel + Revenue per Kategori -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
         <div class="card">
           <div class="card-hd">
@@ -632,6 +624,17 @@ body{
             <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
           </div>
           <div id="sb-cat-breakdown"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+      </div>
+
+      <!-- Row 3: Revenue trend (full width) -->
+      <div style="margin-bottom:12px">
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-hd-lbl">Revenue Trend 6 Bulan</span>
+            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600">ESB</span>
+          </div>
+          <div class="chart-wrap-lg"><canvas id="chart-rev"></canvas></div>
         </div>
       </div>
 
@@ -1417,7 +1420,7 @@ function renderKPIProgress() {
 
   const II = (key) => `<i class="info-icon" onclick="event.stopPropagation();showInfo('${key}')">i</i>`;
 
-  function drawCard(id, label, infoKey, kpi, fmtFn, unit) {
+  function drawCard(id, label, infoKey, kpi, fmtFn, unit, subId) {
     const el = document.getElementById(id);
     if (!el) return;
     const pct      = Math.min(kpi.pct_of_target || 0, 100);
@@ -1435,12 +1438,29 @@ function renderKPIProgress() {
       <div style="font-size:10px;color:var(--txt3);margin-top:2px">Target: <strong>${fmtFn(kpi.target)}</strong>${unit ? ' ' + unit : ''}${vsHtml}</div>
       <div class="kpi-prog-bar"><div class="kpi-prog-fill" style="width:${pct}%;background:${barColor}"></div></div>
       <div style="font-size:10px;color:${pctColor};font-weight:600">${kpi.pct_of_target}% dari target</div>
+      ${subId ? `<div id="${subId}"></div>` : ''}
     `;
   }
 
   drawCard('kpi-prog-revenue', 'Revenue',     'kpi-target-revenue',  SB.kpis.revenue,     fmtRp,  '');
-  drawCard('kpi-prog-occ',     'Occupancy',   'kpi-target-occ',      SB.kpis.occupancy,   fmtOcc, '(rata-rata)');
-  drawCard('kpi-prog-mem',     'New Members', 'kpi-target-members',  SB.kpis.new_members, fmtNum, 'member baru');
+  drawCard('kpi-prog-occ',     'Occupancy',   'kpi-target-occ',      SB.kpis.occupancy,   fmtOcc, '(rata-rata)', 'kpi-occ-sub');
+  drawCard('kpi-prog-mem',     'New Members', 'kpi-target-members',  SB.kpis.new_members, fmtNum, 'member baru',  'kpi-mem-sub');
+
+  // Inject ESB sub-stats if already loaded
+  injectEsbSubstats();
+}
+
+// ESB data available from renderHome() — injected into KPI cards when both sides are ready
+let ESB_SUBSTATS = null;
+function injectEsbSubstats() {
+  if (!ESB_SUBSTATS) return;
+  const { occPct, totalBookToday, totalMembers } = ESB_SUBSTATS;
+  const occSub = document.getElementById('kpi-occ-sub');
+  if (occSub) occSub.innerHTML = occPct > 0
+    ? `<div style="font-size:10px;color:var(--txt3);margin-top:5px;padding-top:5px;border-top:1px solid var(--border)">Hari ini: <strong style="color:var(--txt2)">${occPct.toFixed(1)}%</strong> · ${totalBookToday} booking</div>`
+    : '';
+  const memSub = document.getElementById('kpi-mem-sub');
+  if (memSub && totalMembers > 0) memSub.innerHTML = `<div style="font-size:10px;color:var(--txt3);margin-top:5px;padding-top:5px;border-top:1px solid var(--border)">Total aktif: <strong style="color:var(--txt2)">${totalMembers.toLocaleString('id-ID')}</strong> member</div>`;
 }
 
 function renderFunnel() {
@@ -1596,11 +1616,13 @@ function renderHome() {
   document.getElementById('home-date').textContent =
     days[today.getDay()]+', '+today.getDate()+' '+months[today.getMonth()]+' '+today.getFullYear();
 
-  // Score chip
+  // Score chip — traffic light dot
   const score = calcScore(s);
+  const scoreColor = score>=70?'var(--green)':score>=40?'var(--amber)':'var(--red)';
   document.getElementById('home-score-val').textContent = score;
-  document.getElementById('home-score-val').style.color =
-    score>=70?'var(--green)':score>=40?'var(--amber)':'var(--red)';
+  document.getElementById('home-score-val').style.color = scoreColor;
+  const scoreDot = document.getElementById('home-score-dot');
+  if (scoreDot) scoreDot.style.background = scoreColor;
 
   // Score chip: click → show breakdown popup
   const scoreChip = document.getElementById('home-score-chip');
@@ -1687,7 +1709,8 @@ function renderHome() {
     : '<span style="color:var(--txt3)">Belum ada data AVM</span>';
 
   // Members
-  document.getElementById('kpi-mem').textContent = fN(si(s.total_members));
+  const totalMembersEsb = si(s.total_members);
+  document.getElementById('kpi-mem').textContent = fN(totalMembersEsb);
   const ret = sf(s.retention_rate);
   document.getElementById('kpi-mem-d').innerHTML =
     `<span style="color:var(--txt3)">${fN(si(s.matched))} matched ESB · </span>` +
@@ -1695,7 +1718,11 @@ function renderHome() {
     :ret>=40?`<span class="warn">ret ${fPct(ret)}</span>`
     :`<span class="dn">ret ${fPct(ret)}</span>`);
 
-  // ── Row 2: Revenue trend chart ──────────────────────────────────────
+  // Store ESB sub-stats for KPI progress cards and inject
+  ESB_SUBSTATS = { occPct, totalBookToday, totalMembers: totalMembersEsb };
+  injectEsbSubstats();
+
+  // ── Revenue trend chart ──────────────────────────────────────
   const rev6 = (D.revenue||[]).filter(r=>{const m=r.Month||r.month||'';return m&&m!=='NaT'&&m!=='nan';}).slice(-6);
   destroyChart('chart-rev');
   CHARTS['chart-rev'] = new Chart(document.getElementById('chart-rev'),{
