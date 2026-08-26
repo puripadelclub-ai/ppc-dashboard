@@ -1026,6 +1026,80 @@ def supabase_data():
         return jsonify({"status": "error", "message": str(e), "trace": tb}), 500
 
 
+@app.route("/api/heatmap", methods=["GET"])
+def heatmap_endpoint():
+    """
+    Occupancy heatmap data (jam × hari) dari Supabase bookings.
+    Params: from=YYYY-MM-DD, to=YYYY-MM-DD (default: 30 hari terakhir)
+    """
+    try:
+        import requests as _rh
+        from datetime import date as _date, timedelta as _td
+
+        _sb_url = os.environ.get("SUPABASE_URL", "")
+        _sb_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+        _hd = {"apikey": _sb_key, "Authorization": f"Bearer {_sb_key}"}
+
+        today    = _date.today()
+        from_str = request.args.get("from", str(today - _td(days=29)))
+        to_str   = request.args.get("to",   str(today))
+
+        # Paginated fetch (max 10,000 rows → ~417 days of data)
+        all_rows: list = []
+        PAGE = 1000
+        for page_num in range(10):
+            params = [
+                ("select", "booking_date,start_time"),
+                ("booking_date", f"gte.{from_str}"),
+                ("booking_date", f"lte.{to_str}"),
+                ("limit",  str(PAGE)),
+                ("offset", str(page_num * PAGE)),
+            ]
+            r = _rh.get(f"{_sb_url}/rest/v1/bookings",
+                        headers=_hd, params=params, timeout=15)
+            if r.status_code != 200:
+                break
+            page = r.json()
+            if not isinstance(page, list) or not page:
+                break
+            all_rows.extend(page)
+            if len(page) < PAGE:
+                break
+
+        # Build heatmap grid: (weekday 0=Mon…6=Sun, hour) → count
+        from datetime import datetime as _dt
+        grid: dict = {}
+        for row in all_rows:
+            bd = row.get("booking_date", "")
+            st = str(row.get("start_time", "") or "")
+            if not bd or len(st) < 2:
+                continue
+            try:
+                wd  = _dt.strptime(str(bd)[:10], "%Y-%m-%d").weekday()
+                hr  = int(st[:2])
+                if hr < 6 or hr > 22:
+                    continue
+                key = (wd, hr)
+                grid[key] = grid.get(key, 0) + 1
+            except Exception:
+                continue
+
+        heatmap = [{"day": k[0], "hour": k[1], "count": v}
+                   for k, v in grid.items()]
+        n_days  = ((_date.fromisoformat(to_str) - _date.fromisoformat(from_str)).days + 1)
+
+        return jsonify({
+            "status":   "success",
+            "from":     from_str,
+            "to":       to_str,
+            "n_days":   n_days,
+            "n_rows":   len(all_rows),
+            "heatmap":  heatmap,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 def run_pipeline():
     """
     Main pipeline:

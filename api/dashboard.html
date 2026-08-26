@@ -697,12 +697,17 @@ body{
 
       <!-- Occupancy Heatmap: Jam × Hari (Sprint 4) -->
       <div class="card mb">
-        <div class="card-hd">
+        <div class="card-hd" style="flex-wrap:wrap;gap:8px">
           <span class="card-hd-lbl">Occupancy Heatmap</span>
-          <span style="font-size:10px;color:var(--txt3);margin-left:4px">· 30 hari terakhir · per jam × hari</span>
-          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
+          <span id="hm-meta" style="font-size:10px;color:var(--txt3)">· per jam × hari</span>
+          <div style="display:flex;align-items:center;gap:5px;margin-left:auto">
+            <input type="date" id="hm-from" onchange="refreshHeatmap()" style="padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:var(--surface);color:var(--txt);cursor:pointer">
+            <span style="color:var(--txt3);font-size:11px">–</span>
+            <input type="date" id="hm-to" onchange="refreshHeatmap()" style="padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:var(--surface);color:var(--txt);cursor:pointer">
+          </div>
+          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600">Supabase</span>
         </div>
-        <div id="ops-heatmap" style="overflow-x:auto">
+        <div id="ops-heatmap">
           <span style="font-size:11px;color:var(--txt3)">Memuat...</span>
         </div>
       </div>
@@ -1936,24 +1941,40 @@ function renderUsageSummary() {
     : `<div style="color:var(--txt3);padding:16px;font-size:13px">Tidak ada data untuk periode ini</div>`;
 }
 
-// ── OCCUPANCY HEATMAP (Sprint 4, from Supabase) ───────────────────────
-function renderOccupancyHeatmap() {
+// ── OCCUPANCY HEATMAP (Sprint 4, date-filterable) ─────────────────────
+async function refreshHeatmap() {
+  const el     = document.getElementById('ops-heatmap');
+  const fromEl = document.getElementById('hm-from');
+  const toEl   = document.getElementById('hm-to');
+  if (!fromEl || !toEl || !fromEl.value || !toEl.value) return;
+  if (el) el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Memuat heatmap...</span>';
+  try {
+    const res  = await fetch(`/api/heatmap?from=${fromEl.value}&to=${toEl.value}`);
+    const data = await res.json();
+    const meta = document.getElementById('hm-meta');
+    if (meta && data.n_days) meta.textContent = `· ${data.n_days} hari · per jam × hari · ${data.n_rows||0} booking`;
+    renderOccupancyHeatmap(data.heatmap || []);
+  } catch(e) {
+    if (el) el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Gagal memuat heatmap</span>';
+  }
+}
+
+function renderOccupancyHeatmap(heatmapData) {
   const el = document.getElementById('ops-heatmap');
   if (!el) return;
-  if (!SB || !SB.heatmap || !SB.heatmap.length) {
-    el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Tidak ada data heatmap — jalankan pipeline dulu</span>';
+  if (!heatmapData || !heatmapData.length) {
+    el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Tidak ada data heatmap untuk periode ini</span>';
     return;
   }
 
-  const DAYS  = ['Sen','Sel','Rab','Kam','Jum','Sab','Min']; // 0=Mon…6=Sun
-  const HOURS = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]; // 06:00–22:00
+  const DAYS  = ['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
+  const HOURS = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22];
 
   // Build grid: grid[wd][hr] = count
   const grid = {};
   let maxCount = 0;
-  for (const r of SB.heatmap) {
-    const wd = r.day;
-    const hr = r.hour;
+  for (const r of heatmapData) {
+    const wd = r.day, hr = r.hour;
     if (wd < 0 || wd > 6 || hr < 6 || hr > 22) continue;
     if (!grid[wd]) grid[wd] = {};
     grid[wd][hr] = (grid[wd][hr] || 0) + r.count;
@@ -1961,48 +1982,48 @@ function renderOccupancyHeatmap() {
   }
   if (maxCount === 0) { el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Data kosong</span>'; return; }
 
-  // Color: white → amber → brand (heat intensity)
-  function cellColor(count) {
+  function cellBg(count) {
     if (!count) return 'var(--bg)';
-    const ratio = count / maxCount;
-    if (ratio < 0.33) return 'rgba(180,83,9,0.18)';
-    if (ratio < 0.66) return 'rgba(180,83,9,0.45)';
+    const r = count / maxCount;
+    if (r < 0.25) return 'rgba(3,72,66,0.12)';
+    if (r < 0.50) return 'rgba(3,72,66,0.30)';
+    if (r < 0.75) return 'rgba(3,72,66,0.58)';
     return 'var(--brand)';
   }
-  function textColor(count) {
-    if (!count) return 'var(--txt3)';
-    return count / maxCount >= 0.66 ? '#fff' : 'var(--txt2)';
+  function cellFg(count) {
+    return (!count || count / maxCount < 0.58) ? 'var(--txt2)' : '#fff';
   }
 
-  let html = `<table style="border-collapse:separate;border-spacing:2px;font-size:10px;margin-top:4px">`;
-  // Header row: hours
-  html += '<tr><th style="color:var(--txt3);font-size:9px;font-weight:500;min-width:28px;text-align:left;padding-right:4px"></th>';
+  // Full-width table: table-layout:fixed fills the card width
+  let html = `<table style="width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2px;margin-top:6px">`;
+  // Header: day-label col (fixed 34px) + 17 hour cols (auto)
+  html += `<colgroup><col style="width:34px">${HOURS.map(()=>'<col>').join('')}</colgroup>`;
+  html += '<thead><tr><th></th>';
   for (const hr of HOURS) {
-    html += `<th style="color:var(--txt3);font-size:9px;font-weight:400;text-align:center;min-width:26px">${hr}:00</th>`;
+    html += `<th style="font-size:9px;font-weight:400;color:var(--txt3);text-align:center;padding-bottom:3px">${hr}</th>`;
   }
-  html += '</tr>';
+  html += '</tr></thead><tbody>';
 
-  // Data rows: days
   for (let wd = 0; wd < 7; wd++) {
-    html += `<tr><td style="color:var(--txt2);font-size:10px;font-weight:600;padding-right:6px;white-space:nowrap">${DAYS[wd]}</td>`;
+    html += `<tr><td style="font-size:10px;font-weight:600;color:var(--txt2);padding-right:4px;vertical-align:middle">${DAYS[wd]}</td>`;
     for (const hr of HOURS) {
-      const count = (grid[wd] && grid[wd][hr]) || 0;
-      const bg    = cellColor(count);
-      const tc    = textColor(count);
+      const count = (grid[wd]?.[hr]) || 0;
       const lbl   = count > 0 ? count : '';
-      html += `<td title="${DAYS[wd]} ${hr}:00 — ${count} booking"><div class="hm-cell" style="background:${bg};color:${tc}">${lbl}</div></td>`;
+      html += `<td title="${DAYS[wd]} ${hr}:00 — ${count} booking" style="padding:1px">
+        <div style="background:${cellBg(count)};color:${cellFg(count)};border-radius:3px;height:24px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">${lbl}</div>
+      </td>`;
     }
     html += '</tr>';
   }
-  html += '</table>';
-  // Legend
+  html += '</tbody></table>';
   html += `<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:10px;color:var(--txt3)">
-    <span>Rendah</span>
-    <div style="width:14px;height:8px;border-radius:2px;background:rgba(180,83,9,0.18)"></div>
-    <div style="width:14px;height:8px;border-radius:2px;background:rgba(180,83,9,0.45)"></div>
-    <div style="width:14px;height:8px;border-radius:2px;background:var(--brand)"></div>
-    <span>Tinggi</span>
-    <span style="margin-left:8px">(angka = jumlah booking)</span>
+    <span>Sepi</span>
+    <div style="width:14px;height:7px;border-radius:2px;background:rgba(3,72,66,0.12)"></div>
+    <div style="width:14px;height:7px;border-radius:2px;background:rgba(3,72,66,0.30)"></div>
+    <div style="width:14px;height:7px;border-radius:2px;background:rgba(3,72,66,0.58)"></div>
+    <div style="width:14px;height:7px;border-radius:2px;background:var(--brand)"></div>
+    <span>Ramai</span>
+    <span style="margin-left:8px;color:var(--txt3)">(angka = total booking, header = jam)</span>
   </div>`;
 
   el.innerHTML = html;
@@ -2205,8 +2226,16 @@ function renderOperations() {
       </table>`
     : '<div style="color:var(--txt3);padding:16px;font-size:13px">Tidak ada data bulan ini</div>';
 
-  // ── Occupancy Heatmap (Sprint 4, from Supabase) ──
-  renderOccupancyHeatmap();
+  // ── Occupancy Heatmap (Sprint 4) — init date range & fetch ──
+  const hmFrom = document.getElementById('hm-from');
+  const hmTo   = document.getElementById('hm-to');
+  if (hmFrom && hmTo && !hmFrom.value) {
+    // Default: last 30 days
+    const t30 = new Date(); t30.setDate(t30.getDate() - 29);
+    hmFrom.value = localDate(t30);
+    hmTo.value   = todayStr;
+  }
+  refreshHeatmap();
 }
 
 // ── MARKETING ─────────────────────────────────────
