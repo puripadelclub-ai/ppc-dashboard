@@ -721,6 +721,9 @@ body{
         </div>
       </div>
 
+      <div class="section-eyebrow">Ringkasan & Proyeksi</div>
+      <div id="intel-brief-row" style="margin-bottom:18px"></div>
+
       <div class="section-eyebrow">Akuisisi</div>
       <!-- Row 2: Conversion Funnel + Revenue per Kategori -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
@@ -999,9 +1002,6 @@ body{
         <h2>Intelligence</h2>
         <p>Ringkasan bisnis otomatis + posisi pasar PPC vs kompetitor</p>
       </div>
-
-      <div class="section-eyebrow">Ringkasan & Proyeksi</div>
-      <div id="intel-brief-row" style="margin-bottom:18px"></div>
 
       <div class="section-eyebrow">Posisi Pasar</div>
       <div class="four-col" id="intel-kpi-row"></div>
@@ -1604,6 +1604,7 @@ async function fetchSupabaseKPIs(period) {
     // Sprint 5: run alerts + attach drill handlers after KPI data is ready
     attachDrillHandlers();
     evaluateAlerts();
+    renderIntelBrief();
   } catch(e) {
     console.warn('Supabase KPI fetch failed:', e);
   }
@@ -3338,34 +3339,33 @@ function renderMemberTable() {
     'F&B Loyal':'🍽️🍽️','F&B User':'🍽️',
   };
 
-  document.getElementById('mem-dir-tbl').innerHTML = `<table class="tbl">
-    <thead><tr><th>Nama</th><th>Segment</th><th>Preferensi</th><th>Rekomendasi Aksi</th><th class="r">Spending</th><th class="r">Terakhir</th></tr></thead>
-    <tbody>${page.map(m=>{
-      const seg=m.RFM_Segment||'';
-      const bc=segColors[seg]||'badge-gray';
-      const action=m.Recommended_Action||'—';
-      const nc=(m['Member Name']||'').toLowerCase().trim();
-      const pd=prefLookup[nc]||{};
-      const tags=(pd.Pref_Tags||'').split('|').map(t=>t.trim()).filter(Boolean);
-      const tagHtml = tags.length
-        ? tags.map(t=>{
-            const emoji=tagEmoji[t]||'';
-            return `<span class="badge badge-gray" title="${t}" style="font-size:10px">${emoji?emoji+' ':''} ${t}</span>`;
-          }).join(' ')
-        : '<span class="muted" style="font-size:10px">—</span>';
-      const favCourt = pd.Fav_Court && pd.Fav_Court!=='nan' ? ` · ${pd.Fav_Court}` : '';
-      const favPeriod = pd.Fav_Period && pd.Fav_Period!=='nan' ? ` · ${pd.Fav_Period}` : '';
-      const mName = m['Member Name']||'';
-      return `<tr style="cursor:pointer" onclick="openMember360('${mName.replace(/'/g,"\\'")}')">
-        <td style="font-weight:500">${mName||'—'}<span class="muted" style="font-size:10px">${favCourt}${favPeriod}</span></td>
-        <td>${seg?`<span class="badge ${bc}">${seg}</span>`:''}</td>
-        <td style="max-width:180px">${tagHtml}</td>
-        <td class="muted" style="font-size:11px">${action}</td>
-        <td class="r mono">${fIDR(sf(m.total_spending||0))}</td>
-        <td class="r mono" style="font-size:11px">${m.last_visit||'—'}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
+  const segDotColors = {Champions:'#059669',Loyal:'#5cb8b0',New:'#6EE7B7','Needs Attention':'#B45309','At Risk':'#f97316','Cannot Lose':'#DC2626',Lost:'#DC2626'};
+  document.getElementById('mem-dir-tbl').innerHTML = page.map(m=>{
+    const seg = m.RFM_Segment||'';
+    const nc  = (m['Member Name']||'').toLowerCase().trim();
+    const pd  = prefLookup[nc]||{};
+    const tags= (pd.Pref_Tags||'').split('|').map(t=>t.trim()).filter(Boolean);
+    const favCourt  = pd.Fav_Court  && pd.Fav_Court!=='nan'  ? pd.Fav_Court  : '';
+    const favPeriod = pd.Fav_Period && pd.Fav_Period!=='nan' ? pd.Fav_Period : '';
+    const sub = [favCourt, favPeriod].filter(Boolean).join(' · ');
+    const mName = m['Member Name']||'—';
+    const initials = mName.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+    const dotCol = segDotColors[seg]||'#9CA3AF';
+    const spending = sf(m.total_spending||0);
+    const tagIcons = tags.slice(0,3).map(t=>tagEmoji[t]||'').filter(Boolean).join(' ');
+    const mNameEsc = mName.replace(/'/g,"\\'");
+    return `<div onclick="openMember360('${mNameEsc}')" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--bg)';this.style.borderRadius='6px';this.style.margin='0 -8px';this.style.padding='10px 8px'" onmouseout="this.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s'">
+      <div style="width:36px;height:36px;border-radius:50%;background:${dotCol};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:700;color:#fff">${initials}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${mName}</div>
+        <div style="font-size:10.5px;color:var(--txt3);margin-top:1px">${seg?`<span style="color:${dotCol};font-weight:600">${seg}</span>`:''}${sub?' · '+sub:''}${tagIcons?' · '+tagIcons:''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:13px;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums">${spending>0?fIDR(spending):'—'}</div>
+        <div style="font-size:10px;color:var(--txt3);margin-top:1px">${m.last_visit||'—'}</div>
+      </div>
+    </div>`;
+  }).join('');
 
   const totalPages = Math.ceil(total/MEMBERS_PER_PAGE);
   document.getElementById('mem-pager').innerHTML = `
@@ -3407,20 +3407,24 @@ function openMember360(name) {
     <div style="font-size:10.5px;color:var(--txt3);margin-bottom:8px">Memuat riwayat transaksi...</div>
     <div id="drawer-360-txn"></div>`;
 
-  // Query Supabase for transactions
+  // Query Supabase for transactions (gross_amount = kolom di Supabase, bukan total_price)
   _SB.from('transactions')
-    .select('transaction_date,product_name,total_price,payment_method')
-    .ilike('customer_name', name)
+    .select('transaction_date,product_name,gross_amount,payment_method')
+    .ilike('customer_name', `%${name}%`)
     .order('transaction_date', {ascending:false})
     .limit(20)
     .then(({data,error})=>{
       const txnEl = document.getElementById('drawer-360-txn');
       if (!txnEl) return;
-      if (error||!data?.length) {
-        txnEl.innerHTML='<div style="color:var(--txt3);font-size:11px">Tidak ada transaksi ditemukan.</div>';
+      if (error) {
+        txnEl.innerHTML=`<div style="color:var(--txt3);font-size:11px">Error: ${error.message}</div>`;
         return;
       }
-      const total = data.reduce((s,r)=>s+sf(r.total_price||0),0);
+      if (!data?.length) {
+        txnEl.innerHTML='<div style="color:var(--txt3);font-size:11px">Tidak ada transaksi ditemukan di Supabase.</div>';
+        return;
+      }
+      const total = data.reduce((s,r)=>s+sf(r.gross_amount||0),0);
       txnEl.innerHTML=`
         <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:8px">${data.length} transaksi terakhir · Total ${fIDR(total)}</div>
         ${data.map(r=>`
@@ -3429,7 +3433,7 @@ function openMember360(name) {
               <div style="font-size:11.5px;font-weight:500;color:var(--txt)">${r.product_name||'—'}</div>
               <div style="font-size:10px;color:var(--txt3)">${r.transaction_date||''}${r.payment_method?' · '+r.payment_method:''}</div>
             </div>
-            <span style="font-size:12px;font-weight:600;color:var(--txt);flex-shrink:0;margin-left:8px">${fIDR(sf(r.total_price||0))}</span>
+            <span style="font-size:12px;font-weight:600;color:var(--txt);flex-shrink:0;margin-left:8px">${fIDR(sf(r.gross_amount||0))}</span>
           </div>`).join('')}`;
     });
 }
@@ -3440,7 +3444,7 @@ function changeMemberPage(dir) {
   renderMemberTable();
 }
 
-// ── INTELLIGENCE BRIEF (What → Why → So What → Action) ───────────────
+// ── INTELLIGENCE BRIEF (What → Why → So What → Action) — tampil di Home
 function renderIntelBrief() {
   const el = document.getElementById('intel-brief-row');
   if (!el) return;
@@ -3532,7 +3536,6 @@ function renderIntelBrief() {
 
 // ── INTELLIGENCE ──────────────────────────────────
 function renderIntelligence() {
-  renderIntelBrief();
   const allComps = D.competitors||[];
   const occ = D.occupancy||[];
 
