@@ -628,6 +628,7 @@ body{
           <div class="card-hd">
             <span class="card-hd-lbl">Conversion Funnel</span>
             <span id="funnel-period-lbl" style="font-size:10px;color:var(--txt3);margin-left:4px"></span>
+            <i class="info-icon" onclick="event.stopPropagation();showInfo('kpi-funnel')" style="margin-left:4px">i</i>
           </div>
           <div id="kpi-funnel-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
         </div>
@@ -635,6 +636,7 @@ body{
           <div class="card-hd">
             <span class="card-hd-lbl">Revenue per Kategori</span>
             <span id="sb-cat-period" style="font-size:10px;color:var(--txt3);margin-left:4px"></span>
+            <i class="info-icon" onclick="event.stopPropagation();showInfo('sb-revenue-cat')" style="margin-left:4px">i</i>
             <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
           </div>
           <div id="sb-cat-breakdown"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
@@ -1204,6 +1206,28 @@ const METRIC_INFO = {
 • MONITOR → Tunggu 3–5 hari lagi jika BARU. Coba ganti creative atau headline jika sudah >7 hari tanpa result. Periksa frekuensi: jika >3 berarti audiens mulai bosan.
 • KILLED → Analisis kenapa dimatikan. Jika CPR tinggi: pertimbangkan retarget audience atau ubah offer. Jika budget habis: review anggaran mingguan.
 • BARU → Beri waktu 3–5 hari untuk learning phase Meta. Jangan ubah budget atau targeting di fase ini. Pantau CPR vs benchmark setelah 50+ impresi.`},
+
+  // SPRINT 4 — Target vs Actual
+  'kpi-target-revenue':{title:'Revenue vs Target',
+    what:'Gross revenue bulan ini dari Supabase transactions table, dibandingkan terhadap target bulanan Rp145jt (target realistis jangka pendek) atau Rp180jt (target 3 bulan). Progress bar: hijau ≥100%, kuning ≥70%, merah <70%.',
+    source:'Sumber: Supabase transactions → SUM(gross_amount) untuk periode yang dipilih. Data disync dari ESB setiap kali pipeline berjalan. Kolom: transaction_date, gross_amount.',
+    bench:'Target bulan ini: Rp145jt (match Juli 2026 — bulan terbaik YTD). Target 3 bulan: Rp180jt (+24% dari Juli). Pace Agustus saat ini: Rp111jt pada H-26 → proyeksi ~Rp132jt full bulan.'},
+  'kpi-target-occ':{title:'Occupancy vs Target',
+    what:'Rata-rata occupancy rate harian selama periode yang dipilih, dibandingkan target 55% (jangka pendek) atau 62% (3 bulan). Occupancy = total slot terisi ÷ total slot tersedia (2 court × 32 jam/hari).',
+    source:'Sumber: Supabase daily_summaries → AVG(occupancy_pct) × 100 untuk periode. Data diisi pipeline dari AVM booking data setiap hari. Kolom: summary_date, occupancy_pct.',
+    bench:'Breakeven PPC diestimasi di ~42–45%. Target 55% = profitabilitas nyaman. Target 62% = venue premium fully optimized. Benchmark padel Jakarta premium: 58–68% (estimasi market). Agustus saat ini 57.1% sudah MELEWATI target 55%.'},
+  'kpi-target-members':{title:'New Members vs Target',
+    what:'Jumlah member baru yang join di periode yang dipilih, berdasarkan join_date di tabel members. Dibandingkan target 50/bulan (jangka pendek) atau 65/bulan (3 bulan). Target di-scale proporsional untuk periode <30 hari.',
+    source:'Sumber: Supabase members → COUNT(*) WHERE join_date BETWEEN d_from AND d_to. Data disync dari Google Sheets member list setiap pipeline run. Kolom: join_date.',
+    bench:'Tren: Juni 96 → Juli 68 → Agustus ~43 (proyeksi). Penurunan disebabkan conversion rate lead→member yang turun: 14.2% → 10.5% → 6.1%. Meta Ads masih deliver lead (704 results Juli), masalah ada di sales funnel post-lead, bukan di awareness.'},
+  'kpi-funnel':{title:'Conversion Funnel',
+    what:'Funnel dari ad spend Meta → results (leads dari iklan) → new members yang join. Mengukur efisiensi marketing dari daya beli iklan sampai konversi menjadi member berbayar.',
+    source:'Spend & Results: Supabase ads_daily → SUM(spend), SUM(results) untuk periode. New Members: Supabase members → COUNT(*) berdasarkan join_date. CPR = spend ÷ results. Lead→Member conv rate = new members ÷ results × 100.',
+    bench:'CPR benchmark Meta Ads untuk fitness/sports Indonesia: Rp3.000–8.000 (lead generation). CPR PPC Jul: Rp4.737 — masih dalam range efisien. Masalah utama: conv rate lead→member yang terus turun (14.2% → 6.1%) — indikasi follow-up atau penawaran ke leads perlu diperbaiki, bukan budget iklan.'},
+  'sb-revenue-cat':{title:'Revenue per Kategori (Supabase)',
+    what:'Breakdown total gross revenue berdasarkan kategori produk untuk periode yang dipilih. Berbeda dengan ESB panel di atas yang selalu menampilkan 6 bulan terakhir, panel ini mengikuti date filter yang dipilih.',
+    source:'Sumber: Supabase transactions → GROUP BY category, SUM(gross_amount). Category diambil dari kolom "Menu Category" di ESB Sales Recapitulation. Data diupdate setiap pipeline run.',
+    bench:'Distribusi sehat padel club: Court Rent 55–65%, Membership 10–15%, Coaching 8–12%, F&B 5–10%, Lainnya <10%. Court Rent >70% = terlalu bergantung satu revenue stream. Coaching <8% = potensi underoptimized coaching program.'},
 };
 
 function showInfo(key) {
@@ -1399,10 +1423,12 @@ function renderKPIProgress() {
   function fmtOcc(v) { return v.toFixed(1) + '%'; }
   function fmtNum(v) { return v.toString(); }
 
-  function drawCard(id, label, kpi, fmtFn, unit) {
+  const II = (key) => `<i class="info-icon" onclick="event.stopPropagation();showInfo('${key}')">i</i>`;
+
+  function drawCard(id, label, infoKey, kpi, fmtFn, unit) {
     const el = document.getElementById(id);
     if (!el) return;
-    const pct     = Math.min(kpi.pct_of_target || 0, 100);
+    const pct      = Math.min(kpi.pct_of_target || 0, 100);
     const barColor = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
     const pctColor = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
     const vs       = kpi.vs_prev_pct;
@@ -1412,7 +1438,7 @@ function renderKPIProgress() {
     const borderCol = pct >= 100 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
     el.style.borderLeft = `3px solid ${borderCol}`;
     el.innerHTML = `
-      <div class="kpi-lbl" style="margin-bottom:2px">${label} <span id="${id}-badge" style="font-size:9px;padding:1px 5px;border-radius:4px;background:${pct>=100?'var(--green-bg)':'var(--amber-bg)'};color:${pctColor}">vs Target</span></div>
+      <div class="kpi-lbl" style="margin-bottom:2px">${label} <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:${pct>=100?'var(--green-bg)':'var(--amber-bg)'};color:${pctColor}">vs Target</span>${II(infoKey)}</div>
       <div style="font-size:22px;font-weight:700;color:var(--txt);letter-spacing:-.3px;margin-top:4px">${fmtFn(kpi.value)}</div>
       <div style="font-size:10px;color:var(--txt3);margin-top:2px">Target: <strong>${fmtFn(kpi.target)}</strong>${unit ? ' ' + unit : ''}${vsHtml}</div>
       <div class="kpi-prog-bar"><div class="kpi-prog-fill" style="width:${pct}%;background:${barColor}"></div></div>
@@ -1420,9 +1446,9 @@ function renderKPIProgress() {
     `;
   }
 
-  drawCard('kpi-prog-revenue', 'Revenue', SB.kpis.revenue, fmtRp, '');
-  drawCard('kpi-prog-occ',     'Occupancy', SB.kpis.occupancy, fmtOcc, '(rata-rata)');
-  drawCard('kpi-prog-mem',     'New Members', SB.kpis.new_members, fmtNum, 'member baru');
+  drawCard('kpi-prog-revenue', 'Revenue',     'kpi-target-revenue',  SB.kpis.revenue,     fmtRp,  '');
+  drawCard('kpi-prog-occ',     'Occupancy',   'kpi-target-occ',      SB.kpis.occupancy,   fmtOcc, '(rata-rata)');
+  drawCard('kpi-prog-mem',     'New Members', 'kpi-target-members',  SB.kpis.new_members, fmtNum, 'member baru');
 }
 
 function renderFunnel() {
