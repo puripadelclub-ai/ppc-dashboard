@@ -412,9 +412,9 @@ body{
 .alert-dot{
   width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px
 }
-.nav-alert-dot{
-  width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-left:auto;display:inline-block
-}
+/* nav alert: subtle left-border accent only */
+.nav-item[data-alert-crit]{border-left-color:#EF4444!important}
+.nav-item[data-alert-warn]{border-left-color:#F59E0B!important}
 
 /* ── Drill-down Drawer ──────────────────────────────────── */
 #drill-drawer{
@@ -3977,15 +3977,18 @@ function renderAlertPanel() {
 }
 
 function renderNavBadges() {
-  document.querySelectorAll('.nav-alert-dot').forEach(d=>d.remove());
+  // Reset all alert attributes
+  document.querySelectorAll('.nav-item[data-page]').forEach(el=>{
+    el.removeAttribute('data-alert-crit');
+    el.removeAttribute('data-alert-warn');
+  });
+  // Set subtle left-border accent per page
   const counts = {};
   ACTIVE_ALERTS.forEach(a=>{ if(!counts[a.page]) counts[a.page]={crit:0,warn:0}; counts[a.page][a.sev]++; });
   document.querySelectorAll('.nav-item[data-page]').forEach(el=>{
     const c = counts[el.dataset.page]; if(!c) return;
-    const dot = document.createElement('span');
-    dot.className='nav-alert-dot';
-    dot.style.cssText=`background:${c.crit?'#EF4444':'#F59E0B'}`;
-    (el.querySelector('.nav-label')||el).after(dot);
+    if (c.crit) el.setAttribute('data-alert-crit','');
+    else el.setAttribute('data-alert-warn','');
   });
 }
 
