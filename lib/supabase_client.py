@@ -207,3 +207,8 @@ def upsert_members(rows: list[dict]) -> dict:
 
 def upsert_daily_summary(row: dict) -> dict:
     return upsert("daily_summaries", [row], on_conflict="summary_date")
+
+
+def upsert_court_passes(rows: list[dict]) -> dict:
+    """Upsert court pass purchases. Dedup key: id (sha256 of date+name+pkg)."""
+    return upsert("court_passes", rows, on_conflict="id")

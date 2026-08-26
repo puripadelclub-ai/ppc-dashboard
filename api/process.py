@@ -1671,6 +1671,31 @@ def run_pipeline():
     except Exception as e_tx:
         log.append(f"  ⚠️ Supabase transactions sync (non-fatal): {e_tx}")
 
+    # ── Court Pass sheet → Supabase court_passes ─────────────────────────────
+    log.append("Syncing Court Pass sheet to Supabase court_passes table...")
+    try:
+        from court_pass_client import read_and_parse_court_passes
+        from supabase_client import upsert_court_passes, log_start as _ls_cp, log_complete as _lc_cp
+
+        log_id_cp = _ls_cp("COURT_PASS_SHEET", "sync_court_passes")
+        cp_rows = read_and_parse_court_passes()
+        cp_total = 0
+        BATCH = 200
+        for i in range(0, len(cp_rows), BATCH):
+            res_cp = upsert_court_passes(cp_rows[i:i + BATCH])
+            cp_total += res_cp.get("inserted", 0)
+            if res_cp.get("error"):
+                log.append(f"  ⚠️ Court pass batch error: {res_cp['error']}")
+                break
+
+        _lc_cp(log_id_cp, "success", {"upserted": cp_total})
+        log.append(
+            f"  → Supabase court_passes: {cp_total} upserted "
+            f"({len(cp_rows)} parsed from sheet)"
+        )
+    except Exception as e_cp:
+        log.append(f"  ⚠️ Court pass sync (non-fatal): {e_cp}")
+
     log.append("✅ All done!")
     return log
 
