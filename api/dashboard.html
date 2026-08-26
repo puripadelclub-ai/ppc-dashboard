@@ -588,6 +588,19 @@ body{
         </div>
       </div>
 
+      <!-- Row 4: System Status -->
+      <div style="margin-top:12px">
+        <div class="card" style="padding:12px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <span class="card-hd-lbl" style="font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--txt3);font-weight:700">System Status</span>
+            <span id="health-overall" style="font-size:10px;font-weight:600"></span>
+          </div>
+          <div id="health-status" style="display:flex;gap:8px;flex-wrap:wrap">
+            <span style="color:var(--txt3);font-size:11px">Memuat status...</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Hidden canvases needed by other functions (kept for compat) -->
       <canvas id="chart-avm-today" style="display:none"></canvas>
     </div>
@@ -1230,6 +1243,37 @@ function nav(page) {
   }
 }
 
+// ── SYNC HEALTH ───────────────────────────────────
+async function fetchSyncHealth() {
+  const el = document.getElementById('health-status');
+  const ov = document.getElementById('health-overall');
+  if (!el) return;
+  try {
+    const res  = await fetch('/api/sync-health');
+    const data = await res.json();
+    const srcs = data.sources || {};
+    const cMap = {green:'var(--green)',amber:'var(--amber)',red:'var(--red)',gray:'var(--txt3)'};
+    const bgMap= {green:'var(--green-bg)',amber:'var(--amber-bg)',red:'var(--red-bg)',gray:'rgba(0,0,0,.04)'};
+    const LMAP = {AVM:'AVM Booking',ESB:'ESB Revenue',META_ADS:'Meta Ads',MEMBERS:'Members'};
+    el.innerHTML = Object.entries(srcs).map(([src,h])=>{
+      const c = h.color||'gray';
+      return `<div style="display:flex;align-items:center;gap:6px;background:${bgMap[c]};
+        border-radius:6px;padding:5px 10px;border:1px solid ${bgMap[c]}">
+        <span style="width:6px;height:6px;border-radius:50%;background:${cMap[c]};flex-shrink:0"></span>
+        <span style="font-weight:600;font-size:11px;color:${cMap[c]}">${LMAP[src]||src}</span>
+        <span style="font-size:11px;color:var(--txt2)">${h.label||h.status}</span>
+      </div>`;
+    }).join('');
+    if (ov) {
+      const ok = data.overall === 'ok';
+      ov.textContent = ok ? '✓ Semua sync OK' : '⚠ Ada masalah';
+      ov.style.color = ok ? 'var(--green)' : 'var(--amber)';
+    }
+  } catch(e) {
+    el.innerHTML='<span style="color:var(--txt3);font-size:11px">Status tidak tersedia</span>';
+  }
+}
+
 // ── LOAD DATA ─────────────────────────────────────
 async function reloadData() {
   document.getElementById('loading').style.display='flex';
@@ -1244,6 +1288,7 @@ async function reloadData() {
     const tbMeta = document.getElementById('tb-meta');
     if(tbMeta) tbMeta.textContent = meta.generated_at ? 'Update: '+meta.generated_at : '';
     document.getElementById('sb-updated').textContent = meta.last_updated || '—';
+    fetchSyncHealth(); // load health panel setelah data utama ready
   } catch(e) {
     document.getElementById('loading').innerHTML='<div style="color:var(--red);text-align:center"><b>Gagal memuat data</b><br><span style="font-size:11px;color:var(--txt2)">Jalankan /api/process dulu</span></div>';
   }

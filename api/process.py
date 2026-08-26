@@ -695,6 +695,95 @@ def health():
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/sync-health", methods=["GET"])
+def sync_health():
+    """
+    Return health status per sync source dari sync_logs tabel.
+    Sources: AVM, ESB, META_ADS, MEMBERS
+    Used by dashboard System Status panel.
+    """
+    try:
+        import requests as _req_h
+        from datetime import datetime, timezone, timedelta
+
+        _sb_url = os.environ.get("SUPABASE_URL", "")
+        _sb_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+        _hd = {"apikey": _sb_key, "Authorization": f"Bearer {_sb_key}"}
+
+        resp = _req_h.get(
+            f"{_sb_url}/rest/v1/sync_logs",
+            headers=_hd,
+            params={"limit": 40, "order": "started_at.desc"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return jsonify({"status": "error", "message": "sync_logs unreachable"}), 500
+
+        logs = resp.json()
+
+        # Keep latest log per source
+        latest: dict = {}
+        for log in logs:
+            src = log.get("source", "")
+            if src and src not in latest:
+                latest[src] = log
+
+        SOURCES = ["AVM", "ESB", "META_ADS", "MEMBERS"]
+        health: dict = {}
+        overall_ok = True
+
+        for src in SOURCES:
+            log = latest.get(src)
+            if not log:
+                health[src] = {
+                    "status": "never", "color": "gray",
+                    "label": "Belum pernah sync", "rows_inserted": 0,
+                }
+                overall_ok = False
+                continue
+
+            status    = log.get("status", "unknown")
+            started   = log.get("started_at", "")
+            rows_in   = log.get("rows_inserted") or 0
+            error_msg = log.get("error_message") or ""
+
+            # Format timestamp → WIB
+            ts_label = ""
+            if started:
+                try:
+                    dt  = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                    wib = dt + timedelta(hours=7)
+                    ts_label = wib.strftime("%d %b %H:%M")
+                except Exception:
+                    ts_label = started[:16]
+
+            if status == "success":
+                color = "green"
+                label = f"{rows_in:,} rows · {ts_label} WIB"
+            elif status == "running":
+                color = "amber"
+                label = f"Running... · {ts_label} WIB"
+            else:
+                color = "red"
+                label = f"{str(error_msg)[:60]} · {ts_label} WIB"
+                overall_ok = False
+
+            health[src] = {
+                "status": status, "color": color, "label": label,
+                "rows_inserted": rows_in, "started_at": started,
+                "error": error_msg,
+            }
+
+        return jsonify({
+            "status":  "success",
+            "overall": "ok" if overall_ok else "degraded",
+            "sources": health,
+        })
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 def run_pipeline():
     """
     Main pipeline:
@@ -705,6 +794,14 @@ def run_pipeline():
     log = []
 
     # ── 1. BACA DATA ──────────────────────────────────
+    # Log ESB read ke sync_logs agar health panel bisa tracking
+    _esb_log_id = None
+    try:
+        from supabase_client import log_start as _ls0, log_complete as _lc0
+        _esb_log_id = _ls0("ESB", "read_sales_pipeline")
+    except Exception:
+        pass
+
     log.append("Reading Sales from Drive...")
     df_sales, sales_filename = read_sales_from_drive()
     log.append(f"  → {sales_filename}: {len(df_sales)} rows")
@@ -776,6 +873,14 @@ def run_pipeline():
 
     write_df_to_tab(df_summary, TAB_OUT_SUMMARY)
 
+    # Mark ESB pipeline as success di sync_logs
+    try:
+        from supabase_client import log_complete as _lc0b
+        if _esb_log_id:
+            _lc0b(_esb_log_id, "success", {"rows_inserted": len(df_sales)})
+    except Exception:
+        pass
+
     # ── 4. AVM BOOKING DATA ────────────────────────────
     # Fetch 60 hari ke belakang secara parallel, lalu akumulasi dengan data historis
     # sehingga data lama tidak hilang tiap kali pipeline dijalankan.
@@ -783,6 +888,10 @@ def run_pipeline():
     log.append("Fetching AVM booking data (last 60 days, parallel + accumulate)...")
     try:
         df_avm_new = fetch_bookings_range(days_back=60, days_forward=7)
+        # Sanity check: <10 bookings dalam 60 hari = suspiciously low, skip write
+        if not df_avm_new.empty and len(df_avm_new) < 10:
+            log.append(f"  ⚠️ AVM returned only {len(df_avm_new)} bookings — suspiciously low, preserving existing data")
+            df_avm_new = pd.DataFrame()  # treat as empty to skip write
         if not df_avm_new.empty:
             # Baca existing raw_avm untuk pertahankan data sebelum window fetch
             try:
