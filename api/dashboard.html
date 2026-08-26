@@ -724,7 +724,7 @@ body{
       <div class="section-eyebrow">Ringkasan & Proyeksi</div>
       <div id="intel-brief-row" style="margin-bottom:18px"></div>
 
-      <div class="section-eyebrow">Akuisisi</div>
+      <div class="section-eyebrow">Akuisisi & Revenue</div>
       <!-- Row 2: Conversion Funnel + Revenue per Kategori -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
         <div class="card">
@@ -740,7 +740,7 @@ body{
             <span class="card-hd-lbl">Revenue per Kategori</span>
             <span id="sb-cat-period" style="font-size:10px;color:var(--txt3);margin-left:4px"></span>
             <i class="info-icon" onclick="event.stopPropagation();showInfo('sb-revenue-cat')" style="margin-left:4px">i</i>
-            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
+            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto" title="Data ESB dikueri langsung dari Supabase — sama dengan sumber ESB, date-filterable">ESB · Supabase</span>
           </div>
           <div id="sb-cat-breakdown"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
         </div>
@@ -758,7 +758,7 @@ body{
         </div>
       </div>
 
-      <div class="section-eyebrow">Operasional & Pasar</div>
+      <div class="section-eyebrow">Snapshot Bisnis</div>
       <!-- Row 3: Ops hari ini + Posisi pasar + Member health -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
         <div class="card">
@@ -946,10 +946,10 @@ body{
         </div>
       </div>
 
-      <div class="section-eyebrow">Produk & Preferensi</div>
+      <div class="section-eyebrow">Preferensi & Pembelian</div>
       <div class="two-col">
         <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">Revenue per Produk (ESB)</span><span class="card-meta" id="mem-prod-meta"></span></div>
+          <div class="card-hd"><span class="card-hd-lbl">Pembelian per Kategori</span><span class="card-meta" id="mem-prod-meta"></span></div>
           <div class="chart-wrap"><canvas id="chart-mem-products"></canvas></div>
         </div>
         <div class="card">
@@ -1000,7 +1000,7 @@ body{
     <div class="page" id="page-intelligence">
       <div class="page-hd">
         <h2>Intelligence</h2>
-        <p>Ringkasan bisnis otomatis + posisi pasar PPC vs kompetitor</p>
+        <p>Posisi pasar PPC vs kompetitor</p>
       </div>
 
       <div class="section-eyebrow">Posisi Pasar</div>
