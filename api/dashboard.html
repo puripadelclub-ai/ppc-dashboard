@@ -835,7 +835,11 @@ body{
           <select id="ops-hour-week-sel" onchange="renderHourlyWeekTable(this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:var(--surface);color:var(--txt);cursor:pointer;flex-shrink:0"></select>
         </div>
         <div id="ops-hourly-tbl" style="overflow-x:auto"></div>
-        <div style="padding:5px 14px 10px;font-size:10px;color:var(--txt3)">🟡 <b>Penuh</b> (2/2 lapangan terisi) &nbsp;·&nbsp; <b>1/1</b> = 1 paid + 1 gratis di jam yg sama &nbsp;·&nbsp; <span style="color:#d97706;font-weight:600">🟠 jam malam 18–22</span></div>
+        <div style="padding:5px 14px 10px;font-size:10px;color:var(--txt3);display:flex;align-items:center;gap:8px">
+          <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--brand);display:inline-block"></span><b style="color:var(--txt2)">Penuh</b> (2/2 lapangan)</span>
+          &nbsp;·&nbsp; <b>1/1</b> = 1 paid + 1 gratis di jam yg sama
+          &nbsp;·&nbsp; <span style="color:var(--amber);font-weight:600">jam malam 18–22</span>
+        </div>
       </div>
 
       <div class="section-eyebrow">Penggunaan & Detail</div>
@@ -2302,7 +2306,7 @@ function renderHourlyWeekTable(weekKey) {
   hours.forEach(h=>{
     const tStr = `${String(h).padStart(2,'0')}:00`;
     const isPeak = h>=18;
-    html += `<tr><td style="${STD};text-align:left;padding-left:10px;color:${isPeak?'#d97706':'var(--txt3)'};font-size:11px;font-weight:${isPeak?600:400}">${tStr}</td>`;
+    html += `<tr><td style="${STD};text-align:left;padding-left:10px;color:${isPeak?'var(--amber)':'var(--txt3)'};font-size:11px;font-weight:${isPeak?600:400}">${tStr}</td>`;
     days.forEach(d=>{
       const sl = (look[d]||{})[h]||{paid:0,free:0};
       const tot = sl.paid+sl.free;
@@ -2310,7 +2314,7 @@ function renderHourlyWeekTable(weekKey) {
       let val='', bg='transparent', col='inherit';
       if (tot>0) {
         val = (sl.paid>0&&sl.free>0) ? `${sl.paid}/${sl.free}` : String(tot);
-        if (full){ bg='#fde047'; col='#713f12'; }
+        if (full){ bg='var(--brand)'; col='#fff'; }
       }
       html += `<td style="${STD};background:${bg};color:${col};font-weight:${full?600:400}">${val}</td>`;
     });
