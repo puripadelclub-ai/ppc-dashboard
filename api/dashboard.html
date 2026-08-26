@@ -934,8 +934,8 @@ body{
       <div class="section-eyebrow">Segmentasi & Retensi</div>
       <div class="two-col">
         <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">RFM Segments</span><i class="info-icon" onclick="event.stopPropagation();showInfo('rfm-segments')">i</i></div>
-          <div class="chart-wrap"><canvas id="chart-rfm"></canvas></div>
+          <div class="card-hd"><span class="card-hd-lbl">Segmentasi Member</span><i class="info-icon" onclick="event.stopPropagation();showInfo('rfm-segments')">i</i></div>
+          <div id="seg-summary" style="padding:4px 0"></div>
         </div>
         <div class="card">
           <div class="card-hd"><span class="card-hd-lbl">Retention Rate</span><i class="info-icon" onclick="event.stopPropagation();showInfo('retention-rate')">i</i></div>
@@ -997,8 +997,11 @@ body{
     <div class="page" id="page-intelligence">
       <div class="page-hd">
         <h2>Intelligence</h2>
-        <p>Posisi pasar PPC vs kompetitor padel Jakarta Barat</p>
+        <p>Ringkasan bisnis otomatis + posisi pasar PPC vs kompetitor</p>
       </div>
+
+      <div class="section-eyebrow">Ringkasan & Proyeksi</div>
+      <div id="intel-brief-row" style="margin-bottom:18px"></div>
 
       <div class="section-eyebrow">Posisi Pasar</div>
       <div class="four-col" id="intel-kpi-row"></div>
@@ -1671,9 +1674,21 @@ function renderKPIProgress() {
     countUp(numId, kpi.value, 900, fmtFn);
   }
 
-  drawCard('kpi-prog-revenue', 'Revenue',     'kpi-target-revenue',  SB.kpis.revenue,     fmtRp,  '');
+  drawCard('kpi-prog-revenue', 'Revenue',     'kpi-target-revenue',  SB.kpis.revenue,     fmtRp,  '', 'kpi-rev-sub');
   drawCard('kpi-prog-occ',     'Occupancy',   'kpi-target-occ',      SB.kpis.occupancy,   fmtOcc, '(rata-rata)', 'kpi-occ-sub');
   drawCard('kpi-prog-mem',     'New Members', 'kpi-target-members',  SB.kpis.new_members, fmtNum, 'member baru',  'kpi-mem-sub');
+
+  // Run-rate revenue forecast (bulan ini saja)
+  const _today = new Date();
+  const _dom   = _today.getDate();
+  const _dim   = new Date(_today.getFullYear(), _today.getMonth()+1, 0).getDate();
+  const _revNow = SB.kpis.revenue.value || 0;
+  const _runRate = _dom > 0 && _revNow > 0 ? Math.round(_revNow / _dom * _dim) : 0;
+  const _months  = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  const _revSub  = document.getElementById('kpi-rev-sub');
+  if (_revSub && _runRate > 0) {
+    _revSub.innerHTML = `<div style="font-size:10px;color:var(--txt3);margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">Proyeksi ${_months[_today.getMonth()]}: <strong style="color:var(--txt2)">${fmtRp(_runRate)}</strong></div>`;
+  }
 
   // Inject ESB sub-stats if already loaded
   injectEsbSubstats();
@@ -3125,17 +3140,43 @@ function renderMembers() {
     <div class="kpi"><div class="kpi-lbl">Coaching User${ii('coaching-user')}</div><div class="kpi-val">${fN(coachUsers)}</div><div class="kpi-d">≥1 sesi (30 hari)</div></div>
   `;
 
-  // ── RFM doughnut chart ────────────────────────────
+  // ── Segment summary cards (replace doughnut) ─────
   const segColors = {Champions:'#034842',Loyal:'#5cb8b0',New:'#4ade80','Needs Attention':'#f59e0b','At Risk':'#f97316','Cannot Lose':'#ef4444',Lost:'#dc2626'};
-  destroyChart('chart-rfm');
-  CHARTS['chart-rfm'] = new Chart(document.getElementById('chart-rfm'),{
-    type:'doughnut',
-    data:{
-      labels:rfmSegs.map(r=>r.segment),
-      datasets:[{data:rfmSegs.map(r=>r.count),backgroundColor:rfmSegs.map(r=>segColors[r.segment]||'#d1d5db'),borderWidth:2,borderColor:'#fff'}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11},boxWidth:10}}}}
-  });
+  const segActions = {
+    Champions:'Berikan VIP experience & early access event',
+    Loyal:'Upsell coaching & ball machine premium',
+    New:'Onboarding — pastikan 2 sesi pertama berkesan',
+    'Needs Attention':'Kirim promo personal sebelum churn',
+    'At Risk':'Win-back campaign + diskon renewal',
+    'Cannot Lose':'Hubungi langsung — high-value member',
+    Lost:'Re-engagement offer atau survei penyebab churn'
+  };
+  const segEl = document.getElementById('seg-summary');
+  if (segEl) {
+    const total = rfmSegs.reduce((s,r)=>s+r.count,0);
+    if (!rfmSegs.length) {
+      segEl.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:10px 0">Data segmen belum tersedia</div>';
+    } else {
+      segEl.innerHTML = rfmSegs.map(r=>{
+        const pct = total>0?(r.count/total*100).toFixed(1):0;
+        const col = segColors[r.segment]||'#9CA3AF';
+        const act = segActions[r.segment]||'—';
+        return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block;flex-shrink:0;margin-top:4px"></span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
+              <span style="font-size:12px;font-weight:600;color:var(--txt)">${r.segment}</span>
+              <span style="font-size:13px;font-weight:700;color:var(--txt);flex-shrink:0;margin-left:8px">${fN(r.count)} <span style="font-size:10px;font-weight:400;color:var(--txt3)">(${pct}%)</span></span>
+            </div>
+            <div style="height:3px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:3px">
+              <div style="height:100%;width:${pct}%;background:${col};opacity:.7;border-radius:2px"></div>
+            </div>
+            <div style="font-size:10.5px;color:var(--txt3)">${act}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
 
   // ── Retention chart ───────────────────────────────
   const ret12 = ret.slice(-12);
@@ -3314,8 +3355,9 @@ function renderMemberTable() {
         : '<span class="muted" style="font-size:10px">—</span>';
       const favCourt = pd.Fav_Court && pd.Fav_Court!=='nan' ? ` · ${pd.Fav_Court}` : '';
       const favPeriod = pd.Fav_Period && pd.Fav_Period!=='nan' ? ` · ${pd.Fav_Period}` : '';
-      return `<tr>
-        <td style="font-weight:500">${m['Member Name']||'—'}<span class="muted" style="font-size:10px">${favCourt}${favPeriod}</span></td>
+      const mName = m['Member Name']||'';
+      return `<tr style="cursor:pointer" onclick="openMember360('${mName.replace(/'/g,"\\'")}')">
+        <td style="font-weight:500">${mName||'—'}<span class="muted" style="font-size:10px">${favCourt}${favPeriod}</span></td>
         <td>${seg?`<span class="badge ${bc}">${seg}</span>`:''}</td>
         <td style="max-width:180px">${tagHtml}</td>
         <td class="muted" style="font-size:11px">${action}</td>
@@ -3334,14 +3376,163 @@ function renderMemberTable() {
     </div>`;
 }
 
+// ── Customer 360 ──────────────────────────────────
+function openMember360(name) {
+  if (!name) return;
+  // Reuse drill drawer
+  document.getElementById('drawer-title').textContent = name;
+  document.getElementById('drawer-sub').textContent   = 'Customer 360 · Semua touchpoint';
+  document.getElementById('drill-drawer').classList.add('open');
+  document.getElementById('drill-overlay').classList.add('open');
+
+  const el = document.getElementById('drawer-content');
+  // Basic info from D.members
+  const mem = (D.members||[]).find(m=>(m['Member Name']||'').toLowerCase()===name.toLowerCase())||{};
+  const seg = mem.RFM_Segment||'—';
+  const segColors360 = {Champions:'var(--green)',Loyal:'var(--brand)','Needs Attention':'var(--amber)','At Risk':'var(--amber)','Cannot Lose':'var(--red)',Lost:'var(--red)',New:'var(--txt3)'};
+  const segCol = segColors360[seg]||'var(--txt3)';
+
+  el.innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="width:10px;height:10px;border-radius:50%;background:${segCol};display:inline-block"></span>
+        <span style="font-size:12px;font-weight:700;color:${segCol}">${seg}</span>
+      </div>
+      <div class="drawer-kpi-row">
+        <div class="drawer-kpi"><div class="drawer-kpi-lbl">Total Spending</div><div class="drawer-kpi-val">${fIDR(sf(mem.total_spending||0))}</div></div>
+        <div class="drawer-kpi"><div class="drawer-kpi-lbl">Terakhir Visit</div><div class="drawer-kpi-val" style="font-size:14px">${mem.last_visit||'—'}</div></div>
+      </div>
+      ${mem.Recommended_Action?`<div style="font-size:10.5px;color:var(--txt3);padding:8px 10px;background:var(--bg);border-radius:6px;margin-top:8px">💡 ${mem.Recommended_Action}</div>`:''}
+    </div>
+    <div style="font-size:10.5px;color:var(--txt3);margin-bottom:8px">Memuat riwayat transaksi...</div>
+    <div id="drawer-360-txn"></div>`;
+
+  // Query Supabase for transactions
+  _SB.from('transactions')
+    .select('transaction_date,product_name,total_price,payment_method')
+    .ilike('customer_name', name)
+    .order('transaction_date', {ascending:false})
+    .limit(20)
+    .then(({data,error})=>{
+      const txnEl = document.getElementById('drawer-360-txn');
+      if (!txnEl) return;
+      if (error||!data?.length) {
+        txnEl.innerHTML='<div style="color:var(--txt3);font-size:11px">Tidak ada transaksi ditemukan.</div>';
+        return;
+      }
+      const total = data.reduce((s,r)=>s+sf(r.total_price||0),0);
+      txnEl.innerHTML=`
+        <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:8px">${data.length} transaksi terakhir · Total ${fIDR(total)}</div>
+        ${data.map(r=>`
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-size:11.5px;font-weight:500;color:var(--txt)">${r.product_name||'—'}</div>
+              <div style="font-size:10px;color:var(--txt3)">${r.transaction_date||''}${r.payment_method?' · '+r.payment_method:''}</div>
+            </div>
+            <span style="font-size:12px;font-weight:600;color:var(--txt);flex-shrink:0;margin-left:8px">${fIDR(sf(r.total_price||0))}</span>
+          </div>`).join('')}`;
+    });
+}
+
 function changeMemberPage(dir) {
   const totalPages = Math.ceil(filteredMembers.length/MEMBERS_PER_PAGE);
   memberPage = Math.max(0,Math.min(memberPage+dir,totalPages-1));
   renderMemberTable();
 }
 
+// ── INTELLIGENCE BRIEF (What → Why → So What → Action) ───────────────
+function renderIntelBrief() {
+  const el = document.getElementById('intel-brief-row');
+  if (!el) return;
+  if (!SB?.kpis) { el.innerHTML = '<div style="color:var(--txt3);font-size:12px">Data belum tersedia — buka Home dulu untuk memuat KPI.</div>'; return; }
+
+  const kpis  = SB.kpis;
+  const rev   = kpis.revenue?.value || 0;
+  const revVs = kpis.revenue?.vs_prev_pct;
+  const revPct= kpis.revenue?.pct_of_target || 0;
+  const occ   = kpis.occupancy?.value || 0;    // stored as %  e.g. 56.9
+  const occVs = kpis.occupancy?.vs_prev_pct;
+  const occTgt= kpis.occupancy?.target || 55;
+  const newMem= kpis.new_members?.value || 0;
+  const memTgt= kpis.new_members?.target || 0;
+  const cpr   = SB.funnel?.cpr || 0;
+  const adSpend= SB.funnel?.ad_spend || 0;
+  const results= SB.funnel?.results || 0;
+
+  // Run-rate
+  const _t = new Date();
+  const _dom= _t.getDate(), _dim=new Date(_t.getFullYear(),_t.getMonth()+1,0).getDate();
+  const runRate = _dom>0&&rev>0 ? Math.round(rev/_dom*_dim) : 0;
+  const _mn = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_t.getMonth()];
+
+  // Top category from product_detail
+  const cats={};
+  (D.product_detail||[]).forEach(p=>{
+    const cat=p.Product_Category||p.category||mapCatLabel(p.product_type||'Other');
+    cats[cat]=(cats[cat]||0)+sf(p.Total_Revenue||p.revenue_total||0);
+  });
+  const topCat=Object.entries(cats).sort((a,b)=>b[1]-a[1])[0];
+  const totalCatRev=Object.values(cats).reduce((s,v)=>s+v,0);
+  const topCatPct=topCat&&totalCatRev>0?(topCat[1]/totalCatRev*100).toFixed(0):0;
+
+  // Churn signal
+  const segs=D.rfm_segments||[];
+  const totalSeg=segs.reduce((s,r)=>s+r.count,0);
+  const lostCnt=(segs.find(s=>/lost/i.test(s.segment))||{}).count||0;
+  const churnPct=totalSeg>0?(lostCnt/totalSeg*100).toFixed(0):0;
+
+  // Narrative generation
+  const vsRev = revVs!=null ? (revVs>=0?` ↑${revVs}%`:` ↓${Math.abs(revVs)}%`) : '';
+  const vsOcc = occVs!=null ? (occVs>=0?` +${occVs}%`:` ${occVs}%`) : '';
+
+  const whatText = `Revenue ${fIDR(rev)}${vsRev} vs bulan lalu (${revPct}% dari target). Occupancy ${occ.toFixed?occ.toFixed(1):occ}%${vsOcc}${occ>=occTgt?' — di atas target':' — di bawah target'}. ${newMem} member baru${memTgt?` dari target ${memTgt}`:''}.`;
+
+  const whyParts=[];
+  if(topCat) whyParts.push(`${topCat[0]} mendominasi revenue (${topCatPct}%)`);
+  if(results>0) whyParts.push(`${fN(results)} leads dari iklan (spend ${fIDR(adSpend)}, CPR ${fIDR(cpr)})`);
+  if(churnPct>0) whyParts.push(`${churnPct}% member di segmen Lost`);
+  const whyText = whyParts.length ? whyParts.join('. ')+'.' : 'Detail tersedia di halaman Marketing dan Members.';
+
+  const soWhatParts=[];
+  if(runRate>0) soWhatParts.push(`Proyeksi ${_mn}: ${fIDR(runRate)} (run-rate)`);
+  if(revPct<70) soWhatParts.push('Revenue di bawah 70% target — perlu akselerasi');
+  else if(revPct>=100) soWhatParts.push('Target revenue bulan ini sudah tercapai');
+  else soWhatParts.push(`Butuh ${fIDR((kpis.revenue?.target||0)-rev)} lagi untuk capai target`);
+  if(churnPct>15) soWhatParts.push(`Churn ${churnPct}% mengancam base member aktif`);
+  const soWhatText = soWhatParts.join('. ')+'.';
+
+  const actionParts=[];
+  if(cpr>7000) actionParts.push('CPR kritis — review targeting & creative iklan segera');
+  else if(cpr>5200) actionParts.push('CPR mendekati batas — optimalkan audience iklan');
+  if(occ<occTgt) actionParts.push('Buat promo mid-week untuk naikkan occupancy');
+  if(newMem<memTgt*0.7) actionParts.push('Intensifkan campaign member acquisition');
+  if(churnPct>10) actionParts.push('Aktifkan win-back untuk segmen Lost');
+  if(actionParts.length===0) actionParts.push('Pertahankan momentum — semua metrik dalam kondisi sehat');
+  const actionText = actionParts.join('. ')+'.';
+
+  const cards=[
+    {icon:'📊',label:'What',color:'var(--brand)',text:whatText},
+    {icon:'🔍',label:'Why',color:'#7C3AED',text:whyText},
+    {icon:'💡',label:'So What',color:'var(--amber)',text:soWhatText},
+    {icon:'🎯',label:'Action',color:'var(--green)',text:actionText},
+  ];
+
+  el.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+      ${cards.map(c=>`
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;border-left:3px solid ${c.color}">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+            <span style="font-size:14px">${c.icon}</span>
+            <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:${c.color}">${c.label}</span>
+          </div>
+          <p style="font-size:12px;color:var(--txt2);line-height:1.65;margin:0">${c.text}</p>
+        </div>`).join('')}
+    </div>`;
+}
+
 // ── INTELLIGENCE ──────────────────────────────────
 function renderIntelligence() {
+  renderIntelBrief();
   const allComps = D.competitors||[];
   const occ = D.occupancy||[];
 
