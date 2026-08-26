@@ -402,6 +402,64 @@ body{
   @page{margin:1.5cm;size:A4}
 }
 
+/* ── Alert Panel ────────────────────────────────────────── */
+.alert-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:9px 12px;background:var(--surface);border-radius:8px;
+  cursor:pointer;transition:background .15s
+}
+.alert-item:hover{background:var(--bg)}
+.alert-dot{
+  width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px
+}
+.nav-alert-dot{
+  width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-left:auto;display:inline-block
+}
+
+/* ── Drill-down Drawer ──────────────────────────────────── */
+#drill-drawer{
+  position:fixed;top:0;right:-440px;width:420px;height:100vh;
+  background:var(--surface);border-left:1px solid var(--border);
+  z-index:500;display:flex;flex-direction:column;
+  transition:right .28s cubic-bezier(0.23,1,0.32,1);
+  box-shadow:-6px 0 30px rgba(0,0,0,.09)
+}
+#drill-drawer.open{right:0}
+#drill-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.2);z-index:499;backdrop-filter:blur(1px)
+}
+#drill-overlay.open{display:block}
+.drawer-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 20px;border-bottom:1px solid var(--border);flex-shrink:0
+}
+.drawer-close{
+  background:none;border:1px solid var(--border);border-radius:7px;
+  padding:5px 11px;cursor:pointer;font-size:12px;color:var(--txt2);
+  font-family:inherit;font-weight:600;transition:background .15s
+}
+.drawer-close:hover{background:var(--bg)}
+.drawer-kpi-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.drawer-kpi{
+  background:var(--bg);border-radius:var(--r-sm);padding:12px 14px;
+  border:1px solid var(--border)
+}
+.drawer-kpi-lbl{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--txt3);font-weight:700;margin-bottom:4px}
+.drawer-kpi-val{font-size:20px;font-weight:800;color:var(--txt);letter-spacing:-.4px;font-variant-numeric:tabular-nums}
+@media(max-width:768px){
+  #drill-drawer{width:100%;right:-105%}
+}
+
+/* ── KPI card — drillable ────────────────────────────────── */
+.kpi-drillable{cursor:pointer;transition:box-shadow .2s,transform .2s,border-color .2s}
+.kpi-drillable:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.kpi-drillable:hover .drill-hint{opacity:1}
+.drill-hint{
+  font-size:9.5px;color:var(--brand);font-weight:600;opacity:0;
+  transition:opacity .2s;margin-top:6px;display:flex;align-items:center;gap:3px
+}
+
 /* ── Export button ──────────────────────────────────────── */
 .export-btn{
   background:none;border:1px solid var(--border-md);border-radius:7px;
@@ -618,6 +676,9 @@ body{
       </div>
 
       <!-- Row 0: KPI Target vs Actual (Supabase-backed) -->
+      <!-- Alert Panel -->
+      <div id="alert-panel" style="display:none;margin-bottom:18px"></div>
+
       <div class="section-eyebrow">Pencapaian</div>
       <div id="kpi-progress-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
         <div class="card" id="kpi-prog-revenue" style="border-left:3px solid var(--brand)">
@@ -1029,6 +1090,19 @@ body{
 </div><!-- #main -->
 </div><!-- #app -->
 <div id="sb-overlay" onclick="toggleSidebar()"></div>
+
+<!-- ── Drill-down Drawer ──────────────────────────────── -->
+<div id="drill-overlay" onclick="closeDrawer()"></div>
+<div id="drill-drawer">
+  <div class="drawer-hd">
+    <div>
+      <div id="drawer-title" style="font-size:14px;font-weight:700;color:var(--txt)">Detail</div>
+      <div id="drawer-sub" style="font-size:11px;color:var(--txt3);margin-top:2px"></div>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()">✕ Tutup</button>
+  </div>
+  <div id="drawer-content" style="flex:1;overflow-y:auto;padding:18px 20px"></div>
+</div>
 
 <!-- INFO POPUP OVERLAY -->
 <div id="info-overlay" onclick="closeInfo()">
@@ -1525,6 +1599,9 @@ async function fetchSupabaseKPIs(period) {
     renderKPIProgress();
     renderFunnel();
     renderSBCategoryBreakdown();
+    // Sprint 5: run alerts + attach drill handlers after KPI data is ready
+    attachDrillHandlers();
+    evaluateAlerts();
   } catch(e) {
     console.warn('Supabase KPI fetch failed:', e);
   }
@@ -3776,6 +3853,340 @@ async function checkAuth() {
     else { nav('home'); reloadData(); }
   }
   // No session → login overlay stays visible
+}
+
+// ── ALERT ENGINE ──────────────────────────────────
+const THRESHOLDS = {
+  cpr:       { warn:5200,  crit:7000  },
+  roas:      { warn:8,     crit:4     },
+  occ_drop:  { warn:-10,   crit:-20   },
+  rev_drop:  { warn:-10,   crit:-20   },
+  exp_days:  { warn:7,     crit:0     },
+  churn_pct: { warn:5,     crit:10    },
+};
+let ACTIVE_ALERTS = [];
+
+async function evaluateAlerts() {
+  const alerts = [];
+  const kpis = SB?.kpis || {};
+
+  // 1. Revenue MoM drop
+  const revDrop = kpis.revenue?.vs_prev_pct;
+  if (revDrop != null) {
+    if (revDrop <= THRESHOLDS.rev_drop.crit)
+      alerts.push({sev:'crit',page:'home',icon:'📉',title:'Revenue turun signifikan',msg:`${revDrop.toFixed(1)}% vs bulan lalu`});
+    else if (revDrop <= THRESHOLDS.rev_drop.warn)
+      alerts.push({sev:'warn',page:'home',icon:'📉',title:'Revenue mulai melemah',msg:`${revDrop.toFixed(1)}% vs bulan lalu`});
+  }
+
+  // 2. Occupancy WoW drop
+  const occDrop = kpis.occupancy?.vs_prev_pct;
+  if (occDrop != null) {
+    if (occDrop <= THRESHOLDS.occ_drop.crit)
+      alerts.push({sev:'crit',page:'operations',icon:'🏟️',title:'Occupancy drop tajam',msg:`${occDrop.toFixed(1)}% vs periode lalu`});
+    else if (occDrop <= THRESHOLDS.occ_drop.warn)
+      alerts.push({sev:'warn',page:'operations',icon:'🏟️',title:'Occupancy turun',msg:`${occDrop.toFixed(1)}% vs periode lalu`});
+  }
+
+  // 3. ROAS
+  const roas = getBlendedRoas();
+  if (roas > 0) {
+    if (roas < THRESHOLDS.roas.crit)
+      alerts.push({sev:'crit',page:'marketing',icon:'📢',title:'ROAS kritis',msg:`${roas.toFixed(1)}x — min ${THRESHOLDS.roas.crit}x`});
+    else if (roas < THRESHOLDS.roas.warn)
+      alerts.push({sev:'warn',page:'marketing',icon:'📢',title:'ROAS melemah',msg:`${roas.toFixed(1)}x — target ≥${THRESHOLDS.roas.warn}x`});
+  }
+
+  // 4. CPR
+  const rawAds = D.raw_ads||[];
+  const rawSpend = rawAds.reduce((t,r)=>t+sf(r.budget_spent||r.Spend||r['Amount Spent']||0),0);
+  const rawRes   = rawAds.reduce((t,r)=>t+si(r.Results||r.results||0),0);
+  const cprVal   = rawRes>0&&rawSpend>0 ? rawSpend/rawRes : 0;
+  if (cprVal > 0) {
+    if (cprVal > THRESHOLDS.cpr.crit)
+      alerts.push({sev:'crit',page:'marketing',icon:'💸',title:'CPR terlalu tinggi',msg:`${fIDR(cprVal)}/result — max ${fIDR(THRESHOLDS.cpr.crit)}`});
+    else if (cprVal > THRESHOLDS.cpr.warn)
+      alerts.push({sev:'warn',page:'marketing',icon:'💸',title:'CPR mendekati batas',msg:`${fIDR(cprVal)}/result — batas ${fIDR(THRESHOLDS.cpr.warn)}`});
+  }
+
+  // 5. Member expiry (direct Supabase query)
+  try {
+    const today = todayLocal();
+    const in7 = new Date(); in7.setDate(in7.getDate()+7);
+    const in7s = localDate(in7);
+    const [{data:expiring},{data:expired}] = await Promise.all([
+      _SB.from('members').select('name,expiry_date')
+        .eq('membership_status','active').gte('expiry_date',today).lte('expiry_date',in7s).order('expiry_date'),
+      _SB.from('members').select('name,expiry_date')
+        .eq('membership_status','active').lt('expiry_date',today)
+    ]);
+    if (expired?.length)
+      alerts.push({sev:'crit',page:'members',icon:'⏰',title:`${expired.length} member sudah expired`,msg:'Status masih aktif — perlu tindakan segera'});
+    if (expiring?.length)
+      alerts.push({sev:'warn',page:'members',icon:'⏰',title:`${expiring.length} member expiry ≤7 hari`,
+        msg:expiring.slice(0,3).map(m=>m.name).join(', ')+(expiring.length>3?` +${expiring.length-3} lainnya`:'')});
+  } catch(e) {}
+
+  // 6. Churn proxy (Lost segment dari RFM)
+  const members = D.members||[];
+  const lost = members.filter(m=>/lost|churn/i.test(m.RFM_Segment||'')).length;
+  const churnPct = members.length>0 ? lost/members.length*100 : 0;
+  if (churnPct >= THRESHOLDS.churn_pct.crit)
+    alerts.push({sev:'crit',page:'members',icon:'📊',title:'Churn rate tinggi',msg:`${churnPct.toFixed(1)}% member di segmen Lost/Churned`});
+  else if (churnPct >= THRESHOLDS.churn_pct.warn)
+    alerts.push({sev:'warn',page:'members',icon:'📊',title:'Churn perlu diperhatikan',msg:`${churnPct.toFixed(1)}% member di segmen Lost/Churned`});
+
+  ACTIVE_ALERTS = alerts;
+  renderAlertPanel();
+  renderNavBadges();
+}
+
+function renderAlertPanel() {
+  const panel = document.getElementById('alert-panel');
+  if (!panel) return;
+  if (!ACTIVE_ALERTS.length) { panel.style.display='none'; return; }
+  const crits = ACTIVE_ALERTS.filter(a=>a.sev==='crit');
+  const color  = crits.length ? 'var(--red)' : 'var(--amber)';
+  const bg     = crits.length ? 'rgba(220,38,38,.05)' : 'rgba(180,83,9,.05)';
+  const bdr    = crits.length ? 'rgba(220,38,38,.14)' : 'rgba(180,83,9,.13)';
+  const label  = [crits.length?`${crits.length} Kritis`:'', ACTIVE_ALERTS.length-crits.length>0?`${ACTIVE_ALERTS.length-crits.length} Perhatian`:''].filter(Boolean).join(' · ');
+  panel.style.display='';
+  panel.innerHTML=`
+    <div style="background:${bg};border:1px solid ${bdr};border-radius:var(--r);padding:14px 18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block"></span>
+          <span style="font-size:10.5px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.8px">${label}</span>
+        </div>
+        <button onclick="document.getElementById('alert-list').style.display=document.getElementById('alert-list').style.display==='none'?'flex':'none'"
+          style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--txt3);font-family:inherit">Sembunyikan</button>
+      </div>
+      <div id="alert-list" style="display:flex;flex-direction:column;gap:7px">
+        ${ACTIVE_ALERTS.map(a=>`
+          <div class="alert-item" onclick="nav('${a.page}')"
+            style="border:1px solid ${a.sev==='crit'?'rgba(220,38,38,.11)':'rgba(180,83,9,.10)'}">
+            <span style="font-size:14px;flex-shrink:0;margin-top:1px">${a.icon}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:700;color:${a.sev==='crit'?'var(--red)':'var(--amber)'};margin-bottom:1px">${a.title}</div>
+              <div style="font-size:10.5px;color:var(--txt3)">${a.msg}</div>
+            </div>
+            <span style="font-size:8.5px;color:var(--txt3);background:var(--bg);border-radius:4px;padding:2px 6px;text-transform:uppercase;letter-spacing:.3px;flex-shrink:0">${a.page}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderNavBadges() {
+  document.querySelectorAll('.nav-alert-dot').forEach(d=>d.remove());
+  const counts = {};
+  ACTIVE_ALERTS.forEach(a=>{ if(!counts[a.page]) counts[a.page]={crit:0,warn:0}; counts[a.page][a.sev]++; });
+  document.querySelectorAll('.nav-item[data-page]').forEach(el=>{
+    const c = counts[el.dataset.page]; if(!c) return;
+    const dot = document.createElement('span');
+    dot.className='nav-alert-dot';
+    dot.style.cssText=`background:${c.crit?'#EF4444':'#F59E0B'}`;
+    (el.querySelector('.nav-label')||el).after(dot);
+  });
+}
+
+// ── DRILL-DOWN DRAWER ──────────────────────────────
+function openDrawer(type) {
+  document.getElementById('drill-drawer').classList.add('open');
+  document.getElementById('drill-overlay').classList.add('open');
+  renderDrawer(type);
+}
+function closeDrawer() {
+  document.getElementById('drill-drawer').classList.remove('open');
+  document.getElementById('drill-overlay').classList.remove('open');
+}
+
+function renderDrawer(type) {
+  const titles = {revenue:'Revenue Breakdown',occ:'Occupancy Breakdown',members:'New Member Breakdown'};
+  const subs   = {revenue:'Per kategori produk · berdasarkan data ESB',occ:'Distribusi per hari dalam seminggu',members:'Per segmen RFM & sumber akuisisi'};
+  document.getElementById('drawer-title').textContent = titles[type]||'Detail';
+  document.getElementById('drawer-sub').textContent   = subs[type]||'';
+  const el = document.getElementById('drawer-content');
+  el.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:20px 0">Memuat...</div>';
+  if (type==='revenue')  renderDrawerRevenue(el);
+  if (type==='occ')      renderDrawerOcc(el);
+  if (type==='members')  renderDrawerMembers(el);
+}
+
+function renderDrawerRevenue(el) {
+  const prods = D.product_detail||[];
+  if (!prods.length) { el.innerHTML='<div style="color:var(--txt3);padding:20px 0;font-size:12px">Data produk belum tersedia.</div>'; return; }
+
+  // Group by category
+  const cats = {};
+  prods.forEach(p=>{
+    const cat = p.Product_Category||p.category||'Lainnya';
+    const rev = sf(p.Total_Revenue||p.revenue_total||0);
+    cats[cat] = (cats[cat]||0) + rev;
+  });
+  const sorted = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+  const total = sorted.reduce((s,[,v])=>s+v,0);
+
+  // Summary KPIs
+  const topCat = sorted[0];
+  el.innerHTML = `
+    <div class="drawer-kpi-row">
+      <div class="drawer-kpi"><div class="drawer-kpi-lbl">Total Revenue</div><div class="drawer-kpi-val">${fIDR(total)}</div></div>
+      <div class="drawer-kpi"><div class="drawer-kpi-lbl">Kategori Terbesar</div><div class="drawer-kpi-val" style="font-size:14px;font-weight:700">${topCat?.[0]||'—'}</div></div>
+    </div>
+    <div style="margin-bottom:10px">
+      ${sorted.map(([cat,rev])=>{
+        const pct = total>0?rev/total*100:0;
+        return `
+          <div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:11.5px;font-weight:600;color:var(--txt)">${cat}</span>
+              <span style="font-size:11px;color:var(--txt2)">${fIDR(rev)} <span style="color:var(--txt3)">(${pct.toFixed(1)}%)</span></span>
+            </div>
+            <div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
+              <div style="height:100%;width:${pct.toFixed(1)}%;background:var(--brand);border-radius:3px;transition:width .6s cubic-bezier(0.23,1,0.32,1)"></div>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>
+    <canvas id="drawer-rev-chart" style="max-height:200px"></canvas>`;
+
+  // Chart
+  setTimeout(()=>{
+    const ctx = document.getElementById('drawer-rev-chart');
+    if (!ctx) return;
+    destroyChart('drawer-rev-chart');
+    CHARTS['drawer-rev-chart'] = new Chart(ctx,{
+      type:'bar',
+      data:{labels:sorted.map(([c])=>c),datasets:[{data:sorted.map(([,v])=>v),
+        backgroundColor:sorted.map((_,i)=>i===0?'rgba(3,72,66,.85)':'rgba(3,72,66,.25)'),
+        borderRadius:5,borderSkipped:false}]},
+      options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>' '+fIDR(c.raw)}}},
+        scales:{x:{ticks:{callback:v=>fIDR(v),font:{size:9}},grid:{display:false},border:{display:false}},
+          y:{grid:{display:false},ticks:{font:{size:10}},border:{display:false}}}}
+    });
+  },50);
+}
+
+function renderDrawerOcc(el) {
+  const avm = D.avm||[];
+  if (!avm.length) { el.innerHTML='<div style="color:var(--txt3);padding:20px 0;font-size:12px">Data AVM belum tersedia.</div>'; return; }
+
+  // Group bookings by day of week
+  const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const dayData = Array(7).fill(0);
+  const dayCnt  = Array(7).fill(0);
+  avm.forEach(r=>{
+    const d = new Date(r.date||'');
+    if (isNaN(d)) return;
+    const dow = d.getDay();
+    dayData[dow] += si(r.total_bookings);
+    dayCnt[dow]++;
+  });
+  const dayAvg = dayData.map((v,i)=>dayCnt[i]>0?Math.round(v/dayCnt[i]):0);
+  const peak   = days[dayAvg.indexOf(Math.max(...dayAvg))];
+  const slow   = days[dayAvg.indexOf(Math.min(...dayAvg.filter(v=>v>0)))];
+  const avgOcc = avm.length>0?(avm.reduce((s,r)=>s+nOcc(r['Overall Occ %']||0),0)/avm.length*100).toFixed(1):0;
+
+  el.innerHTML=`
+    <div class="drawer-kpi-row">
+      <div class="drawer-kpi"><div class="drawer-kpi-lbl">Avg Occupancy</div><div class="drawer-kpi-val">${avgOcc}%</div></div>
+      <div class="drawer-kpi"><div class="drawer-kpi-lbl">Hari Terbaik</div><div class="drawer-kpi-val" style="font-size:16px">${peak}</div></div>
+    </div>
+    <div style="margin-bottom:12px">
+      ${days.map((d,i)=>{
+        const avg = dayAvg[i]; const max = Math.max(...dayAvg)||1;
+        const pct = avg/max*100;
+        const isWeekend = i===0||i===6;
+        return `<div style="margin-bottom:9px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="font-size:11.5px;font-weight:${isWeekend?700:500};color:${isWeekend?'var(--brand)':'var(--txt)'}">${d}</span>
+            <span style="font-size:11px;color:var(--txt2)">${fN(avg)} booking/hari</span>
+          </div>
+          <div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${pct.toFixed(1)}%;background:${isWeekend?'var(--brand)':'rgba(3,72,66,.4)'};border-radius:3px;transition:width .6s cubic-bezier(0.23,1,0.32,1)"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="font-size:10.5px;color:var(--txt3);padding:10px;background:var(--bg);border-radius:8px">
+      💡 Hari paling sepi: <strong style="color:var(--txt2)">${slow}</strong> — pertimbangkan promo mid-week untuk naikkan occupancy
+    </div>`;
+}
+
+function renderDrawerMembers(el) {
+  const members = D.members||[];
+  if (!members.length) { el.innerHTML='<div style="color:var(--txt3);padding:20px 0;font-size:12px">Data member belum tersedia.</div>'; return; }
+
+  // RFM segment distribution
+  const segs = {};
+  members.forEach(m=>{ const s=m.RFM_Segment||'Unknown'; segs[s]=(segs[s]||0)+1; });
+  const sorted = Object.entries(segs).sort((a,b)=>b[1]-a[1]);
+  const total = members.length;
+
+  const segColors = {
+    'Champions':'#059669','Loyal Customers':'#34D399','Potential Loyalist':'#6EE7B7',
+    'At Risk':'#F59E0B','Needs Attention':'#FBBF24','Lost':'#EF4444',
+    'Promising':'#3B82F6','New Customers':'#60A5FA','Hibernating':'#9CA3AF'
+  };
+
+  el.innerHTML=`
+    <div class="drawer-kpi-row">
+      <div class="drawer-kpi"><div class="drawer-kpi-lbl">Total Member</div><div class="drawer-kpi-val">${fN(total)}</div></div>
+      <div class="drawer-kpi"><div class="drawer-kpi-lbl">Segmen Aktif</div><div class="drawer-kpi-val">${sorted.length}</div></div>
+    </div>
+    <div style="margin-bottom:14px">
+      ${sorted.map(([seg,cnt])=>{
+        const pct = cnt/total*100;
+        const color = segColors[seg]||'var(--brand)';
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="display:flex;align-items:center;gap:6px">
+              <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0"></span>
+              <span style="font-size:11.5px;font-weight:600;color:var(--txt)">${seg}</span>
+            </span>
+            <span style="font-size:11px;color:var(--txt2)">${fN(cnt)} <span style="color:var(--txt3)">(${pct.toFixed(1)}%)</span></span>
+          </div>
+          <div style="height:5px;background:var(--bg);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${pct.toFixed(1)}%;background:${color};opacity:.75;border-radius:3px;transition:width .6s cubic-bezier(0.23,1,0.32,1)"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  // Async: tambahkan acquisition source dari Supabase
+  _SB.from('members').select('acquisition_source').then(({data})=>{
+    if (!data?.length) return;
+    const src = {};
+    data.forEach(m=>{ const s=m.acquisition_source||'Unknown'; src[s]=(src[s]||0)+1; });
+    const srcSorted = Object.entries(src).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const srcTotal = data.length;
+    const srcEl = document.createElement('div');
+    srcEl.innerHTML=`
+      <div class="section-eyebrow" style="margin-top:16px">Sumber Akuisisi</div>
+      ${srcSorted.map(([s,c])=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:11.5px;color:var(--txt)">${s}</span>
+          <span style="font-size:11px;font-weight:600;color:var(--txt2)">${fN(c)} <span style="color:var(--txt3)">(${(c/srcTotal*100).toFixed(1)}%)</span></span>
+        </div>`).join('')}`;
+    document.getElementById('drawer-content')?.appendChild(srcEl);
+  });
+}
+
+// ── Make KPI progress cards drillable ─────────────
+function attachDrillHandlers() {
+  const map = {'kpi-prog-revenue':'revenue','kpi-prog-occ':'occ','kpi-prog-mem':'members'};
+  Object.entries(map).forEach(([id,type])=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add('kpi-drillable');
+    el.onclick = ()=>openDrawer(type);
+    // Add hint text
+    const hint = document.createElement('div');
+    hint.className='drill-hint';
+    hint.innerHTML=`<svg viewBox="0 0 24 24" width="9" height="9" style="stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round"><polyline points="9 18 15 12 9 6"/></svg>Lihat detail`;
+    el.appendChild(hint);
+  });
 }
 
 // ── INIT ──────────────────────────────────────────
