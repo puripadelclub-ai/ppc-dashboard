@@ -3514,23 +3514,45 @@ function renderIntelBrief() {
   if(actionParts.length===0) actionParts.push('Pertahankan momentum — semua metrik dalam kondisi sehat');
   const actionText = actionParts.join('. ')+'.';
 
-  const cards=[
-    {icon:'📊',label:'What',color:'var(--brand)',text:whatText},
-    {icon:'🔍',label:'Why',color:'#7C3AED',text:whyText},
-    {icon:'💡',label:'So What',color:'var(--amber)',text:soWhatText},
-    {icon:'🎯',label:'Action',color:'var(--green)',text:actionText},
-  ];
+  // Summary chips for slim bar
+  const revChip  = `<span style="color:${revPct>=100?'var(--green)':revPct>=80?'var(--amber)':'var(--red)'}">Revenue ${revPct}%</span>`;
+  const occChip  = `<span style="color:${occ>=occTgt?'var(--green)':'var(--amber)'}">Occ ${occ.toFixed?occ.toFixed(1):occ}%</span>`;
+  const memChip  = `<span style="color:var(--txt2)">${newMem} member baru</span>`;
+  const actionShort = actionParts[0]||'Semua metrik sehat';
 
   el.innerHTML=`
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
-      ${cards.map(c=>`
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;border-left:3px solid ${c.color}">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
-            <span style="font-size:14px">${c.icon}</span>
-            <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:${c.color}">${c.label}</span>
-          </div>
-          <p style="font-size:12px;color:var(--txt2);line-height:1.65;margin:0">${c.text}</p>
-        </div>`).join('')}
+    <div id="intel-card" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+      <!-- Slim bar — always visible -->
+      <div onclick="(function(){var d=document.getElementById('intel-detail');var ic=document.getElementById('intel-chevron');var open=d.style.display!=='none';d.style.display=open?'none':'block';ic.style.transform=open?'rotate(0deg)':'rotate(180deg)';})()" style="display:flex;align-items:center;gap:0;padding:11px 14px;cursor:pointer;gap:10px;user-select:none">
+        <span style="font-size:13px">🎯</span>
+        <span style="font-size:12px;font-weight:600;color:var(--txt);flex:1">${actionShort}</span>
+        <div style="display:flex;align-items:center;gap:12px;margin-right:10px">
+          <span style="font-size:11px">${revChip}</span>
+          <span style="font-size:11px;color:var(--border2)">·</span>
+          <span style="font-size:11px">${occChip}</span>
+          <span style="font-size:11px;color:var(--border2)">·</span>
+          <span style="font-size:11px">${memChip}</span>
+        </div>
+        <svg id="intel-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none" style="flex-shrink:0;color:var(--txt3);transition:transform .2s"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <!-- Expandable detail -->
+      <div id="intel-detail" style="display:none;border-top:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0">
+          ${[
+            {icon:'📊',label:'What',color:'var(--brand)',text:whatText},
+            {icon:'🔍',label:'Why',color:'#7C3AED',text:whyText},
+            {icon:'💡',label:'So What',color:'var(--amber)',text:soWhatText},
+            {icon:'🎯',label:'Action',color:'var(--green)',text:actionText},
+          ].map((c,i)=>`
+            <div style="padding:14px 16px;${i%2===0?'border-right:1px solid var(--border)':''};${i<2?'border-bottom:1px solid var(--border)':''}">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+                <span style="font-size:13px">${c.icon}</span>
+                <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:${c.color}">${c.label}</span>
+              </div>
+              <p style="font-size:12px;color:var(--txt2);line-height:1.65;margin:0">${c.text}</p>
+            </div>`).join('')}
+        </div>
+      </div>
     </div>`;
 }
 
