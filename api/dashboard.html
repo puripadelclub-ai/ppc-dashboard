@@ -14,11 +14,11 @@
   /* Brand */
   --brand:#034842;--brand-d:#022F2A;--brand-lt:rgba(3,72,66,.07);--brand-md:rgba(3,72,66,.14);
   /* Backgrounds */
-  --bg:#EFF1EF;--surface:#fff;--sb-bg:#022D27;
+  --bg:#F0EDE7;--surface:#fff;--sb-bg:#022D27;
   /* Borders & elevation */
-  --border:rgba(0,0,0,.06);--border-md:rgba(0,0,0,.10);
-  --shadow:0 1px 2px rgba(0,0,0,.04),0 2px 10px rgba(0,0,0,.05);
-  --shadow-md:0 2px 6px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.07);
+  --border:rgba(0,0,0,.07);--border-md:rgba(0,0,0,.12);
+  --shadow:0 1px 3px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.07);
+  --shadow-md:0 2px 8px rgba(0,0,0,.08),0 12px 32px rgba(0,0,0,.1);
   /* Text */
   --txt:#111827;--txt2:#4B5563;--txt3:#9CA3AF;--txt-muted:#9CA3AF;
   /* Semantic */
@@ -123,7 +123,8 @@ body{
 /* ── MAIN + TOPBAR ─────────────────────────────────────── */
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 #topbar{
-  background:var(--surface);border-bottom:1px solid var(--border);
+  background:linear-gradient(to bottom,#ffffff,#fdfcfa);
+  border-bottom:1px solid rgba(0,0,0,.09);
   padding:11px 24px;display:flex;align-items:center;gap:12px;
   box-shadow:0 1px 0 rgba(0,0,0,.04)
 }
@@ -174,13 +175,14 @@ body{
 /* ── CARDS ─────────────────────────────────────────────── */
 .card{
   background:var(--surface);border-radius:var(--r);
-  padding:18px 20px;box-shadow:var(--shadow);
-  transition:box-shadow .2s
+  padding:20px 22px;box-shadow:var(--shadow);
+  border:1px solid rgba(0,0,0,.055);
+  transition:box-shadow .2s,transform .2s
 }
-.card:hover{box-shadow:var(--shadow-md)}
+.card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
 .card-hd{
-  font-size:12.5px;font-weight:700;color:var(--txt);
-  margin-bottom:16px;letter-spacing:-.1px;
+  font-size:11px;font-weight:600;color:var(--txt2);
+  margin-bottom:14px;letter-spacing:.1px;
   display:flex;align-items:center;justify-content:space-between;gap:8px
 }
 .card-hd-lbl{display:flex;align-items:center;gap:7px}
@@ -197,10 +199,10 @@ body{
 .kpi:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
 .kpi.accent{border-top:3px solid var(--brand)}
 .kpi-lbl,.kpi-label{
-  font-size:10px;text-transform:uppercase;letter-spacing:.7px;
+  font-size:9.5px;text-transform:uppercase;letter-spacing:1px;
   color:var(--txt3);margin-bottom:9px;font-weight:700
 }
-.kpi-val{font-size:24px;font-weight:700;line-height:1.05;color:var(--txt);letter-spacing:-.5px}
+.kpi-val{font-size:26px;font-weight:800;line-height:1.05;color:var(--txt);letter-spacing:-.6px;font-variant-numeric:tabular-nums}
 .kpi.accent .kpi-val{color:var(--brand)}
 .kpi-d,.kpi-sub{font-size:11.5px;margin-top:6px;color:var(--txt3);line-height:1.4}
 /* Alias: kpi-card = kpi */
@@ -418,22 +420,34 @@ body{
 }
 #info-close:hover{background:var(--bg)}
 
-/* ── Sprint 4: Date Filter ──────────────────────────── */
+/* ── Date Filter ──────────────────────────────────────── */
 .df-btn{
-  padding:5px 13px;border:1px solid var(--border);border-radius:16px;
-  background:var(--surface);color:var(--txt2);font-size:11px;font-weight:500;
-  cursor:pointer;transition:all .15s;line-height:1.4;
+  padding:6px 14px;border:1.5px solid rgba(0,0,0,.1);border-radius:20px;
+  background:var(--surface);color:var(--txt2);font-size:11.5px;font-weight:500;
+  cursor:pointer;transition:all .18s cubic-bezier(0.23,1,0.32,1);line-height:1.4;
+  box-shadow:0 1px 3px rgba(0,0,0,.04);
 }
-.df-btn:hover{border-color:var(--brand);color:var(--brand)}
+.df-btn:hover{border-color:var(--brand);color:var(--brand);box-shadow:0 2px 6px rgba(3,72,66,.12)}
 .df-btn.active{
   background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600;
+  box-shadow:0 2px 8px rgba(3,72,66,.25);
 }
 
-/* ── Sprint 4: KPI Progress Bar ─────────────────────── */
+/* ── KPI Progress Bar ────────────────────────────────── */
 .kpi-prog-bar{
-  height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin:7px 0 4px;
+  height:8px;background:#EAE6DF;border-radius:4px;overflow:hidden;margin:8px 0 5px;
 }
-.kpi-prog-fill{height:100%;border-radius:3px;transition:width .45s ease}
+.kpi-prog-fill{height:100%;border-radius:4px;transition:width .55s cubic-bezier(0.23,1,0.32,1)}
+
+/* ── Section Eyebrow ─────────────────────────────────── */
+.section-eyebrow{
+  font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--txt3);font-weight:700;margin-bottom:11px;margin-top:6px;
+  display:flex;align-items:center;gap:10px;
+}
+.section-eyebrow::after{
+  content:'';flex:1;height:1px;background:var(--border);
+}
 
 /* ── Sprint 4: Heatmap ───────────────────────────────── */
 .hm-cell{
@@ -536,14 +550,14 @@ body{
     <!-- HOME -->
     <div class="page" id="page-home">
       <!-- Greeting -->
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px">
         <div>
-          <h2 id="home-greeting" style="font-size:19px;font-weight:700">Selamat Pagi, PPC 👋</h2>
-          <p id="home-date" style="font-size:12px;color:var(--txt2);margin-top:3px"></p>
+          <h2 id="home-greeting" style="font-size:21px;font-weight:800;letter-spacing:-.4px">Selamat Pagi, PPC 👋</h2>
+          <p id="home-date" style="font-size:12px;color:var(--txt3);margin-top:4px;letter-spacing:.1px"></p>
         </div>
-        <div id="home-score-chip" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 13px;cursor:pointer">
+        <div id="home-score-chip" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1.5px solid rgba(0,0,0,.09);border-radius:20px;padding:6px 14px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.06)">
           <span id="home-score-dot" style="width:8px;height:8px;border-radius:50%;background:var(--txt3);display:inline-block;flex-shrink:0"></span>
-          <span style="font-size:12px;color:var(--txt2)">Skor</span>
+          <span style="font-size:11.5px;color:var(--txt2)">Skor</span>
           <strong id="home-score-val" style="font-size:14px;color:var(--txt)">—</strong>
           <span style="font-size:11px;color:var(--txt3)">/100</span>
         </div>
@@ -559,6 +573,7 @@ body{
       </div>
 
       <!-- Row 0: KPI Target vs Actual (Supabase-backed) -->
+      <div class="section-eyebrow">Pencapaian</div>
       <div id="kpi-progress-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
         <div class="card" id="kpi-prog-revenue" style="border-left:3px solid var(--brand)">
           <div class="kpi-lbl" style="margin-bottom:4px">Revenue <span class="badge-green" style="font-size:9px;padding:1px 5px;border-radius:4px;margin-left:2px">vs Target</span></div>
@@ -606,6 +621,7 @@ body{
         </div>
       </div>
 
+      <div class="section-eyebrow">Akuisisi</div>
       <!-- Row 2: Conversion Funnel + Revenue per Kategori -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
         <div class="card">
@@ -627,6 +643,7 @@ body{
         </div>
       </div>
 
+      <div class="section-eyebrow">Trend Revenue</div>
       <!-- Row 3: Revenue trend (full width) -->
       <div style="margin-bottom:12px">
         <div class="card">
@@ -638,6 +655,7 @@ body{
         </div>
       </div>
 
+      <div class="section-eyebrow">Operasional & Pasar</div>
       <!-- Row 3: Ops hari ini + Posisi pasar + Member health -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
         <div class="card">
@@ -1434,8 +1452,8 @@ function renderKPIProgress() {
     el.style.borderLeft = `3px solid ${borderCol}`;
     el.innerHTML = `
       <div class="kpi-lbl" style="margin-bottom:2px">${label} <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:${pct>=100?'var(--green-bg)':'var(--amber-bg)'};color:${pctColor}">vs Target</span>${II(infoKey)}</div>
-      <div style="font-size:22px;font-weight:700;color:var(--txt);letter-spacing:-.3px;margin-top:4px">${fmtFn(kpi.value)}</div>
-      <div style="font-size:10px;color:var(--txt3);margin-top:2px">Target: <strong>${fmtFn(kpi.target)}</strong>${unit ? ' ' + unit : ''}${vsHtml}</div>
+      <div style="font-size:26px;font-weight:800;color:var(--txt);letter-spacing:-.5px;margin-top:4px;font-variant-numeric:tabular-nums">${fmtFn(kpi.value)}</div>
+      <div style="font-size:10px;color:var(--txt3);margin-top:3px">Target: <strong>${fmtFn(kpi.target)}</strong>${unit ? ' ' + unit : ''}${vsHtml}</div>
       <div class="kpi-prog-bar"><div class="kpi-prog-fill" style="width:${pct}%;background:${barColor}"></div></div>
       <div style="font-size:10px;color:${pctColor};font-weight:600">${kpi.pct_of_target}% dari target</div>
       ${subId ? `<div id="${subId}"></div>` : ''}
