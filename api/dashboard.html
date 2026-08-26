@@ -658,13 +658,6 @@ body{
           <h2 id="home-greeting" style="font-size:21px;font-weight:800;letter-spacing:-.4px">Selamat Pagi, PPC 👋</h2>
           <p id="home-date" style="font-size:12px;color:var(--txt3);margin-top:4px;letter-spacing:.1px"></p>
         </div>
-        <div id="home-score-chip" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1.5px solid rgba(0,0,0,.09);border-radius:20px;padding:6px 14px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.06)">
-          <span id="home-score-dot" style="width:8px;height:8px;border-radius:50%;background:var(--txt3);display:inline-block;flex-shrink:0"></span>
-          <span style="font-size:11.5px;color:var(--txt2)">Skor</span>
-          <strong id="home-score-val" style="font-size:14px;color:var(--txt)">—</strong>
-          <span style="font-size:11px;color:var(--txt3)">/100</span>
-          <span id="home-alert-badge" style="display:none;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:2px"></span>
-        </div>
       </div>
 
       <!-- Date Filter Tabs -->
@@ -677,6 +670,9 @@ body{
       </div>
 
       <!-- Row 0: KPI Target vs Actual (Supabase-backed) -->
+      <!-- Alert Panel -->
+      <div id="alert-panel" style="display:none;margin-bottom:18px"></div>
+
       <div class="section-eyebrow">Pencapaian</div>
       <div id="kpi-progress-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
         <div class="card" id="kpi-prog-revenue" style="border-left:3px solid var(--brand)">
@@ -1843,69 +1839,6 @@ function renderHome() {
     (hour<11?'Selamat Pagi':hour<15?'Selamat Siang':'Selamat Sore')+', PPC 👋';
   document.getElementById('home-date').textContent =
     days[today.getDay()]+', '+today.getDate()+' '+months[today.getMonth()]+' '+today.getFullYear();
-
-  // Score chip — traffic light dot
-  const score = calcScore(s);
-  const scoreColor = score>=70?'var(--green)':score>=40?'var(--amber)':'var(--red)';
-  document.getElementById('home-score-val').textContent = score;
-  document.getElementById('home-score-val').style.color = scoreColor;
-  const scoreDot = document.getElementById('home-score-dot');
-  if (scoreDot) scoreDot.style.background = scoreColor;
-
-  // Score chip: click → show breakdown popup
-  const scoreChip = document.getElementById('home-score-chip');
-  scoreChip.style.cursor = 'pointer';
-  scoreChip.onclick = function(e) {
-    e.stopPropagation();
-    const existing = document.getElementById('score-popup');
-    if(existing) { existing.remove(); return; }
-    const roas = getBlendedRoas();
-    const roasPt = roas>=3?30:roas>=2?20:roas>=1?10:0;
-    const ret = sf(s.retention_rate);
-    const retPt = ret>=70?25:ret>=50?15:ret>=30?8:ret>=15?3:0;
-    const revM=si(s.revenue_this_month), revL=si(s.revenue_last_month);
-    let momPct=null, momPt=0;
-    if(revL>0){ momPct=(revM-revL)/revL*100; momPt=momPct>=10?25:momPct>=0?15:5; } else momPt=10;
-    const spend=getCurrentMonthAdSpend()||si(s.total_ads_budget);
-    const cir=revM>0&&spend>0?(spend/revM*100):null;
-    const cirPt = cir!==null?(cir<20?20:cir<40?12:5):(spend===0?20:0);
-    const row=(lbl,sub,pt,max,page,infoKey)=>`
-      <div onclick="if(event.target.closest('.info-icon'))return;const p=document.getElementById('score-popup');if(p)p.remove();nav('${page||'home'}')"
-        style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;margin:0 -4px;padding-left:4px;padding-right:4px"
-        onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
-        <div style="display:flex;align-items:flex-start;gap:4px">
-          <div>
-            <div style="font-size:12px;color:var(--txt);font-weight:500">${lbl}</div>
-            <div style="font-size:10px;color:var(--txt3);margin-top:1px">${sub}</div>
-          </div>
-          ${infoKey?ii(infoKey):''}
-        </div>
-        <div style="text-align:right;flex-shrink:0;margin-left:12px">
-          <span style="font-weight:700;font-size:13px;color:${pt>=max*.8?'var(--green)':pt>=max*.4?'var(--amber)':'var(--red)'}">${pt}</span>
-          <span style="color:var(--txt3);font-size:11px">/${max}pt</span>
-        </div>
-      </div>`;
-    const pop = document.createElement('div');
-    pop.id = 'score-popup';
-    pop.style.cssText = 'position:absolute;right:0;top:calc(100% + 8px);z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow-md);min-width:280px;font-family:inherit';
-    pop.innerHTML = `
-      <div style="font-size:13px;font-weight:700;color:var(--txt);margin-bottom:4px">Business Score Breakdown</div>
-      <div style="font-size:10px;color:var(--txt3);margin-bottom:10px">Klik baris untuk ke halaman terkait · <i class="info-icon" style="cursor:default;position:static;opacity:.7">i</i> untuk tips naikan skor</div>
-      ${row('ROAS Meta Ads', roas>0?`${roas.toFixed(1)}x (blended)`:'Data tidak tersedia', roasPt, 30, 'marketing', 'score-roas')}
-      ${row('Retention Rate', ret>0?`${ret.toFixed(1)}%`:'Data tidak tersedia', retPt, 25, 'members', 'score-retention')}
-      ${row('Revenue MoM', momPct!==null?`${momPct>=0?'+':''}${momPct.toFixed(1)}%`:'Bulan lalu tidak ada', momPt, 25, 'home', 'score-revenue-mom')}
-      ${row('Efisiensi Iklan (CIR)', cir!==null?`${cir.toFixed(1)}% spend dari revenue`:(spend===0?'Tidak ada iklan bulan ini':'Data tidak tersedia'), cirPt, 20, 'marketing', 'score-cir')}
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:2px solid var(--border)">
-        <span style="font-size:12px;color:var(--txt2)">Total Skor</span>
-        <span style="font-size:20px;font-weight:800;color:${score>=70?'var(--green)':score>=40?'var(--amber)':'var(--red)'}">${score}<span style="font-size:13px;font-weight:500;color:var(--txt3)">/100</span></span>
-      </div>`;
-    scoreChip.style.position = 'relative';
-    scoreChip.appendChild(pop);
-    setTimeout(()=>document.addEventListener('click',function h(){
-      const p=document.getElementById('score-popup'); if(p)p.remove();
-      document.removeEventListener('click',h);
-    }),0);
-  };
 
   // ── Row 1: Financial KPIs (ESB) ─────────────────────────────────────
   const rev  = si(s.revenue_this_month);
@@ -3752,19 +3685,6 @@ function getBlendedRoas() {
   return spend>0&&rev>0 ? rev/spend : 0;
 }
 
-function calcScore(s) {
-  let score = 0;
-  const roas = getBlendedRoas();
-  if(roas>=3) score+=30; else if(roas>=2) score+=20; else if(roas>=1) score+=10;
-  const ret = sf(s.retention_rate);
-  if(ret>=70) score+=25; else if(ret>=50) score+=15; else if(ret>=30) score+=8; else if(ret>=15) score+=3;
-  const revM = si(s.revenue_this_month), revL = si(s.revenue_last_month);
-  if(revL>0){const mom=(revM-revL)/revL; if(mom>=0.1)score+=25; else if(mom>=0)score+=15; else score+=5;} else score+=10;
-  const spend = getCurrentMonthAdSpend()||si(s.total_ads_budget), rev = si(s.revenue_this_month);
-  if(rev>0&&spend>0){const cir=spend/rev; if(cir<0.2)score+=20; else if(cir<0.4)score+=12; else score+=5;}
-  else if(spend===0) score+=20; // tidak ada iklan = efisiensi sempurna (0% CIR)
-  return Math.min(score,100);
-}
 
 // ── CHART CLEANUP ─────────────────────────────────
 function destroyChart(id) {
@@ -3905,17 +3825,39 @@ async function evaluateAlerts() {
   } catch(e) {}
 
   ACTIVE_ALERTS = alerts;
-  renderAlertBadge();
+  renderAlertPanel();
   renderNavBadges();
 }
 
-function renderAlertBadge() {
-  const badge = document.getElementById('home-alert-badge');
-  if (!badge) return;
-  if (!ACTIVE_ALERTS.length) { badge.style.display='none'; return; }
-  const hasCrit = ACTIVE_ALERTS.some(a=>a.sev==='crit');
-  badge.style.cssText = `display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:2px;background:${hasCrit?'rgba(220,38,38,.1)':'rgba(180,83,9,.1)'};color:${hasCrit?'var(--red)':'var(--amber)'}`;
-  badge.textContent = `⚠ ${ACTIVE_ALERTS.length}`;
+function renderAlertPanel() {
+  const panel = document.getElementById('alert-panel');
+  if (!panel) return;
+  if (!ACTIVE_ALERTS.length) { panel.style.display='none'; return; }
+  const crits  = ACTIVE_ALERTS.filter(a=>a.sev==='crit');
+  const color  = crits.length ? 'var(--red)' : 'var(--amber)';
+  const bg     = crits.length ? 'rgba(220,38,38,.05)' : 'rgba(180,83,9,.05)';
+  const bdr    = crits.length ? 'rgba(220,38,38,.14)' : 'rgba(180,83,9,.13)';
+  const label  = [crits.length?`${crits.length} Kritis`:'', ACTIVE_ALERTS.length-crits.length>0?`${ACTIVE_ALERTS.length-crits.length} Perhatian`:''].filter(Boolean).join(' · ');
+  panel.style.display='';
+  panel.innerHTML=`
+    <div style="background:${bg};border:1px solid ${bdr};border-radius:var(--r);padding:14px 18px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0"></span>
+        <span style="font-size:10.5px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.8px">${label}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        ${ACTIVE_ALERTS.map(a=>`
+          <div class="alert-item" onclick="nav('${a.page}')"
+            style="border:1px solid ${a.sev==='crit'?'rgba(220,38,38,.11)':'rgba(180,83,9,.10)'}">
+            <span style="font-size:14px;flex-shrink:0;margin-top:1px">${a.icon}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:700;color:${a.sev==='crit'?'var(--red)':'var(--amber)'};margin-bottom:1px">${a.title}</div>
+              <div style="font-size:10.5px;color:var(--txt3)">${a.msg}</div>
+            </div>
+            <span style="font-size:8.5px;color:var(--txt3);background:var(--bg);border-radius:4px;padding:2px 6px;text-transform:uppercase;letter-spacing:.3px;flex-shrink:0">${a.page}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
 }
 
 function renderNavBadges() {
@@ -4045,8 +3987,9 @@ function renderDrawerMembers(el) {
 
 // ── Make KPI progress cards drillable ─────────────
 // Revenue tidak di-drill — sudah ada breakdown per kategori di bawahnya
+// Members tidak di-drill — field acquisition_source kosong di Supabase
 function attachDrillHandlers() {
-  const map = {'kpi-prog-occ':'occ','kpi-prog-mem':'members'};
+  const map = {'kpi-prog-occ':'occ'};
   Object.entries(map).forEach(([id,type])=>{
     const el = document.getElementById(id);
     if (!el) return;
