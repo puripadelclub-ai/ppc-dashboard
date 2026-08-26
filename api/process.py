@@ -837,18 +837,33 @@ def supabase_data():
         scaled_mem = int(TARGETS["new_members"] * scale)
 
         def _sb(table, cols, date_col, d0, d1):
-            """Pull rows from Supabase via PostgREST with date range filter."""
-            params = [
-                ("select", cols),
-                (date_col, f"gte.{d0}"),
-                (date_col, f"lte.{d1}"),
-                ("limit",  "10000"),
-            ]
-            r = _rh.get(
-                f"{_sb_url}/rest/v1/{table}",
-                headers=_hd, params=params, timeout=15,
-            )
-            return r.json() if r.status_code == 200 else []
+            """
+            Pull all rows from Supabase via paginated PostgREST calls.
+            Supabase caps at 1000 rows/request — pagination prevents data truncation.
+            """
+            PAGE = 1000
+            all_rows: list = []
+            for page_num in range(20):  # safety cap: max 20,000 rows
+                params = [
+                    ("select", cols),
+                    (date_col, f"gte.{d0}"),
+                    (date_col, f"lte.{d1}"),
+                    ("limit",  str(PAGE)),
+                    ("offset", str(page_num * PAGE)),
+                ]
+                r = _rh.get(
+                    f"{_sb_url}/rest/v1/{table}",
+                    headers=_hd, params=params, timeout=15,
+                )
+                if r.status_code != 200:
+                    break
+                page = r.json()
+                if not isinstance(page, list) or not page:
+                    break
+                all_rows.extend(page)
+                if len(page) < PAGE:
+                    break  # last page reached
+            return all_rows
 
         def _sf(v, d=0.0):
             try:
