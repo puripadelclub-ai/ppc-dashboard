@@ -3509,8 +3509,8 @@ function openMember360(name) {
         <span style="font-size:12px;font-weight:700;color:${segCol}">${seg}</span>
       </div>
       <div class="drawer-kpi-row">
-        <div class="drawer-kpi"><div class="drawer-kpi-lbl">Total Spending</div><div class="drawer-kpi-val">${fIDR(sf(mem.total_spending||0))}</div></div>
-        <div class="drawer-kpi"><div class="drawer-kpi-lbl">Terakhir Visit</div><div class="drawer-kpi-val" style="font-size:14px">${mem.last_visit||'—'}</div></div>
+        <div class="drawer-kpi"><div class="drawer-kpi-lbl">Total Spending</div><div class="drawer-kpi-val" id="m360-spending">${mem.total_spending?fIDR(sf(mem.total_spending)):'—'}</div></div>
+        <div class="drawer-kpi"><div class="drawer-kpi-lbl">Terakhir Visit</div><div class="drawer-kpi-val" id="m360-lastvisit" style="font-size:14px">${mem.last_visit||'—'}</div></div>
       </div>
       ${mem.Recommended_Action?`<div style="font-size:10.5px;color:var(--txt3);padding:8px 10px;background:var(--bg);border-radius:6px;margin-top:8px">💡 ${mem.Recommended_Action}</div>`:''}
     </div>
@@ -3565,6 +3565,11 @@ function openMember360(name) {
     if (eTx) { txnEl.innerHTML=`<div style="color:var(--txt3);font-size:11px">Error: ${eTx.message}</div>`; return; }
     if (!txns?.length) { txnEl.innerHTML='<div style="color:var(--txt3);font-size:11px">Tidak ada transaksi ditemukan.</div>'; return; }
     const total = txns.reduce((s,r)=>s+sf(r.gross_amount||0),0);
+    // Update KPI cards with real Supabase data
+    const spEl = document.getElementById('m360-spending');
+    const lvEl = document.getElementById('m360-lastvisit');
+    if (spEl && total > 0) spEl.textContent = fIDR(total);
+    if (lvEl && txns[0]?.transaction_date) lvEl.textContent = txns[0].transaction_date.slice(0,10);
     txnEl.innerHTML=`
       <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:8px">${txns.length} transaksi terakhir · Total ${fIDR(total)}</div>
       ${txns.map(r=>`
