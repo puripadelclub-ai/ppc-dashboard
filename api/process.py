@@ -133,6 +133,77 @@ def sync_programs_coaching():
         return jsonify({"status": "error", "message": str(e), "trace": tb}), 500
 
 
+@app.route("/api/debug-coaching", methods=["GET"])
+def debug_coaching():
+    """Debug endpoint: lihat tab apa saja yang ditemukan di coaching sheet."""
+    import json as _json
+    import os as _os
+    import re as _re
+    import gspread as _gs
+    from google.oauth2.service_account import Credentials as _Creds
+
+    _BULAN = {
+        'JANUARI':1,'FEBRUARI':2,'MARET':3,'APRIL':4,
+        'MEI':5,'JUNI':6,'JULI':7,'AGUSTUS':8,
+        'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DESEMBER':12,
+    }
+
+    try:
+        creds_json = _os.environ.get("GOOGLE_CREDENTIALS")
+        info = _json.loads(creds_json)
+        creds = _Creds.from_service_account_info(info, scopes=[
+            "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/spreadsheets",
+        ])
+        gc = _gs.authorize(creds)
+        SHEET_ID = _os.environ.get("COACHING_SHEET_ID", "1dtmKhpbAeVu-YX9Lx1ayU4OPmdyYcRMg4IZGPBgd0iA")
+        sh = gc.open_by_key(SHEET_ID)
+        worksheets = sh.worksheets()
+
+        result = []
+        for ws in worksheets:
+            title = ws.title.strip()
+            title_up = title.upper()
+            # Check month match
+            month_match = None
+            for name, num in _BULAN.items():
+                if title_up == name or name in title_up:
+                    month_match = num
+                    break
+            # Read first 3 rows
+            try:
+                vals = ws.get_all_values()
+                first_rows = [r[:6] for r in vals[:5]]
+                # Find year
+                year_found = None
+                for row in vals[:5]:
+                    for cell in row:
+                        m = _re.search(r'(20\d{2})', str(cell))
+                        if m:
+                            year_found = int(m.group(1))
+                            break
+                    if year_found:
+                        break
+                row_count = len(vals)
+            except Exception as e:
+                first_rows = [f"ERROR: {e}"]
+                row_count = -1
+                year_found = None
+
+            result.append({
+                "tab": title,
+                "title_up": title_up,
+                "month_match": month_match,
+                "year_found": year_found,
+                "total_rows_in_sheet": row_count,
+                "first_5_rows_col_A_to_F": first_rows,
+            })
+
+        return jsonify({"status": "ok", "tabs": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
 @app.route("/api/fetch-ads", methods=["GET", "POST"])
 def fetch_ads():
     """
