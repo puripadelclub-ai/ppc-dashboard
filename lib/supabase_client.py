@@ -215,3 +215,8 @@ def upsert_programs(rows: list[dict]) -> dict:
 
 # Backward-compat alias
 upsert_court_passes = upsert_programs
+
+
+def upsert_coaching_sessions(rows: list[dict]) -> dict:
+    """Upsert coaching session rows. Dedup key: id (sha256 of date+member+time)."""
+    return upsert("coaching_sessions", rows, on_conflict="id")

@@ -1696,6 +1696,31 @@ def run_pipeline():
     except Exception as e_cp:
         log.append(f"  ⚠️ Programs sync (non-fatal): {e_cp}")
 
+    # ── Coaching Log sheet → Supabase coaching_sessions ───────────────────────
+    log.append("Syncing Coaching Log sheet to Supabase coaching_sessions table...")
+    try:
+        from coaching_client import read_and_parse_coaching_sessions
+        from supabase_client import upsert_coaching_sessions, log_start as _ls_cs, log_complete as _lc_cs
+
+        log_id_cs = _ls_cs("COACHING_SHEET", "sync_coaching_sessions")
+        cs_rows = read_and_parse_coaching_sessions()
+        cs_total = 0
+        BATCH = 200
+        for i in range(0, len(cs_rows), BATCH):
+            res_cs = upsert_coaching_sessions(cs_rows[i:i + BATCH])
+            cs_total += res_cs.get("inserted", 0)
+            if res_cs.get("error"):
+                log.append(f"  ⚠️ Coaching batch error: {res_cs['error']}")
+                break
+
+        _lc_cs(log_id_cs, "success", {"upserted": cs_total})
+        log.append(
+            f"  → Supabase coaching_sessions: {cs_total} upserted "
+            f"({len(cs_rows)} parsed from sheet)"
+        )
+    except Exception as e_cs:
+        log.append(f"  ⚠️ Coaching sync (non-fatal): {e_cs}")
+
     log.append("✅ All done!")
     return log
 

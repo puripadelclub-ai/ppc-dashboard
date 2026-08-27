@@ -1059,6 +1059,23 @@ body{
         <div id="mem-court-pass-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
       </div>
 
+      <!-- Coaching Sessions -->
+      <div class="section-eyebrow">Coaching Bulan Ini</div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-hd">
+          <span class="card-hd-lbl">Coaching Overview</span>
+          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
+        </div>
+        <div id="coaching-stats-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+      </div>
+      <div class="card" style="margin-bottom:12px" id="coaching-bundling-card">
+        <div class="card-hd">
+          <span class="card-hd-lbl">Active Bundling</span>
+          <span id="coaching-bundling-badge" style="font-size:9px;background:rgba(245,158,11,.12);color:#B45309;padding:2px 7px;border-radius:4px;font-weight:600;margin-left:auto"></span>
+        </div>
+        <div id="coaching-bundling-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+      </div>
+
       <!-- Revenue share bar -->
       <div class="section-eyebrow">Komposisi Revenue</div>
       <div class="card" style="margin-bottom:1rem">
@@ -3815,8 +3832,118 @@ function renderRevenue() {
   renderSBCategoryBreakdown();
 }
 
+async function renderCoachingSection() {
+  const statsEl    = document.getElementById('coaching-stats-body');
+  const bundlingEl = document.getElementById('coaching-bundling-body');
+  const badgeEl    = document.getElementById('coaching-bundling-badge');
+  if (!statsEl) return;
+
+  // ── Month range (current month) ──
+  const now   = new Date();
+  const y     = now.getFullYear();
+  const m     = String(now.getMonth() + 1).padStart(2, '0');
+  const from  = `${y}-${m}-01`;
+  const to    = `${y}-${m}-31`;
+
+  try {
+    // All sessions this month
+    const {data: sessions} = await _SB.from('coaching_sessions')
+      .select('member_name,package_type,persons,sessions_remaining,status,session_date')
+      .gte('session_date', from).lte('session_date', to);
+
+    if (!sessions || sessions.length === 0) {
+      statsEl.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:11px">Belum ada data coaching bulan ini. Jalankan pipeline terlebih dahulu.</div>';
+      bundlingEl.innerHTML = '';
+      return;
+    }
+
+    // Stats
+    const total    = sessions.length;
+    const uniqMem  = new Set(sessions.map(s => s.member_name)).size;
+    const pkgCount = {};
+    sessions.forEach(s => { pkgCount[s.package_type] = (pkgCount[s.package_type]||0) + 1; });
+
+    const PKG_LABEL = {
+      FREE_COACHING:'Free Coaching', FREE_1X:'Free 1x',
+      BUNDLING_4X:'Bundling 4x', BUNDLING_6X:'Bundling 6x', BUNDLING:'Bundling',
+      COACHING_KIDS:'Coaching Kids', PRIVATE:'Private',
+      ADDON_FREE:'Add-on Free', ADDON_PLAYER:'Add-on Player',
+      TRIAL:'Trial', OTHER:'Lainnya',
+    };
+    const PKG_COLOR = {
+      FREE_COACHING:'var(--txt3)', FREE_1X:'var(--txt3)',
+      BUNDLING_4X:'var(--brand)', BUNDLING_6X:'var(--brand)', BUNDLING:'var(--brand)',
+      COACHING_KIDS:'#8b5cf6', PRIVATE:'#f59e0b',
+      ADDON_FREE:'var(--txt3)', ADDON_PLAYER:'var(--txt3)',
+      TRIAL:'#3b82f6', OTHER:'var(--txt3)',
+    };
+
+    const pkgRows = Object.entries(pkgCount)
+      .sort((a,b) => b[1]-a[1])
+      .map(([k,v]) =>
+        `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:11px;color:${PKG_COLOR[k]||'var(--txt3)'}">${PKG_LABEL[k]||k}</span>
+          <span style="font-size:12px;font-weight:700;color:var(--txt)">${v} sesi</span>
+        </div>`
+      ).join('');
+
+    statsEl.innerHTML = `
+      <div style="display:flex;gap:1.5rem;padding:.75rem 0 1rem;border-bottom:1px solid var(--border);margin-bottom:.75rem">
+        <div style="text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--brand)">${total}</div>
+          <div style="font-size:10px;color:var(--txt3);margin-top:2px">Total Sesi</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--txt)">${uniqMem}</div>
+          <div style="font-size:10px;color:var(--txt3);margin-top:2px">Member Unik</div>
+        </div>
+      </div>
+      ${pkgRows}`;
+
+    // ── Active bundling (all time, still active) ──
+    const {data: bundling} = await _SB.from('coaching_sessions')
+      .select('member_name,package_type,sessions_remaining,session_date')
+      .in('package_type', ['BUNDLING_4X','BUNDLING_6X','BUNDLING'])
+      .eq('status', 'active')
+      .order('sessions_remaining', {ascending: true});
+
+    // Keep latest record per member (most recent session = most up-to-date sisa)
+    const latestMap = {};
+    (bundling||[]).forEach(s => {
+      if (!latestMap[s.member_name] || s.session_date > latestMap[s.member_name].session_date) {
+        latestMap[s.member_name] = s;
+      }
+    });
+    const active = Object.values(latestMap).sort((a,b) => (a.sessions_remaining||99) - (b.sessions_remaining||99));
+
+    if (badgeEl) badgeEl.textContent = active.length ? `${active.length} aktif` : '';
+
+    if (!active.length) {
+      bundlingEl.innerHTML = '<div style="padding:.75rem;font-size:11px;color:var(--txt3)">Tidak ada bundling aktif.</div>';
+    } else {
+      bundlingEl.innerHTML = active.map(s => {
+        const sisa   = s.sessions_remaining;
+        const urgent = sisa !== null && sisa <= 1;
+        const warn   = sisa !== null && sisa <= 2 && !urgent;
+        const col    = urgent ? 'var(--red,#ef4444)' : warn ? 'var(--amber,#b45309)' : 'var(--green,#059669)';
+        const lbl    = PKG_LABEL[s.package_type] || s.package_type;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--txt)">${s.member_name}</div>
+            <div style="font-size:10px;color:var(--txt3)">${lbl}</div>
+          </div>
+          <div style="font-size:13px;font-weight:800;color:${col}">${sisa !== null ? 'Sisa '+sisa+'x' : '—'}</div>
+        </div>`;
+      }).join('');
+    }
+  } catch(e) {
+    statsEl.innerHTML = `<div style="padding:1rem;font-size:11px;color:var(--red,#ef4444)">Error: ${e.message}</div>`;
+  }
+}
+
 function renderPrograms() {
   renderCourtPassSummary();
+  renderCoachingSection();
   const prods = D.product_detail || [];
   const fmtRp  = v => 'Rp' + (Number(v)||0).toLocaleString('id-ID');
   const fmtJt  = v => { const n=Number(v)||0; return n>=1e9?'Rp'+(n/1e9).toFixed(1)+'M':n>=1e6?'Rp'+(n/1e6).toFixed(0)+'jt':fmtRp(n); };
