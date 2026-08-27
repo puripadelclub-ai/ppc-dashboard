@@ -946,6 +946,15 @@ body{
         </div>
       </div>
 
+      <div class="section-eyebrow">Court Pass Aktif</div>
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-hd-lbl">Court Pass Aktif</span>
+          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
+        </div>
+        <div id="mem-court-pass-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+      </div>
+
       <div class="section-eyebrow">Preferensi & Pembelian</div>
       <div class="two-col">
         <div class="card">
@@ -3123,6 +3132,49 @@ function renderWeeklyAdsTable(weekKey) {
 }
 
 // ── MEMBERS ───────────────────────────────────────
+async function renderCourtPassSummary() {
+  const el = document.getElementById('mem-court-pass-body');
+  if (!el) return;
+  try {
+    const today = todayLocal();
+    const {data:passes, error} = await _SB.from('court_passes')
+      .select('member_name,package_type,hours_total,hours_remaining,status,expiry_date')
+      .eq('status','active')
+      .order('expiry_date');
+    if (error || !passes?.length) {
+      el.innerHTML='<span style="font-size:11px;color:var(--txt3)">Tidak ada court pass aktif.</span>';
+      return;
+    }
+    const pkgLabel = t => (t||'').replace(/_/g,' ').replace('COURT PASS','Pass');
+    const totalHoursLeft = passes.reduce((s,p)=>s+(p.hours_remaining||0),0);
+    const expSoon = passes.filter(p=>p.expiry_date && p.expiry_date<=new Date(Date.now()+14*864e5).toISOString().slice(0,10));
+
+    el.innerHTML = `
+      <div style="display:flex;gap:16px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+        <div><div style="font-size:18px;font-weight:800;color:var(--txt)">${passes.length}</div><div style="font-size:10px;color:var(--txt3)">Pass Aktif</div></div>
+        <div><div style="font-size:18px;font-weight:800;color:var(--green)">${totalHoursLeft}h</div><div style="font-size:10px;color:var(--txt3)">Total Sisa Jam</div></div>
+        <div><div style="font-size:18px;font-weight:800;color:${expSoon.length?'var(--amber)':'var(--txt)'}">${expSoon.length}</div><div style="font-size:10px;color:var(--txt3)">Expired ≤14 hari</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
+        ${passes.map(p=>{
+          const pct = p.hours_total>0 ? Math.round((p.hours_remaining||0)/p.hours_total*100) : null;
+          const isExpSoon = p.expiry_date && p.expiry_date<=new Date(Date.now()+14*864e5).toISOString().slice(0,10);
+          const barCol = isExpSoon ? 'var(--amber)' : 'var(--green)';
+          return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;cursor:pointer" onclick="openMember360('${p.member_name.replace(/'/g,"\\'")}')">
+            <div style="font-size:12px;font-weight:600;color:var(--txt);margin-bottom:2px">${p.member_name}</div>
+            <div style="font-size:10px;color:var(--txt3);margin-bottom:6px">${pkgLabel(p.package_type)}${p.expiry_date?` · Exp ${p.expiry_date}`:''}</div>
+            ${pct!=null?`<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:3px">
+              <div style="height:100%;background:${barCol};width:${Math.min(100,100-pct)}%;border-radius:2px"></div>
+            </div>
+            <div style="font-size:10px;color:${barCol};font-weight:600">Sisa ${p.hours_remaining||0}/${p.hours_total}h</div>`:''}
+          </div>`;
+        }).join('')}
+      </div>`;
+  } catch(e) {
+    el.innerHTML=`<span style="font-size:11px;color:var(--txt3)">Error: ${e.message}</span>`;
+  }
+}
+
 function renderMembers() {
   const s = D.summary||{};
   const rfmSegs = D.rfm_segments||[];
@@ -3268,6 +3320,7 @@ function renderMembers() {
 
   memberPage = 0;
   renderMemberTable();
+  renderCourtPassSummary();
 }
 
 // Map ESB category string to display label (client-side mirror of server map_esb_category)
@@ -3404,38 +3457,68 @@ function openMember360(name) {
       </div>
       ${mem.Recommended_Action?`<div style="font-size:10.5px;color:var(--txt3);padding:8px 10px;background:var(--bg);border-radius:6px;margin-top:8px">💡 ${mem.Recommended_Action}</div>`:''}
     </div>
-    <div style="font-size:10.5px;color:var(--txt3);margin-bottom:8px">Memuat riwayat transaksi...</div>
+    <div style="font-size:10.5px;color:var(--txt3);margin-bottom:8px">Memuat data...</div>
+    <div id="drawer-360-cp"></div>
     <div id="drawer-360-txn"></div>`;
 
-  // Query Supabase for transactions (gross_amount = kolom di Supabase, bukan total_price)
-  _SB.from('transactions')
-    .select('transaction_date,product_name,gross_amount,payment_method')
-    .ilike('customer_name', `%${name}%`)
-    .order('transaction_date', {ascending:false})
-    .limit(20)
-    .then(({data,error})=>{
-      const txnEl = document.getElementById('drawer-360-txn');
-      if (!txnEl) return;
-      if (error) {
-        txnEl.innerHTML=`<div style="color:var(--txt3);font-size:11px">Error: ${error.message}</div>`;
-        return;
+  // Parallel: transactions + court passes
+  Promise.all([
+    _SB.from('transactions')
+      .select('transaction_date,product_name,gross_amount,payment_method')
+      .ilike('customer_name',`%${name}%`)
+      .order('transaction_date',{ascending:false}).limit(20),
+    _SB.from('court_passes')
+      .select('package_type,package_raw,hours_total,hours_remaining,status,expiry_date,purchase_date')
+      .ilike('member_name',`%${name}%`)
+      .order('purchase_date',{ascending:false}).limit(5)
+  ]).then(([{data:txns,error:eTx},{data:passes,error:eCp}])=>{
+    // ── Court Pass section ──────────────────────────────
+    const cpEl = document.getElementById('drawer-360-cp');
+    if (cpEl) {
+      if (passes?.length) {
+        const pkgLabel = t => (t||'').replace(/_/g,' ').replace('COURT PASS','Pass');
+        const statusCol = {active:'var(--green)',habis:'var(--txt3)',hangus:'var(--red)'};
+        cpEl.innerHTML = `
+          <div style="font-size:10.5px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🎾 Court Pass</div>
+          ${passes.map(p=>{
+            const pct = p.hours_total>0 ? Math.round((p.hours_remaining||0)/p.hours_total*100) : null;
+            const col = statusCol[p.status]||'var(--txt3)';
+            return `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:11.5px;font-weight:600;color:var(--txt)">${pkgLabel(p.package_type)}</span>
+                <span style="font-size:10px;font-weight:700;color:${col};text-transform:uppercase">${p.status}</span>
+              </div>
+              ${p.hours_total!=null?`<div style="margin:5px 0 3px">
+                <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+                  <div style="height:100%;background:${col};width:${Math.min(100,100-(pct||0))}%;border-radius:2px"></div>
+                </div>
+                <div style="font-size:10px;color:var(--txt3);margin-top:3px">Sisa ${p.hours_remaining||0}/${p.hours_total}h${p.expiry_date?' · Exp '+p.expiry_date:''}</div>
+              </div>`:''}
+            </div>`;
+          }).join('')}
+          <div style="border-bottom:1px solid var(--border);margin:10px 0 8px"></div>`;
+      } else if (!eCp) {
+        cpEl.innerHTML = '';
       }
-      if (!data?.length) {
-        txnEl.innerHTML='<div style="color:var(--txt3);font-size:11px">Tidak ada transaksi ditemukan di Supabase.</div>';
-        return;
-      }
-      const total = data.reduce((s,r)=>s+sf(r.gross_amount||0),0);
-      txnEl.innerHTML=`
-        <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:8px">${data.length} transaksi terakhir · Total ${fIDR(total)}</div>
-        ${data.map(r=>`
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border)">
-            <div>
-              <div style="font-size:11.5px;font-weight:500;color:var(--txt)">${r.product_name||'—'}</div>
-              <div style="font-size:10px;color:var(--txt3)">${r.transaction_date||''}${r.payment_method?' · '+r.payment_method:''}</div>
-            </div>
-            <span style="font-size:12px;font-weight:600;color:var(--txt);flex-shrink:0;margin-left:8px">${fIDR(sf(r.gross_amount||0))}</span>
-          </div>`).join('')}`;
-    });
+    }
+
+    // ── Transactions section ────────────────────────────
+    const txnEl = document.getElementById('drawer-360-txn');
+    if (!txnEl) return;
+    if (eTx) { txnEl.innerHTML=`<div style="color:var(--txt3);font-size:11px">Error: ${eTx.message}</div>`; return; }
+    if (!txns?.length) { txnEl.innerHTML='<div style="color:var(--txt3);font-size:11px">Tidak ada transaksi ditemukan.</div>'; return; }
+    const total = txns.reduce((s,r)=>s+sf(r.gross_amount||0),0);
+    txnEl.innerHTML=`
+      <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:8px">${txns.length} transaksi terakhir · Total ${fIDR(total)}</div>
+      ${txns.map(r=>`
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-size:11.5px;font-weight:500;color:var(--txt)">${r.product_name||'—'}</div>
+            <div style="font-size:10px;color:var(--txt3)">${r.transaction_date||''}${r.payment_method?' · '+r.payment_method:''}</div>
+          </div>
+          <span style="font-size:12px;font-weight:600;color:var(--txt);flex-shrink:0;margin-left:8px">${fIDR(sf(r.gross_amount||0))}</span>
+        </div>`).join('')}`;
+  });
 }
 
 function changeMemberPage(dir) {
@@ -4044,6 +4127,24 @@ async function evaluateAlerts() {
     if (expiring?.length)
       alerts.push({sev:'warn',page:'members',icon:'⏰',title:`${expiring.length} member expiry ≤7 hari`,
         msg:expiring.slice(0,3).map(m=>m.name).join(', ')+(expiring.length>3?` +${expiring.length-3} lainnya`:'')});
+  } catch(e) {}
+
+  // 4. Court Pass mau expired (≤14 hari, status active, masih ada sisa jam)
+  try {
+    const today = todayLocal();
+    const in14 = new Date(); in14.setDate(in14.getDate()+14);
+    const in14s = localDate(in14);
+    const {data:cpExp} = await _SB.from('court_passes')
+      .select('member_name,package_type,hours_remaining,expiry_date')
+      .eq('status','active')
+      .gte('expiry_date',today).lte('expiry_date',in14s)
+      .order('expiry_date');
+    if (cpExp?.length) {
+      const names = [...new Set(cpExp.map(p=>p.member_name))];
+      alerts.push({sev:'warn',page:'members',icon:'🎾',
+        title:`${names.length} Court Pass mau expired ≤14 hari`,
+        msg:names.slice(0,3).join(', ')+(names.length>3?` +${names.length-3} lainnya`:'')});
+    }
   } catch(e) {}
 
   ACTIVE_ALERTS = alerts;
