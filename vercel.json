@@ -16,6 +16,10 @@
     {
       "path": "/api/process",
       "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/sync-programs",
+      "schedule": "45 0 * * *"
     }
   ]
 }

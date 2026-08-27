@@ -70,6 +70,69 @@ def process():
         return jsonify({"status": "error", "message": str(e), "trace": tb}), 500
 
 
+@app.route("/api/sync-programs", methods=["GET", "POST"])
+def sync_programs_coaching():
+    """
+    Standalone sync: Programs sheet → Supabase programs table
+                     Coaching sheet → Supabase coaching_sessions table
+    Dipanggil oleh Vercel Cron atau manual trigger.
+    Terpisah dari /api/process agar tidak timeout di ujung pipeline.
+    """
+    log = []
+    try:
+        from programs_client import read_and_parse_programs
+        from coaching_client import read_and_parse_coaching_sessions
+        from supabase_client import (
+            upsert_programs, upsert_coaching_sessions,
+            log_start, log_complete,
+        )
+
+        # ── Programs ──────────────────────────────────────────────────────
+        log.append("Syncing Programs sheet → Supabase programs...")
+        log_id_cp = log_start("PROGRAMS_SHEET", "sync_programs")
+        try:
+            cp_rows = read_and_parse_programs()
+            cp_total = 0
+            BATCH = 200
+            for i in range(0, len(cp_rows), BATCH):
+                res = upsert_programs(cp_rows[i:i + BATCH])
+                cp_total += res.get("inserted", 0)
+                if res.get("error"):
+                    log.append(f"  ⚠️ Programs batch error: {res['error']}")
+                    break
+            log_complete(log_id_cp, "success", {"upserted": cp_total})
+            log.append(f"  → {cp_total} upserted ({len(cp_rows)} parsed)")
+        except Exception as e_cp:
+            try: log_complete(log_id_cp, "failed", error=str(e_cp))
+            except Exception: pass
+            log.append(f"  ✗ Programs sync failed: {e_cp}")
+
+        # ── Coaching ──────────────────────────────────────────────────────
+        log.append("Syncing Coaching sheet → Supabase coaching_sessions...")
+        log_id_cs = log_start("COACHING_SHEET", "sync_coaching_sessions")
+        try:
+            cs_rows = read_and_parse_coaching_sessions()
+            cs_total = 0
+            for i in range(0, len(cs_rows), BATCH):
+                res = upsert_coaching_sessions(cs_rows[i:i + BATCH])
+                cs_total += res.get("inserted", 0)
+                if res.get("error"):
+                    log.append(f"  ⚠️ Coaching batch error: {res['error']}")
+                    break
+            log_complete(log_id_cs, "success", {"upserted": cs_total})
+            log.append(f"  → {cs_total} upserted ({len(cs_rows)} parsed)")
+        except Exception as e_cs:
+            try: log_complete(log_id_cs, "failed", error=str(e_cs))
+            except Exception: pass
+            log.append(f"  ✗ Coaching sync failed: {e_cs}")
+
+        log.append("✅ Done")
+        return jsonify({"status": "success", "details": log})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return jsonify({"status": "error", "message": str(e), "trace": tb}), 500
+
+
 @app.route("/api/fetch-ads", methods=["GET", "POST"])
 def fetch_ads():
     """
