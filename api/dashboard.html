@@ -4025,6 +4025,7 @@ function _renderProgPerf(passes, coachMonth) {
     const c = (r['Menu_Category']||'Lainnya').trim().toLowerCase();
     catRev[c] = (catRev[c]||0) + numOf(r,'Total_Revenue');
   });
+  window._catRev = catRev; // DEBUG: lihat via console → Object.entries(_catRev).sort((a,b)=>b[1]-a[1])
   const matchRev = (...kws) => Object.entries(catRev)
     .filter(([c]) => kws.some(k => c.includes(k.toLowerCase())))
     .reduce((s,[,v]) => s+v, 0);
