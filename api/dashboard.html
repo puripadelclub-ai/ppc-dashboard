@@ -4108,90 +4108,95 @@ function _renderWhoUsesWhat(passes, coachRecent) {
   const badge = document.getElementById('wuw-badge');
   if (!el) return;
 
-  const memberMap = {};
-  const ensure = n => { if (!memberMap[n]) memberMap[n]={passes:[],coachAgg:null}; return memberMap[n]; };
-  passes.forEach(p => ensure(p.member_name).passes.push(p));
-
-  const coachByMem = {};
-  coachRecent.forEach(s => {
-    if (!coachByMem[s.member_name]) coachByMem[s.member_name]={count:0,lastDate:'',pkgSet:new Set()};
-    const a = coachByMem[s.member_name];
-    a.count++;
-    if (s.session_date > a.lastDate) a.lastDate = s.session_date;
-    if (s.package_type) a.pkgSet.add(s.package_type);
-  });
-  Object.entries(coachByMem).forEach(([name,agg]) => { ensure(name).coachAgg = agg; });
-
-  const members = Object.entries(memberMap).sort((a,b) => {
-    const sa = (a[1].passes.length>0?2:0) + (a[1].coachAgg?1:0);
-    const sb = (b[1].passes.length>0?2:0) + (b[1].coachAgg?1:0);
-    return sb - sa || a[0].localeCompare(b[0]);
-  });
-
-  if (!members.length) {
+  if (!passes.length && !coachRecent.length) {
     el.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:12px">Belum ada data program. Jalankan pipeline terlebih dahulu.</div>';
     return;
   }
-  if (badge) badge.textContent = `${members.length} member`;
 
-  // Group members
-  const multi     = members.filter(([,d]) => d.passes.length > 0 && d.coachAgg);
-  const passOnly  = members.filter(([,d]) => d.passes.length > 0 && !d.coachAgg);
-  const coachOnly = members.filter(([,d]) => d.passes.length === 0 && d.coachAgg);
+  // ── Last 3 months as columns ──────────────────────────────────────────
+  const now = new Date();
+  const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  const months = [];
+  for (let i = 2; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      key:   `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+      label: `${MO_ID[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
+    });
+  }
 
-  // Row renderers
-  const TD  = 'padding:5px 10px;border-bottom:1px solid var(--border);font-size:11.5px;vertical-align:middle';
-  const passCell = (ps) => ps.map(p => {
-    const lbl  = (p.package_type||'').replace(/_/g,' ').replace(/COURT PASS/i,'Pass').replace(/INDEPENDENCE WEEK/i,'Indep.Week') || 'Program';
-    const sisa = p.sessions_remaining!=null ? ` · Sisa ${p.sessions_remaining}` : '';
-    return `<span style="background:#0d948815;color:#0d9488;border-radius:3px;padding:1px 6px;font-size:10.5px;font-weight:600;margin-right:3px;display:inline-block">${lbl}${sisa}</span>`;
-  }).join('');
-  const coachCell = (agg) => {
-    if (!agg) return '';
-    const primary = [...agg.pkgSet][0] || 'FREE_COACHING';
-    const col = _PKG_COLOR[primary] || '#6b7280';
-    const lbl = _PKG_LABEL[primary] || 'Coaching';
-    return `<span style="background:${col}18;color:${col};border-radius:3px;padding:1px 6px;font-size:10.5px;font-weight:600;display:inline-block">🏸 ${lbl} · ${agg.count}x</span>`;
-  };
-  const mkRow = ([name,data], hidden=false) => {
-    const cls = hidden ? ' class="wuw-coach-more" style="display:none"' : '';
-    return `<tr${cls} onclick="openMember360('${name.replace(/'/g,"\\'")}')">
-      <td style="${TD};font-weight:600;color:var(--txt);white-space:nowrap;cursor:pointer">${name}</td>
-      <td style="${TD}">${passCell(data.passes)}</td>
-      <td style="${TD}">${coachCell(data.coachAgg)}</td>
-    </tr>`;
-  };
-  const mkGroup = (emoji, label, color, rows, collapseAfter=0) => {
-    const shown  = collapseAfter > 0 ? rows.slice(0, collapseAfter) : rows;
-    const rest   = collapseAfter > 0 ? rows.slice(collapseAfter)    : [];
-    return `<tr><td colspan="3" style="padding:5px 10px;background:var(--sidebar,#f0f0ea);font-size:10px;font-weight:700;color:${color};letter-spacing:.06em;border-bottom:1px solid var(--border)">${emoji} ${label.toUpperCase()} · ${rows.length}</td></tr>
-      ${shown.map(r => mkRow(r, false)).join('')}
-      ${rest.map(r => mkRow(r, true)).join('')}
-      ${rest.length ? `<tr class="wuw-coach-btn"><td colspan="3" style="padding:6px 10px;border-bottom:1px solid var(--border)">
-        <button onclick="document.querySelectorAll('.wuw-coach-more').forEach(r=>r.style.display='');document.querySelectorAll('.wuw-coach-btn').forEach(b=>b.style.display='none')"
-          style="font-size:11px;color:var(--brand,#034842);background:none;border:none;cursor:pointer;font-weight:600">
-          + Lihat ${rest.length} coaching member lainnya
-        </button>
-      </td></tr>` : ''}`;
-  };
+  // ── Coaching: count sessions per package_type per month ───────────────
+  const coachMatrix = {};
+  coachRecent.forEach(s => {
+    const pkg = s.package_type || 'FREE_COACHING';
+    const mo  = (s.session_date||'').slice(0,7);
+    if (!coachMatrix[pkg]) coachMatrix[pkg] = {};
+    coachMatrix[pkg][mo] = (coachMatrix[pkg][mo]||0) + 1;
+  });
+  const coachPkgs = Object.entries(coachMatrix)
+    .map(([pkg, byMo]) => ({pkg, byMo, total: Object.values(byMo).reduce((s,v)=>s+v,0)}))
+    .sort((a,b) => b.total - a.total);
+
+  // ── Passes: active count per package_type ─────────────────────────────
+  const passCount = {};
+  passes.forEach(p => {
+    const pkg = (p.package_type||'UNKNOWN').replace(/_/g,' ');
+    passCount[pkg] = (passCount[pkg]||0) + 1;
+  });
+  const passPkgs = Object.entries(passCount).sort((a,b)=>b[1]-a[1]);
+
+  if (badge) badge.textContent = `${coachPkgs.length + passPkgs.length} program`;
+
+  // ── Style helpers ─────────────────────────────────────────────────────
+  const TH  = 'padding:6px 12px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border);text-align:right;white-space:nowrap';
+  const THL = 'padding:6px 12px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border);text-align:left';
+  const TD  = 'padding:5px 12px;border-bottom:1px solid var(--border);font-size:12px;text-align:right';
+  const TDL = 'padding:5px 12px;border-bottom:1px solid var(--border);font-size:11.5px;font-weight:600;color:var(--txt)';
+  const SEC = 'padding:5px 12px;border-bottom:1px solid var(--border);font-size:10px;font-weight:700;letter-spacing:.06em;background:var(--bg2,#f5f5f0)';
+  const num = v => v > 0
+    ? `<span style="font-weight:700;color:var(--txt)">${v}</span>`
+    : `<span style="color:var(--border)">—</span>`;
+
+  // ── Totals ────────────────────────────────────────────────────────────
+  const totalByMo = {};
+  months.forEach(m => { totalByMo[m.key] = 0; });
+  coachPkgs.forEach(({byMo}) => months.forEach(m => {
+    totalByMo[m.key] = (totalByMo[m.key]||0) + (byMo[m.key]||0);
+  }));
+  const grandCoach = coachPkgs.reduce((s,r)=>s+r.total,0);
+  const NC = months.length + 2; // colspan
 
   el.innerHTML = `
-    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-      ${multi.length    ? `<span style="font-size:11px;font-weight:700;background:var(--brand-lt,#e0f7f5);color:var(--brand,#034842);padding:3px 10px;border-radius:12px">⭐ Multi-program: ${multi.length}</span>`    : ''}
-      ${passOnly.length ? `<span style="font-size:11px;font-weight:700;background:#0d948815;color:#0d9488;padding:3px 10px;border-radius:12px">🎫 Pass: ${passOnly.length}</span>` : ''}
-      ${coachOnly.length? `<span style="font-size:11px;font-weight:700;background:#8b5cf615;color:#8b5cf6;padding:3px 10px;border-radius:12px">🏸 Coaching: ${coachOnly.length}</span>` : ''}
-    </div>
     <div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse">
       <thead><tr>
-        <th style="text-align:left;padding:5px 10px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)">NAMA</th>
-        <th style="text-align:left;padding:5px 10px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)">PASS / PROGRAM</th>
-        <th style="text-align:left;padding:5px 10px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)">COACHING (90 hari)</th>
+        <th style="${THL}">PROGRAM</th>
+        ${months.map(m=>`<th style="${TH}">${m.label}</th>`).join('')}
+        <th style="${TH}">TOTAL / AKTIF</th>
       </tr></thead>
       <tbody>
-        ${multi.length    ? mkGroup('⭐','Multi-program','var(--brand,#034842)', multi)    : ''}
-        ${passOnly.length ? mkGroup('🎫','Pass Aktif','#0d9488', passOnly)                 : ''}
-        ${coachOnly.length? mkGroup('🏸','Coaching','#8b5cf6', coachOnly, 15)              : ''}
+        <tr><td colspan="${NC}" style="${SEC};color:#8b5cf6">🏸 COACHING SESSIONS (90 hari)</td></tr>
+        ${coachPkgs.map(({pkg, byMo, total}) => {
+          const col = _PKG_COLOR[pkg] || '#6b7280';
+          const lbl = _PKG_LABEL[pkg] || pkg.replace(/_/g,' ');
+          return `<tr>
+            <td style="${TDL}"><span style="background:${col}15;color:${col};border-radius:3px;padding:1px 7px;font-size:10.5px">${lbl}</span></td>
+            ${months.map(m=>`<td style="${TD}">${num(byMo[m.key]||0)}</td>`).join('')}
+            <td style="${TD};font-weight:700;color:var(--txt)">${total}</td>
+          </tr>`;
+        }).join('')}
+        <tr style="background:var(--bg2,#fafaf8)">
+          <td style="${TDL};font-size:11px;color:var(--txt3)">TOTAL SESI</td>
+          ${months.map(m=>`<td style="${TD};font-weight:700;color:var(--txt)">${totalByMo[m.key]||0}</td>`).join('')}
+          <td style="${TD};font-weight:700;color:var(--txt)">${grandCoach}</td>
+        </tr>
+        ${passPkgs.length ? `
+        <tr><td colspan="${NC}" style="${SEC};color:#0d9488">🎫 COURT PASS AKTIF (snapshot)</td></tr>
+        ${passPkgs.map(([pkg,count])=>`<tr>
+          <td style="${TDL}"><span style="background:#0d948815;color:#0d9488;border-radius:3px;padding:1px 7px;font-size:10.5px">${pkg}</span></td>
+          ${months.map(()=>`<td style="${TD}"><span style="color:var(--border)">—</span></td>`).join('')}
+          <td style="${TD};font-weight:700;color:var(--txt)">${count}</td>
+        </tr>`).join('')}` : ''}
       </tbody>
     </table>
     </div>`;
