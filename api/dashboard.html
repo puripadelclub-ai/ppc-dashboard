@@ -4036,15 +4036,15 @@ function _renderProgPerf(passes, coachMonth) {
   const coachUniq  = new Set(coachMonth.map(s=>s.member_name)).size;
   const bundlingAct= passes.filter(p=>['BUNDLING_4X','BUNDLING_6X','BUNDLING'].includes(p.package_type));
 
-  // Court Pass / Programs
-  const passRev     = matchRev('court pass','comeback','upgrade','trial','court_pass');
+  // Court Pass / Programs — includes court rental (sewa lapangan) revenue
+  const passRev     = matchRev('court pass','comeback','upgrade','trial','court_pass',
+                               'lapangan','sewa','court rental','ball machine','booking','reservasi');
   const passUniq    = new Set(passes.map(p=>p.member_name)).size;
   const totalSessL  = passes.reduce((s,p)=>s+(p.sessions_remaining||0),0);
 
   // Other ESB categories
   const memberRev   = matchRev('membership');
-  const courtRev    = matchRev('court rental','ball machine','sewa court');
-  const knownRev    = coachRev + passRev + memberRev + courtRev;
+  const knownRev    = coachRev + passRev + memberRev;
   const totalRev    = Object.values(catRev).reduce((s,v)=>s+v,0);
   const othersRev   = Math.max(0, totalRev - knownRev);
 
@@ -4066,10 +4066,6 @@ function _renderProgPerf(passes, coachMonth) {
     {
       label:'Membership', icon:'👑', color:'#f59e0b',
       rev: memberRev, supabase: false, s1v: null,
-    },
-    {
-      label:'Court Rental', icon:'🏟️', color:'#3b82f6',
-      rev: courtRev, supabase: false, s1v: null,
     },
     {
       label:'Lainnya', icon:'📦', color:'#6b7280',
