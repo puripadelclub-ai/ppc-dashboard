@@ -1084,65 +1084,21 @@ body{
         <div class="card">
           <div class="card-hd">
             <span class="card-hd-lbl">Program Terpopuler</span>
-            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">by member unik</span>
+            <span id="affinity-period" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">90 hari</span>
           </div>
-          <div id="affinity-ranking" style="margin-top:.75rem"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+          <div style="font-size:10.5px;color:var(--txt3);margin-top:4px;margin-bottom:8px">Klik program untuk lihat siapa saja member-nya</div>
+          <div id="affinity-ranking"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
         </div>
         <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">Multi-Program Members</span></div>
-          <div id="affinity-multi" style="margin-top:.75rem"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+          <div class="card-hd">
+            <span class="card-hd-lbl">Multi-Program Members</span>
+          </div>
+          <div style="font-size:10.5px;color:var(--txt3);margin-top:4px;margin-bottom:8px">Member yang aktif di 2+ program — target upsell & retensi tertinggi</div>
+          <div id="affinity-multi"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
         </div>
       </div>
 
-      <!-- Revenue share bar -->
-      <div class="section-eyebrow">Komposisi Revenue</div>
-      <div class="card" style="margin-bottom:1rem">
-        <div class="card-hd" style="margin-bottom:.6rem"><span class="card-hd-lbl">Revenue Share per Kategori</span></div>
-        <div id="prod-share-bar" style="display:flex;height:32px;border-radius:8px;overflow:hidden;gap:2px"></div>
-        <div id="prod-share-legend" style="display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-top:.6rem;font-size:.78rem"></div>
-      </div>
-
-      <!-- Category pills -->
-      <div class="pill-row" id="prod-cat-pills" style="margin-bottom:1rem"></div>
-
-      <!-- Charts -->
-      <div class="section-eyebrow">Breakdown Visual</div>
-      <div class="two-col-wide" style="margin-bottom:1rem">
-        <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">Revenue per Kategori</span></div>
-          <div style="position:relative;height:260px"><canvas id="chart-prod-cat"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">Top 10 Produk by Revenue</span></div>
-          <div style="position:relative;height:260px"><canvas id="chart-prod-top"></canvas></div>
-        </div>
-      </div>
-
-      <!-- Table -->
-      <div class="card">
-        <div class="card-hd">
-          Semua Produk
-          <span id="prod-count" style="font-weight:400;color:var(--txt-muted);font-size:.82rem;margin-left:.4rem"></span>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="data-table" id="prog-table">
-            <thead>
-              <tr>
-                <th style="width:32px;text-align:center">#</th>
-                <th>Produk</th>
-                <th>Kategori</th>
-                <th style="text-align:right">Transaksi</th>
-                <th style="text-align:right">Qty</th>
-                <th style="text-align:right">Unik Cust.</th>
-                <th style="text-align:right">Avg Harga</th>
-                <th style="text-align:right">Revenue</th>
-                <th style="min-width:110px">% dari Total</th>
-              </tr>
-            </thead>
-            <tbody id="prog-table-body"></tbody>
-          </table>
-        </div>
-      </div>
+      <!-- Revenue sections moved to Revenue page -->
     </div>
 
 
@@ -4014,7 +3970,7 @@ async function _renderAllProgramSections() {
   try {
     const [passRes, coachRecentRes, coachMonthRes] = await Promise.all([
       _SB.from('programs')
-        .select('member_name,package_type,status,sessions_total,sessions_remaining,expiry_date'),
+        .select('member_name,package_type,status,sessions_total,sessions_remaining,expiry_date,purchase_date'),
       _SB.from('coaching_sessions')
         .select('member_name,package_type,sessions_remaining,status,session_date')
         .gte('session_date', from90),
@@ -4192,9 +4148,11 @@ function _renderCoachingSection(passes, coachRecent) {
           ${pkgs.map(([pk,{n,mem}])=>{
             const col=_PKG_COLOR[pk]||'#6b7280';
             const lbl=_PKG_LABEL[pk]||pk.replace(/_/g,' ');
-            const mArr=JSON.stringify([...mem]);
+            const storeKey='coach_'+pk+'_'+mo;
+            window._progStore = window._progStore||{};
+            window._progStore[storeKey]=[...mem];
             return `<tr style="cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
-              onclick="_coachPkgModal('${lbl.replace(/'/g,"\\'")}','${mo}',${mArr})">
+              onclick="_coachPkgModal('${lbl.replace(/'/g,"\\'")}','${mo}','${storeKey}')">
               <td style="${TD}"><span style="background:${col}15;color:${col};border-radius:3px;padding:2px 9px;font-size:10.5px;font-weight:600">${lbl}</span></td>
               <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${n}</td>
               <td style="${TD};text-align:right;color:var(--txt2)">${mem.size}</td>
@@ -4230,99 +4188,175 @@ function _renderCoachingSection(passes, coachRecent) {
     renderMo(mo);
   };
 
-  window._coachPkgModal = (lbl, mo, members) => {
+  window._coachPkgModal = (lbl, mo, storeKey) => {
+    const members = (window._progStore&&window._progStore[storeKey])||[];
     const [y,mIdx]=mo.split('-');
     const moLbl=`${MO_ID[parseInt(mIdx)-1]} ${y}`;
-    const html=`
-      <div style="font-size:11px;color:var(--txt3);margin-bottom:10px">${members.length} member · ${moLbl}</div>
-      <div style="display:flex;flex-direction:column;gap:5px">
-        ${members.sort().map(name=>`
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;
-            background:var(--bg2,#f5f5f2);border-radius:7px;cursor:pointer;transition:background .12s"
-            onmouseover="this.style.background='var(--brand-lt)'" onmouseout="this.style.background='var(--bg2,#f5f5f2)'"
-            onclick="closeProgModal();openMember360('${name.replace(/'/g,"\\'")}')">
-            <span style="font-size:12.5px;font-weight:600;color:var(--txt)">${name}</span>
-            <span style="font-size:11px;color:var(--brand)">360° →</span>
-          </div>`).join('')}
-      </div>`;
-    openProgModal(lbl, html);
+    _showMemberModal(lbl, `${members.length} member · ${moLbl}`, members);
   };
 
   renderTabs();
   renderMo(activeMo);
 }
 
-// ── Section 3: Court Pass & Promo Aktif ───────────────────────────────────
+// ── Shared modal helper ────────────────────────────────────────────────────
+
+function _showMemberModal(title, subtitle, names) {
+  const html=`
+    ${subtitle?`<div style="font-size:11px;color:var(--txt3);margin-bottom:10px">${subtitle}</div>`:''}
+    <div style="display:flex;flex-direction:column;gap:5px">
+      ${names.sort().map(name=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;
+          background:var(--bg2,#f5f5f2);border-radius:7px;cursor:pointer"
+          onmouseover="this.style.background='var(--brand-lt)'" onmouseout="this.style.background='var(--bg2,#f5f5f2)'"
+          onclick="closeProgModal();openMember360('${name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
+          <span style="font-size:12.5px;font-weight:600;color:var(--txt)">${name}</span>
+          <span style="font-size:11px;color:var(--brand)">360° →</span>
+        </div>`).join('')}
+    </div>`;
+  openProgModal(title, html);
+}
+
+// ── Section 3: Court Pass & Promo — 3-month tab view ─────────────────────
 
 function _renderPassSection(passes) {
   const el    = document.getElementById('pass-body');
   const badge = document.getElementById('pass-badge');
   if (!el) return;
 
-  const active = passes.filter(p=>p.status==='active');
-  if (!active.length) {
-    el.innerHTML = '<div style="font-size:11px;color:var(--txt3)">Tidak ada court pass / promo aktif saat ini.</div>';
+  if (!passes.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--txt3)">Tidak ada court pass / promo.</div>';
     return;
   }
 
-  const byPkg = {};
-  active.forEach(p=>{
-    const pk=p.package_type||'UNKNOWN';
-    if(!byPkg[pk]) byPkg[pk]=[];
-    byPkg[pk].push(p);
-  });
-  const pkgEntries = Object.entries(byPkg).sort((a,b)=>b[1].length-a[1].length);
-  if (badge) badge.textContent = `${pkgEntries.length} program`;
+  const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  const now = new Date();
+  const months = [];
+  for (let i = 2; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push({key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,label:`${MO_ID[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`});
+  }
 
+  // Distinct package types for badge
+  const allPkgTypes = new Set(passes.map(p=>p.package_type||'UNKNOWN'));
+  if (badge) badge.textContent = `${allPkgTypes.size} program`;
+
+  let activeMo = months[months.length-1].key;
   const warn14 = new Date(Date.now()+14*864e5).toISOString().slice(0,10);
 
-  el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px">
-    ${pkgEntries.map(([pk,members])=>{
-      const lbl=pk.replace(/_/g,' ');
-      const totalSisa=members.reduce((s,m)=>s+(m.sessions_remaining||0),0);
-      const expiring=members.filter(m=>m.expiry_date&&m.expiry_date<=warn14);
-      return `<div class="card" style="padding:14px 16px">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
-          <div>
-            <div style="font-size:12.5px;font-weight:700;color:var(--txt);line-height:1.3">${lbl}</div>
-            <div style="font-size:10.5px;color:var(--txt3);margin-top:2px">Sisa total: ${totalSisa} sesi</div>
-          </div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
-            ${expiring.length?`<span style="font-size:10px;font-weight:700;background:#f59e0b20;color:#b45309;border-radius:3px;padding:2px 7px">⚠ ${expiring.length} expire</span>`:''}
-            <span style="font-size:10px;font-weight:700;background:var(--brand-lt);color:var(--brand);border-radius:3px;padding:2px 7px">${members.length} aktif</span>
-          </div>
-        </div>
-        <div style="border-top:1px solid var(--border);padding-top:8px;display:flex;flex-direction:column;gap:5px">
-          ${members.sort((a,b)=>{
-            // expiring first, then by sessions_remaining asc
-            const aExp=a.expiry_date&&a.expiry_date<=warn14;
-            const bExp=b.expiry_date&&b.expiry_date<=warn14;
-            if(aExp!==bExp) return aExp?-1:1;
-            return (a.sessions_remaining||0)-(b.sessions_remaining||0);
-          }).map(m=>{
-            const isExp=m.expiry_date&&m.expiry_date<=warn14;
-            const pct=m.sessions_total>0?Math.round((m.sessions_remaining||0)/m.sessions_total*100):null;
-            const barCol=isExp?'#f59e0b':'#034842';
-            return `<div style="padding:6px 8px;background:var(--bg2,#f5f5f2);border-radius:6px;${isExp?'border-left:2.5px solid #f59e0b;padding-left:6px':''}">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${pct!==null?'4px':'0'}">
-                <span style="font-size:11.5px;font-weight:600;cursor:pointer;color:var(--brand)"
-                  onclick="openMember360('${m.member_name.replace(/'/g,"\\'")}')">
-                  ${m.member_name}
-                </span>
-                <div style="display:flex;gap:4px;align-items:center">
-                  <span style="font-size:10.5px;color:${isExp?'#b45309':'var(--txt3)'}">sisa ${m.sessions_remaining||0}</span>
-                  ${isExp?`<span style="font-size:9px;background:#f59e0b20;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:600">exp ${m.expiry_date}</span>`:''}
-                </div>
-              </div>
-              ${pct!==null?`<div style="height:3px;background:var(--border);border-radius:2px">
-                <div style="height:3px;border-radius:2px;width:${pct}%;background:${barCol};transition:width .3s"></div>
-              </div>`:''}
-            </div>`;
+  // Card styles
+  const TH = 'padding:5px 12px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)';
+  const TD = 'padding:6px 12px;border-bottom:1px solid var(--border);font-size:12px';
+
+  const renderMo = (mo) => {
+    const rows = passes.filter(p=>(p.purchase_date||'').slice(0,7)===mo);
+    const byPkg = {};
+    rows.forEach(p=>{
+      const pk=p.package_type||'UNKNOWN';
+      if(!byPkg[pk]) byPkg[pk]=[];
+      byPkg[pk].push(p);
+    });
+    const pkgs = Object.entries(byPkg).sort((a,b)=>b[1].length-a[1].length);
+
+    if (!pkgs.length) {
+      el.querySelector('#pass-table-wrap').innerHTML =
+        '<div style="padding:.75rem;color:var(--txt3);font-size:12px">Tidak ada pass / promo dibeli di bulan ini.</div>';
+      return;
+    }
+
+    el.querySelector('#pass-table-wrap').innerHTML = `
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="${TH};text-align:left">PROGRAM / PROMO</th>
+          <th style="${TH};text-align:right">DIBELI</th>
+          <th style="${TH};text-align:right">EXPIRE ≤14H</th>
+          <th style="${TH};text-align:right;color:transparent">ACT</th>
+        </tr></thead>
+        <tbody>
+          ${pkgs.map(([pk,members])=>{
+            const lbl=pk.replace(/_/g,' ');
+            const expiring=members.filter(m=>m.expiry_date&&m.expiry_date<=warn14);
+            const storeKey='pass_'+pk+'_'+mo;
+            window._progStore=window._progStore||{};
+            window._progStore[storeKey]=members.map(m=>m.member_name).filter(Boolean);
+            return `<tr style="cursor:pointer;transition:background .12s"
+              onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
+              onclick="_passPkgModal('${lbl.replace(/'/g,"\\'")}','${mo}','${storeKey}')">
+              <td style="${TD}">
+                <span style="background:#0d948815;color:#0d9488;border-radius:3px;padding:2px 9px;font-size:10.5px;font-weight:600">${lbl}</span>
+              </td>
+              <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${members.length}</td>
+              <td style="${TD};text-align:right">
+                ${expiring.length?`<span style="font-weight:700;color:#b45309">⚠ ${expiring.length}</span>`:`<span style="color:var(--border)">—</span>`}
+              </td>
+              <td style="${TD};text-align:right;font-size:11px;color:var(--txt3)">lihat →</td>
+            </tr>`;
           }).join('')}
-        </div>
+          <tr style="background:var(--bg2,#fafaf8)">
+            <td style="${TD};font-size:11px;font-weight:700;color:var(--txt3)">TOTAL</td>
+            <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${rows.length}</td>
+            <td style="${TD}"></td><td style="${TD}"></td>
+          </tr>
+        </tbody>
+      </table>`;
+  };
+
+  const renderTabs = () => {
+    el.querySelector('#pass-tabs').innerHTML = months.map(m=>`
+      <button id="ptab-${m.key}" onclick="_switchPassTab('${m.key}')"
+        style="padding:4px 13px;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;
+        border:1px solid ${m.key===activeMo?'#0d9488':'var(--border)'};
+        background:${m.key===activeMo?'#0d9488':'var(--surface)'};
+        color:${m.key===activeMo?'#fff':'var(--txt3)'}">
+        ${m.label}
+      </button>`).join('');
+  };
+
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span class="card-hd-lbl">Per program · by purchase date</span>
+        <div id="pass-tabs" style="display:flex;gap:4px"></div>
+      </div>
+      <div id="pass-table-wrap"></div>
+    </div>`;
+
+  window._switchPassTab = mo => {
+    activeMo=mo;
+    renderTabs();
+    renderMo(mo);
+  };
+
+  window._passPkgModal = (lbl, mo, storeKey) => {
+    const members=(window._progStore&&window._progStore[storeKey])||[];
+    const [y,mIdx]=mo.split('-');
+    const moLbl=`${MO_ID[parseInt(mIdx)-1]} ${y}`;
+    // Show member detail: name + remaining sessions + expiry
+    const passData=passes.filter(p=>(p.purchase_date||'').slice(0,7)===mo&&(p.package_type||'UNKNOWN').replace(/_/g,' ')===lbl);
+    const html=`
+      <div style="font-size:11px;color:var(--txt3);margin-bottom:10px">${members.length} member · ${moLbl}</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        ${(passData.length?passData:members.map(n=>({member_name:n}))).sort((a,b)=>(a.member_name||'').localeCompare(b.member_name||'')).map(m=>{
+          const name=m.member_name||m;
+          const isExp=m.expiry_date&&m.expiry_date<=warn14;
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;
+            background:var(--bg2,#f5f5f2);border-radius:7px;cursor:pointer;${isExp?'border-left:2.5px solid #f59e0b':''};"
+            onmouseover="this.style.background='var(--brand-lt)'" onmouseout="this.style.background='var(--bg2,#f5f5f2)'"
+            onclick="closeProgModal();openMember360('${name.replace(/'/g,"\\'")}')">
+            <span style="font-size:12px;font-weight:600;color:var(--txt)">${name}</span>
+            <div style="display:flex;gap:5px;align-items:center">
+              ${m.sessions_remaining!=null?`<span style="font-size:10.5px;color:var(--txt3)">sisa ${m.sessions_remaining}</span>`:''}
+              ${isExp?`<span style="font-size:9px;background:#f59e0b20;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:600">exp ${m.expiry_date}</span>`:''}
+              <span style="font-size:11px;color:var(--brand)">360° →</span>
+            </div>
+          </div>`;
+        }).join('')}
       </div>`;
-    }).join('')}
-  </div>`;
+    openProgModal(lbl, html);
+  };
+
+  renderTabs();
+  renderMo(activeMo);
 }
 
 // ── Section 4: Program Affinity — popularity + multi-program members ──────
@@ -4354,12 +4388,13 @@ function _renderProgramAffinity(passes, coachRecent) {
     return 'Free Coaching';
   };
 
-  const bucketMems    = {}; // bucket → Set<name>
-  const memberBuckets = {}; // name → Set<bucket>
+  const bucketMems    = {};
+  const memberBuckets = {};
 
   const add = (name, bucket) => {
-    if (!bucketMems[bucket])   bucketMems[bucket]   = new Set();
-    if (!memberBuckets[name])  memberBuckets[name]  = new Set();
+    if (!name) return;
+    if (!bucketMems[bucket])  bucketMems[bucket]  = new Set();
+    if (!memberBuckets[name]) memberBuckets[name] = new Set();
     bucketMems[bucket].add(name);
     memberBuckets[name].add(bucket);
   };
@@ -4368,18 +4403,29 @@ function _renderProgramAffinity(passes, coachRecent) {
   coachRecent.forEach(s => add(s.member_name, toCoachBucket(s.package_type)));
 
   const ranking = Object.entries(bucketMems)
-    .map(([b,s]) => ({bucket:b, count:s.size}))
+    .map(([b,s]) => ({bucket:b, count:s.size, members:[...s]}))
     .sort((a,b) => b.count - a.count);
 
   const maxCount = ranking[0]?.count || 1;
 
+  // Period label
+  const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  const now = new Date();
+  const d90 = new Date(now.getFullYear(), now.getMonth()-2, 1);
+  const periodLbl = `${MO_ID[d90.getMonth()]}–${MO_ID[now.getMonth()]} '${String(now.getFullYear()).slice(2)}`;
+  const periodEl = document.getElementById('affinity-period');
+  if (periodEl) periodEl.textContent = periodLbl;
+
   if (!ranking.length) {
-    rankEl.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:11px">Belum ada data. Jalankan pipeline terlebih dahulu.</div>';
+    rankEl.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:11px">Belum ada data.</div>';
   } else {
-    rankEl.innerHTML = ranking.map(({bucket,count},i) => {
+    rankEl.innerHTML = ranking.map(({bucket,count,members},i) => {
       const col = BUCKET_COLOR[bucket] || '#6b7280';
       const pct = (count/maxCount*100).toFixed(0);
-      return `<div style="margin-bottom:10px">
+      const storeKey = 'affinity_'+i;
+      window._progStore=window._progStore||{};
+      window._progStore[storeKey]=members;
+      return `<div style="margin-bottom:10px;cursor:pointer" onclick="_affinityModal('${bucket.replace(/'/g,"\\'")}','${storeKey}')">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
           <span style="font-size:11px;font-weight:600;color:var(--txt)">${i+1}. ${bucket}</span>
           <span style="font-size:13px;font-weight:800;color:${col}">${count}</span>
@@ -4391,20 +4437,26 @@ function _renderProgramAffinity(passes, coachRecent) {
     }).join('');
   }
 
+  window._affinityModal = (bucket, storeKey) => {
+    const members=(window._progStore&&window._progStore[storeKey])||[];
+    _showMemberModal(bucket, `${members.length} member unik · ${periodLbl}`, members);
+  };
+
   const multiMembers = Object.entries(memberBuckets)
     .filter(([,s]) => s.size > 1)
     .sort((a,b) => b[1].size - a[1].size)
-    .slice(0,10);
+    .slice(0,15);
 
   if (!multiMembers.length) {
-    multiEl.innerHTML = '<div style="padding:.75rem 0;color:var(--txt3);font-size:11px">Belum ada member dengan multi-program.</div>';
+    if (multiEl) multiEl.innerHTML = '<div style="padding:.75rem 0;color:var(--txt3);font-size:11px">Belum ada member dengan multi-program.</div>';
   } else {
-    multiEl.innerHTML = multiMembers.map(([name,buckets],i) => {
+    if (multiEl) multiEl.innerHTML = multiMembers.map(([name,buckets],i) => {
       const arr = [...buckets];
-      return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer"
+        onclick="openMember360('${name.replace(/'/g,"\\'")}')">
         <span style="font-size:11px;font-weight:700;color:var(--txt3);width:16px;text-align:right;flex-shrink:0;margin-top:2px">${i+1}</span>
-        <div>
-          <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px">${name}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:var(--brand);margin-bottom:4px">${name}</div>
           <div style="display:flex;flex-wrap:wrap;gap:3px">
             ${arr.map(b=>{
               const col = BUCKET_COLOR[b]||'#6b7280';
@@ -4412,6 +4464,7 @@ function _renderProgramAffinity(passes, coachRecent) {
             }).join('')}
           </div>
         </div>
+        <span style="font-size:11px;color:var(--brand);margin-top:2px">360° →</span>
       </div>`;
     }).join('');
   }
@@ -4441,26 +4494,18 @@ function renderPrograms() {
   catEntries.forEach(([c],i) => catColorMap[c] = PROD_COLORS[i % PROD_COLORS.length]);
   const grandTotal = catEntries.reduce((s,e)=>s+e[1],0);
 
-  // ── Revenue Share Bar (always full data) ─────────────────────────────
-  document.getElementById('prod-share-bar').innerHTML = catEntries.map(([c,v]) => {
+  // Revenue share bar + pills moved to Revenue page — elements no longer in Programs HTML
+  const setEl = (id, html) => { const e=document.getElementById(id); if(e) e.innerHTML=html; };
+  setEl('prod-share-bar', catEntries.map(([c,v]) => {
     const pct = grandTotal>0?(v/grandTotal*100).toFixed(1):0;
-    return `<div title="${c}: ${fmtRp(v)} (${pct}%)"
-      style="flex:${pct};background:${catColorMap[c]};transition:flex .3s;cursor:pointer"
-      onclick="filterProdCat('${c}')"></div>`;
-  }).join('');
-  document.getElementById('prod-share-legend').innerHTML = catEntries.map(([c,v]) => {
+    return `<div title="${c}: ${fmtRp(v)} (${pct}%)" style="flex:${pct};background:${catColorMap[c]};transition:flex .3s;cursor:pointer" onclick="filterProdCat('${c}')"></div>`;
+  }).join(''));
+  setEl('prod-share-legend', catEntries.map(([c,v]) => {
     const pct = grandTotal>0?(v/grandTotal*100).toFixed(1):0;
-    return `<div onclick="filterProdCat('${c}')" style="cursor:pointer;display:flex;align-items:center;gap:.3rem">
-      <span style="width:10px;height:10px;border-radius:50%;background:${catColorMap[c]};display:inline-block;flex-shrink:0"></span>
-      <span>${c}</span><strong>${pct}%</strong>
-    </div>`;
-  }).join('');
-
-  // ── Category pills ───────────────────────────────────────────────────
+    return `<div onclick="filterProdCat('${c}')" style="cursor:pointer;display:flex;align-items:center;gap:.3rem"><span style="width:10px;height:10px;border-radius:50%;background:${catColorMap[c]};display:inline-block;flex-shrink:0"></span><span>${c}</span><strong>${pct}%</strong></div>`;
+  }).join(''));
   const cats = ['ALL', ...catEntries.map(e=>e[0])];
-  document.getElementById('prod-cat-pills').innerHTML = cats.map(c =>
-    `<div class="pill${c===_activeProdCat?' active':''}" onclick="filterProdCat('${c}')">${c}</div>`
-  ).join('');
+  setEl('prod-cat-pills', cats.map(c=>`<div class="pill${c===_activeProdCat?' active':''}" onclick="filterProdCat('${c}')">${c}</div>`).join(''));
 
   const filtered = _activeProdCat==='ALL' ? prods
     : prods.filter(r => r['Menu_Category']===_activeProdCat);
