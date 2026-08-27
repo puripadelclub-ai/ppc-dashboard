@@ -4354,10 +4354,16 @@ function _renderCourtPassSection(passes, mo) {
   const badge = document.getElementById('courtpass-badge');
   if (!el) return;
 
-  const courtPasses = passes.filter(p =>
-    /COURT.?PASS/i.test(p.package_type||'') &&
-    (!mo || (p.purchase_date||'').slice(0,7) === mo)
-  );
+  const courtPasses = passes.filter(p => {
+    if (!/COURT.?PASS/i.test(p.package_type||'')) return false;
+    if (!mo) return true;
+    const [yr, mn] = mo.split('-').map(Number);
+    const moStart = `${mo}-01`;
+    const moEnd   = new Date(yr, mn, 0).toISOString().slice(0,10);
+    const bought  = (p.purchase_date||'').slice(0,10);
+    const expire  = (p.expiry_date||'').slice(0,10);
+    return bought <= moEnd && (!expire || expire >= moStart);
+  });
   if (badge) badge.textContent = `${courtPasses.length} aktif`;
 
   if (!courtPasses.length) {
@@ -4415,11 +4421,17 @@ function _renderPromoSection(passes, mo) {
   const badge = document.getElementById('promo-badge');
   if (!el) return;
 
-  // Exclude court pass types, filter by purchase month
-  const promos = passes.filter(p =>
-    !/COURT.?PASS/i.test(p.package_type||'') &&
-    (!mo || (p.purchase_date||'').slice(0,7) === mo)
-  );
+  // Exclude court pass types, filter by active in selected month
+  const promos = passes.filter(p => {
+    if (/COURT.?PASS/i.test(p.package_type||'')) return false;
+    if (!mo) return true;
+    const [yr, mn] = mo.split('-').map(Number);
+    const moStart = `${mo}-01`;
+    const moEnd   = new Date(yr, mn, 0).toISOString().slice(0,10);
+    const bought  = (p.purchase_date||'').slice(0,10);
+    const expire  = (p.expiry_date||'').slice(0,10);
+    return bought <= moEnd && (!expire || expire >= moStart);
+  });
   if (badge) badge.textContent = `${promos.length} aktif`;
 
   if (!promos.length) {
