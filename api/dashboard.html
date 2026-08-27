@@ -593,13 +593,17 @@ body{
       <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <span class="nav-label">Home</span>
     </div>
-    <div class="nav-item" data-label="Operations" data-page="operations" onclick="nav('operations')">
+    <div class="nav-item" data-label="Venue" data-page="operations" onclick="nav('operations')">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      <span class="nav-label">Operations</span>
+      <span class="nav-label">Venue</span>
+    </div>
+    <div class="nav-item" data-label="Revenue" data-page="revenue" onclick="nav('revenue')">
+      <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      <span class="nav-label">Revenue</span>
     </div>
     <div class="nav-item" data-label="Programs" data-page="programs" onclick="nav('programs')">
       <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-      <span class="nav-label">Products</span>
+      <span class="nav-label">Programs</span>
     </div>
     <div class="nav-item" data-label="Marketing" data-page="marketing" onclick="nav('marketing')">
       <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -724,9 +728,9 @@ body{
       <div class="section-eyebrow">Ringkasan & Proyeksi</div>
       <div id="intel-brief-row" style="margin-bottom:18px"></div>
 
-      <div class="section-eyebrow">Akuisisi & Revenue</div>
-      <!-- Row 2: Conversion Funnel + Revenue per Kategori -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="section-eyebrow">Akuisisi</div>
+      <!-- Row 2: Conversion Funnel -->
+      <div style="margin-bottom:12px">
         <div class="card">
           <div class="card-hd">
             <span class="card-hd-lbl">Conversion Funnel</span>
@@ -734,27 +738,6 @@ body{
             <i class="info-icon" onclick="event.stopPropagation();showInfo('kpi-funnel')" style="margin-left:4px">i</i>
           </div>
           <div id="kpi-funnel-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
-        </div>
-        <div class="card">
-          <div class="card-hd">
-            <span class="card-hd-lbl">Revenue per Kategori</span>
-            <span id="sb-cat-period" style="font-size:10px;color:var(--txt3);margin-left:4px"></span>
-            <i class="info-icon" onclick="event.stopPropagation();showInfo('sb-revenue-cat')" style="margin-left:4px">i</i>
-            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto" title="Data ESB dikueri langsung dari Supabase — sama dengan sumber ESB, date-filterable">ESB · Supabase</span>
-          </div>
-          <div id="sb-cat-breakdown"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
-        </div>
-      </div>
-
-      <div class="section-eyebrow">Trend Revenue</div>
-      <!-- Row 3: Revenue trend (full width) -->
-      <div style="margin-bottom:12px">
-        <div class="card">
-          <div class="card-hd">
-            <span class="card-hd-lbl">Revenue Trend 6 Bulan</span>
-            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600">ESB</span>
-          </div>
-          <div class="chart-wrap-lg"><canvas id="chart-rev"></canvas></div>
         </div>
       </div>
 
@@ -795,7 +778,7 @@ body{
     <!-- OPERATIONS -->
     <div class="page" id="page-operations">
       <div class="page-hd">
-        <h2>Operations</h2>
+        <h2>Venue</h2>
         <p>Court utilization, booking breakdown, dan occupancy trend</p>
       </div>
 
@@ -946,15 +929,6 @@ body{
         </div>
       </div>
 
-      <div class="section-eyebrow">Court Pass Aktif</div>
-      <div class="card">
-        <div class="card-hd">
-          <span class="card-hd-lbl">Court Pass Aktif</span>
-          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
-        </div>
-        <div id="mem-court-pass-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
-      </div>
-
       <div class="section-eyebrow">Preferensi & Pembelian</div>
       <div class="two-col">
         <div class="card">
@@ -1006,6 +980,36 @@ body{
       </div>
     </div>
 
+    <!-- REVENUE -->
+    <div class="page" id="page-revenue">
+      <div class="page-hd">
+        <h2>Revenue</h2>
+        <p>Trend finansial, breakdown per kategori, dan proyeksi</p>
+      </div>
+
+      <div class="section-eyebrow">Trend 6 Bulan</div>
+      <div style="margin-bottom:12px">
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-hd-lbl">Revenue Trend 6 Bulan</span>
+            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600">ESB</span>
+          </div>
+          <div class="chart-wrap-lg"><canvas id="chart-rev"></canvas></div>
+        </div>
+      </div>
+
+      <div class="section-eyebrow">Breakdown per Kategori</div>
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-hd-lbl">Revenue per Kategori</span>
+          <span id="sb-cat-period" style="font-size:10px;color:var(--txt3);margin-left:4px"></span>
+          <i class="info-icon" onclick="event.stopPropagation();showInfo('sb-revenue-cat')" style="margin-left:4px">i</i>
+          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto" title="Data ESB dikueri langsung dari Supabase — date-filterable">ESB · Supabase</span>
+        </div>
+        <div id="sb-cat-breakdown"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+      </div>
+    </div>
+
     <div class="page" id="page-intelligence">
       <div class="page-hd">
         <h2>Intelligence</h2>
@@ -1037,13 +1041,23 @@ body{
     <!-- PRODUCTS -->
     <div class="page" id="page-programs">
       <div class="page-hd">
-        <h2>Products</h2>
-        <p>Breakdown revenue &amp; transaksi per produk dari data ESB</p>
+        <h2>Programs</h2>
+        <p>Court Pass, Coaching, Membership, Promo — semua program & paket PPC</p>
       </div>
 
       <!-- KPI -->
       <div class="section-eyebrow">Overview Produk</div>
       <div class="four-col" id="prog-kpi-row"></div>
+
+      <!-- Court Pass Aktif -->
+      <div class="section-eyebrow">Court Pass Aktif</div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-hd">
+          <span class="card-hd-lbl">Court Pass Aktif</span>
+          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
+        </div>
+        <div id="mem-court-pass-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+      </div>
 
       <!-- Revenue share bar -->
       <div class="section-eyebrow">Komposisi Revenue</div>
@@ -1419,8 +1433,8 @@ let activePref = 'ALL';
 const CHARTS = {};
 
 const PAGE_TITLES = {
-  home:'Home', operations:'Operations', marketing:'Marketing',
-  members:'Members', intelligence:'Intelligence', programs:'Products',
+  home:'Home', operations:'Venue', revenue:'Revenue', programs:'Programs',
+  marketing:'Marketing', members:'Members', intelligence:'Intelligence',
   'member-portal':'My Membership'
 };
 
@@ -1850,8 +1864,9 @@ function renderPage(page) {
   if(!D) return;
   const fn = {
     home: renderHome, operations: renderOperations,
+    revenue: renderRevenue, programs: renderPrograms,
     marketing: renderMarketing, members: renderMembers,
-    intelligence: renderIntelligence, programs: renderPrograms
+    intelligence: renderIntelligence
   }[page];
   if(fn) fn();
 }
@@ -1913,44 +1928,7 @@ function renderHome() {
   ESB_SUBSTATS = { occPct, totalBookToday, totalMembers: totalMembersEsb };
   injectEsbSubstats();
 
-  // ── Revenue trend chart ──────────────────────────────────────
-  const rev6 = (D.revenue||[]).filter(r=>{const m=r.Month||r.month||'';return m&&m!=='NaT'&&m!=='nan';}).slice(-6);
-  destroyChart('chart-rev');
-  const revCtx = document.getElementById('chart-rev');
-  // Simple two-tone bars: current month = brand, others = lighter
-  CHARTS['chart-rev'] = new Chart(revCtx,{
-    type:'bar',
-    data:{
-      labels: rev6.map(r=>r.Month||r.month||''),
-      datasets:[{
-        label:'Revenue',
-        data: rev6.map(r=>si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0)),
-        backgroundColor: rev6.map((_,i) => i === rev6.length - 1 ? 'rgba(3,72,66,.85)' : 'rgba(3,72,66,.25)'),
-        borderRadius:6,
-        borderSkipped:false,
-      }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      animation:{duration:900,easing:'easeOutQuart'},
-      plugins:{
-        legend:{display:false},
-        tooltip:{
-          backgroundColor:'rgba(2,47,42,.92)',
-          titleColor:'rgba(255,255,255,.6)',
-          bodyColor:'#fff',
-          bodyFont:{size:13,weight:'700'},
-          padding:10,
-          cornerRadius:8,
-          callbacks:{label:ctx=>'  ' + fIDR(ctx.raw)}
-        }
-      },
-      scales:{
-        y:{ticks:{callback:v=>fIDR(v),font:{size:10},color:'rgba(0,0,0,.35)'},grid:{color:'rgba(0,0,0,.04)'},border:{display:false}},
-        x:{grid:{display:false},ticks:{font:{size:10,weight:'500'},color:'rgba(0,0,0,.45)'},border:{display:false}}
-      }
-    }
-  });
+  // ── Revenue trend chart: moved to renderRevTrend() on Revenue page ──
 
   // ── Revenue per kategori ESB: removed (digantikan Supabase version) ──
 
@@ -3320,7 +3298,6 @@ function renderMembers() {
 
   memberPage = 0;
   renderMemberTable();
-  renderCourtPassSummary();
 }
 
 // Map ESB category string to display label (client-side mirror of server map_esb_category)
@@ -3793,7 +3770,53 @@ let _activeProdCat = 'ALL';
 
 const PROD_COLORS = ['#034842','#2da870','#f59e0b','#3b82f6','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
 
+function renderRevTrend() {
+  const revCtx = document.getElementById('chart-rev');
+  if (!revCtx) return;
+  const rev6 = (D.revenue||[]).filter(r=>{const m=r.Month||r.month||'';return m&&m!=='NaT'&&m!=='nan';}).slice(-6);
+  destroyChart('chart-rev');
+  CHARTS['chart-rev'] = new Chart(revCtx,{
+    type:'bar',
+    data:{
+      labels: rev6.map(r=>r.Month||r.month||''),
+      datasets:[{
+        label:'Revenue',
+        data: rev6.map(r=>si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0)),
+        backgroundColor: rev6.map((_,i) => i === rev6.length - 1 ? 'rgba(3,72,66,.85)' : 'rgba(3,72,66,.25)'),
+        borderRadius:6,
+        borderSkipped:false,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{duration:900,easing:'easeOutQuart'},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'rgba(2,47,42,.92)',
+          titleColor:'rgba(255,255,255,.6)',
+          bodyColor:'#fff',
+          bodyFont:{size:13,weight:'700'},
+          padding:10,
+          cornerRadius:8,
+          callbacks:{label:ctx=>'  ' + fIDR(ctx.raw)}
+        }
+      },
+      scales:{
+        y:{ticks:{callback:v=>fIDR(v),font:{size:10},color:'rgba(0,0,0,.35)'},grid:{color:'rgba(0,0,0,.04)'},border:{display:false}},
+        x:{grid:{display:false},ticks:{font:{size:10,weight:'500'},color:'rgba(0,0,0,.45)'},border:{display:false}}
+      }
+    }
+  });
+}
+
+function renderRevenue() {
+  renderRevTrend();
+  renderSBCategoryBreakdown();
+}
+
 function renderPrograms() {
+  renderCourtPassSummary();
   const prods = D.product_detail || [];
   const fmtRp  = v => 'Rp' + (Number(v)||0).toLocaleString('id-ID');
   const fmtJt  = v => { const n=Number(v)||0; return n>=1e9?'Rp'+(n/1e9).toFixed(1)+'M':n>=1e6?'Rp'+(n/1e6).toFixed(0)+'jt':fmtRp(n); };
