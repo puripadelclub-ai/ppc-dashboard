@@ -79,8 +79,29 @@ def _make_id(session_date: str, member_name: str, time_slot: str) -> str:
     key = f"{session_date}|{member_name.upper()}|{time_slot}"
     return hashlib.sha256(key.encode()).hexdigest()[:20]
 
+def _month_from_title(title: str):
+    """Return month_int if tab title IS an Indonesian month name, else None."""
+    t = title.upper().strip()
+    for name, num in _BULAN.items():
+        if t == name:
+            return num
+    # Also match if title contains the month (e.g. "AGUSTUS 2026")
+    for name, num in _BULAN.items():
+        if name in t:
+            return num
+    return None
+
+def _year_from_values(all_values: list) -> int | None:
+    """Scan first 5 rows for a 4-digit year (e.g. from 'COACHING SESSION AGUSTUS 2026')."""
+    for row in all_values[:5]:
+        for cell in row:
+            m = re.search(r'(20\d{2})', str(cell))
+            if m:
+                return int(m.group(1))
+    return None
+
 def _parse_month_year(title: str):
-    """Extract (month_int, year_int) from tab title like 'COACHING SESSION AGUSTUS 2026'."""
+    """Legacy: extract (month_int, year_int) from title like 'COACHING SESSION AGUSTUS 2026'."""
     title_up = title.upper()
     year_m = re.search(r'(\d{4})', title_up)
     year = int(year_m.group(1)) if year_m else None
@@ -205,18 +226,24 @@ def read_and_parse_coaching_sessions() -> list[dict]:
     all_rows = []
 
     for ws in worksheets:
-        title = ws.title.strip().upper()
+        title = ws.title.strip()
+        title_up = title.upper()
 
-        # Skip summary/index tabs
-        if 'COACHING SESSION' not in title:
-            continue
-
-        month, year = _parse_month_year(title)
-        if not month or not year:
+        # Accept tabs whose name IS a month name (e.g. "April", "Agustus")
+        # OR whose name contains "COACHING SESSION" (old format)
+        month = _month_from_title(title_up)
+        if not month:
+            # Tab name not a month — skip (Sheet2, rekap draft, etc.)
             continue
 
         try:
             values = ws.get_all_values()
+
+            # Get year from sheet content (header row has "COACHING SESSION AGUSTUS 2026")
+            year = _year_from_values(values)
+            if not year:
+                year = datetime.now().year  # fallback to current year
+
             rows = _parse_monthly_tab(values, month, year)
             all_rows.extend(rows)
         except Exception as e:
