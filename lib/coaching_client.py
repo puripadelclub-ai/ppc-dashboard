@@ -5,21 +5,15 @@ Baca + parse Coaching Log sheet → rows siap upsert ke Supabase tabel `coaching
 Sheet: https://docs.google.com/spreadsheets/d/1dtmKhpbAeVu-YX9Lx1ayU4OPmdyYcRMg4IZGPBgd0iA
 Set env var COACHING_SHEET_ID (atau gunakan default di bawah)
 
-Struktur sheet:
-  - Tab Summary/Index: dilewati
-  - Tab per bulan ("COACHING SESSION BULAN YYYY"):
-      Tanggal | Nama Member | Persons | KET (paket) | Durasi/Jam | Sisa
-
-Merged cells: day number dan group session di-merge lintas baris.
-gspread mengembalikan nilai hanya di baris pertama, baris lanjutan = "".
-Parser melakukan carry-forward untuk: day, persons, time_slot, package_type.
+Struktur sheet (raw_coaching tab):
+  Date (YYYY-MM-DD) | Member_Name | Package_Type | Participants | Start_Time | End_Time
 """
 
 import os
 import re
 import json
 import hashlib
-from datetime import datetime, date
+from datetime import datetime
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -34,12 +28,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
-# ── Indonesian month map ──────────────────────────────────────────────────────
-_BULAN = {
-    'JANUARI':1,'FEBRUARI':2,'MARET':3,'APRIL':4,
-    'MEI':5,'JUNI':6,'JULI':7,'AGUSTUS':8,
-    'SEPTEMBER':9,'OKTOBER':10,'NOVEMBER':11,'DESEMBER':12,
-}
+RAW_TAB_NAME = "raw_coaching"
 
 # ── Package type normalisation ────────────────────────────────────────────────
 _PKG_MAP = [
@@ -59,161 +48,29 @@ _PKG_MAP = [
 def _normalise_pkg(raw: str) -> str:
     if not raw:
         return 'FREE_COACHING'
-    upper = raw.upper().strip()
+    upper = raw.upper().strip().replace('_', ' ').replace('-', ' ')
     for pattern, label in _PKG_MAP:
         if re.search(pattern, upper):
             return label
-    return 'OTHER'
+    return raw.upper().strip()  # keep original if no match
 
-def _extract_persons(s: str) -> int | None:
-    m = re.search(r'(\d+)', s)
-    return int(m.group(1)) if m else None
-
-def _safe_int(s: str) -> int | None:
+def _safe_int(s: str):
     try:
-        return int(str(s).replace(',','').strip())
+        return int(str(s).replace(',', '').strip())
     except Exception:
         return None
 
-def _make_id(session_date: str, member_name: str, time_slot: str) -> str:
-    key = f"{session_date}|{member_name.upper()}|{time_slot}"
+def _make_id(session_date: str, member_name: str, start_time: str) -> str:
+    key = f"{session_date}|{member_name.upper().strip()}|{start_time}"
     return hashlib.sha256(key.encode()).hexdigest()[:20]
-
-def _month_from_title(title: str):
-    """Return month_int if tab title IS an Indonesian month name, else None."""
-    t = title.upper().strip()
-    for name, num in _BULAN.items():
-        if t == name:
-            return num
-    # Also match if title contains the month (e.g. "AGUSTUS 2026")
-    for name, num in _BULAN.items():
-        if name in t:
-            return num
-    return None
-
-def _year_from_values(all_values: list) -> int | None:
-    """Scan first 5 rows for a 4-digit year (e.g. from 'COACHING SESSION AGUSTUS 2026')."""
-    for row in all_values[:5]:
-        for cell in row:
-            m = re.search(r'(20\d{2})', str(cell))
-            if m:
-                return int(m.group(1))
-    return None
-
-def _parse_month_year(title: str):
-    """Legacy: extract (month_int, year_int) from title like 'COACHING SESSION AGUSTUS 2026'."""
-    title_up = title.upper()
-    year_m = re.search(r'(\d{4})', title_up)
-    year = int(year_m.group(1)) if year_m else None
-    month = None
-    for name, num in _BULAN.items():
-        if name in title_up:
-            month = num
-            break
-    return month, year
-
-def _parse_sisa(s: str):
-    """Parse 'Sisa 3x' → 3, 'HABIS' → 0, '' → None."""
-    if not s:
-        return None, 'active'
-    s_up = s.upper().strip()
-    if 'HABIS' in s_up:
-        return 0, 'habis'
-    m = re.search(r'SISA\s*(\d+)', s_up)
-    if m:
-        return int(m.group(1)), 'active'
-    return None, 'active'
-
-# ── Monthly tab parser ────────────────────────────────────────────────────────
-
-def _parse_monthly_tab(all_values: list, month: int, year: int) -> list[dict]:
-    """
-    Parse satu tab bulan. Tiap baris = satu sesi member.
-    Carry-forward: day, persons, time_slot, package_type dalam satu grup.
-    """
-    records = []
-    current_day    = None
-    current_persons = None
-    current_time   = None
-    current_pkg    = None
-    current_pkg_raw = None
-
-    for raw_row in all_values:
-        row = list(raw_row) + [''] * 8
-        c0 = str(row[0]).strip()
-        c1 = str(row[1]).strip()
-        c2 = str(row[2]).strip()
-        c3 = str(row[3]).strip()
-        c4 = str(row[4]).strip()
-        c5 = str(row[5]).strip() if len(row) > 5 else ''
-
-        # Skip header rows
-        c0_up = c0.upper()
-        if 'COACHING SESSION' in c0_up or c0_up == 'TANGGAL':
-            continue
-        if not c0 and not c1:
-            continue
-        # Skip summary/note rows (no member name, has text like "NOTE" or numbers only)
-        if c0 and not c1 and not _safe_int(c0):
-            continue
-
-        # Update current day if c0 is a number
-        day_num = _safe_int(c0)
-        if day_num and 1 <= day_num <= 31:
-            current_day = day_num
-            # New day resets group context
-            current_persons = None
-            current_time    = None
-            current_pkg     = None
-            current_pkg_raw = None
-
-        if not current_day:
-            continue
-
-        # Skip rows with no member name
-        if not c1:
-            continue
-
-        # Carry forward or update group attributes
-        if c2:
-            current_persons  = _extract_persons(c2)
-        if c4:
-            current_time     = c4
-        if c3:
-            current_pkg      = _normalise_pkg(c3)
-            current_pkg_raw  = c3
-
-        # Parse sisa / status
-        sisa, status = _parse_sisa(c5)
-
-        # Build session_date
-        try:
-            session_date = date(year, month, current_day).isoformat()
-        except ValueError:
-            continue  # invalid date (e.g. day 31 in April)
-
-        record = {
-            'id':                 _make_id(session_date, c1, current_time or ''),
-            'session_date':       session_date,
-            'member_name':        c1.upper().strip(),
-            'persons':            current_persons,
-            'package_type':       current_pkg or 'FREE_COACHING',
-            'package_raw':        current_pkg_raw or '',
-            'time_slot':          current_time or '',
-            'sessions_remaining': sisa,
-            'status':             status,
-        }
-        records.append(record)
-
-    return records
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def read_and_parse_coaching_sessions() -> list[dict]:
     """
-    Buka Coaching Log sheet, parse semua tab bulan.
-    Return combined list of dicts, dedup by id.
+    Buka Coaching Log sheet, baca tab 'raw_coaching'.
+    Return list of dicts, dedup by id.
     """
     creds_json = os.environ.get("GOOGLE_CREDENTIALS")
     info = json.loads(creds_json)
@@ -221,50 +78,94 @@ def read_and_parse_coaching_sessions() -> list[dict]:
     gc = gspread.authorize(creds)
 
     sh = gc.open_by_key(COACHING_SHEET_ID)
-    worksheets = sh.worksheets()
 
-    all_rows = []
+    # Find raw_coaching tab (case-insensitive)
+    raw_ws = None
+    for ws in sh.worksheets():
+        if ws.title.strip().lower().replace(' ', '_') == RAW_TAB_NAME:
+            raw_ws = ws
+            break
 
-    for ws in worksheets:
-        title = ws.title.strip()
-        title_up = title.upper()
+    if not raw_ws:
+        raise ValueError(
+            f"Tab '{RAW_TAB_NAME}' tidak ditemukan. "
+            f"Tabs tersedia: {[w.title for w in sh.worksheets()]}"
+        )
 
-        # Accept tabs whose name IS a month name (e.g. "April", "Agustus")
-        # OR whose name contains "COACHING SESSION" (old format)
-        month = _month_from_title(title_up)
-        if not month:
-            # Tab name not a month — skip (Sheet2, rekap draft, etc.)
-            continue
+    all_values = raw_ws.get_all_values()
 
-        try:
-            values = ws.get_all_values()
+    if not all_values:
+        return []
 
-            # Get year from sheet content (header row has "COACHING SESSION AGUSTUS 2026")
-            year = _year_from_values(values)
-            if not year:
-                year = datetime.now().year  # fallback to current year
+    # Detect header row — look for "Date" or "Member" in first few rows
+    header_idx = 0
+    for i, row in enumerate(all_values[:5]):
+        row_up = [c.upper().strip() for c in row]
+        if any('DATE' in c or 'MEMBER' in c for c in row_up):
+            header_idx = i
+            break
 
-            rows = _parse_monthly_tab(values, month, year)
-            all_rows.extend(rows)
-        except Exception as e:
-            import warnings
-            warnings.warn(f"coaching_client: skip tab '{ws.title}': {e}")
-            continue
+    header = [c.upper().strip() for c in all_values[header_idx]]
 
-    # Dedup by id (first occurrence wins)
+    # Map column names to indices
+    def _col(names):
+        for n in names:
+            if n in header:
+                return header.index(n)
+        return None
+
+    idx_date  = _col(['DATE'])
+    idx_name  = _col(['MEMBER_NAME', 'MEMBER NAME', 'NAMA MEMBER', 'NAMA'])
+    idx_pkg   = _col(['PACKAGE_TYPE', 'PACKAGE TYPE', 'PAKET', 'KET'])
+    idx_pers  = _col(['PARTICIPANTS', 'PERSONS', 'PARTICIPANT'])
+    idx_start = _col(['START_TIME', 'START TIME', 'JAM MULAI', 'JAM'])
+    idx_end   = _col(['END_TIME', 'END TIME', 'JAM SELESAI'])
+
+    records = []
     seen = {}
-    for r in all_rows:
-        rid = r.get('id', '')
-        if rid and rid not in seen:
-            seen[rid] = r
 
-    rows = list(seen.values())
+    for raw_row in all_values[header_idx + 1:]:
+        row = list(raw_row) + [''] * 10
 
-    # Filter junk
-    rows = [
-        r for r in rows
-        if r.get('session_date') and r.get('member_name')
-        and len(r['member_name']) > 1
-    ]
+        session_date = str(row[idx_date]).strip() if idx_date is not None else ''
+        member_name  = str(row[idx_name]).strip()  if idx_name  is not None else ''
+        pkg_raw      = str(row[idx_pkg]).strip()   if idx_pkg   is not None else ''
+        persons_raw  = str(row[idx_pers]).strip()  if idx_pers  is not None else ''
+        start_time   = str(row[idx_start]).strip() if idx_start is not None else ''
+        end_time     = str(row[idx_end]).strip()   if idx_end   is not None else ''
 
-    return rows
+        # Skip blanks / header repeats
+        if not session_date or not member_name:
+            continue
+        if session_date.upper() in ('DATE', 'TANGGAL'):
+            continue
+
+        # Validate date format YYYY-MM-DD
+        try:
+            datetime.strptime(session_date, '%Y-%m-%d')
+        except ValueError:
+            continue
+
+        pkg_type = _normalise_pkg(pkg_raw)
+        persons  = _safe_int(persons_raw)
+        time_slot = f"{start_time}-{end_time}" if start_time and end_time else start_time
+
+        rec_id = _make_id(session_date, member_name, start_time)
+
+        if rec_id in seen:
+            continue
+        seen[rec_id] = True
+
+        records.append({
+            'id':                 rec_id,
+            'session_date':       session_date,
+            'member_name':        member_name.upper().strip(),
+            'persons':            persons,
+            'package_type':       pkg_type,
+            'package_raw':        pkg_raw,
+            'time_slot':          time_slot,
+            'sessions_remaining': None,
+            'status':             'active',
+        })
+
+    return records
