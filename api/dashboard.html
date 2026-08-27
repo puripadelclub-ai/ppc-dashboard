@@ -984,29 +984,83 @@ body{
     <div class="page" id="page-revenue">
       <div class="page-hd">
         <h2>Revenue</h2>
-        <p>Trend finansial, breakdown per kategori, dan proyeksi</p>
+        <p>Finansial PPC — trend, produk, dan metode pembayaran</p>
       </div>
 
-      <div class="section-eyebrow">Trend 6 Bulan</div>
-      <div style="margin-bottom:12px">
+      <!-- KPI Row -->
+      <div class="section-eyebrow">Ringkasan Bulan Ini</div>
+      <div class="four-col" id="rev-kpi-row" style="margin-bottom:1.4rem">
+        <span style="font-size:11px;color:var(--txt3)">Memuat...</span>
+      </div>
+
+      <!-- Trend chart -->
+      <div class="section-eyebrow">Trend Revenue</div>
+      <div style="margin-bottom:1.4rem">
         <div class="card">
           <div class="card-hd">
-            <span class="card-hd-lbl">Revenue Trend 6 Bulan</span>
-            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600">ESB</span>
+            <span class="card-hd-lbl">Revenue 6 Bulan Terakhir</span>
+            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">ESB</span>
           </div>
           <div class="chart-wrap-lg"><canvas id="chart-rev"></canvas></div>
         </div>
       </div>
 
+      <!-- Category breakdown -->
       <div class="section-eyebrow">Breakdown per Kategori</div>
-      <div class="card">
+      <div class="card" style="margin-bottom:1.4rem">
         <div class="card-hd">
           <span class="card-hd-lbl">Revenue per Kategori</span>
           <span id="sb-cat-period" style="font-size:10px;color:var(--txt3);margin-left:4px"></span>
           <i class="info-icon" onclick="event.stopPropagation();showInfo('sb-revenue-cat')" style="margin-left:4px">i</i>
-          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto" title="Data ESB dikueri langsung dari Supabase — date-filterable">ESB · Supabase</span>
+          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">ESB · Supabase</span>
         </div>
         <div id="sb-cat-breakdown"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+      </div>
+
+      <!-- Top Produk + Payment Method -->
+      <div class="section-eyebrow">Produk &amp; Pembayaran</div>
+      <div class="two-col-wide" style="margin-bottom:1.4rem">
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-hd-lbl">Top 10 Produk by Revenue</span>
+            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">ESB</span>
+          </div>
+          <div id="rev-top-products" style="margin-top:.75rem"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-hd-lbl">Metode Pembayaran</span>
+            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase · 6 bln</span>
+          </div>
+          <div id="rev-payment" style="margin-top:.75rem"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+      </div>
+
+      <!-- Semua Produk Table -->
+      <div class="section-eyebrow">Semua Produk</div>
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-hd-lbl">Detail per Produk</span>
+          <span id="rev-prod-count" style="font-weight:400;color:var(--txt3);font-size:.82rem;margin-left:4px"></span>
+          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">ESB</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="rev-prod-table">
+            <thead>
+              <tr>
+                <th style="width:28px;text-align:center">#</th>
+                <th>Produk</th>
+                <th>Kategori</th>
+                <th style="text-align:right">Transaksi</th>
+                <th style="text-align:right">Unik Cust.</th>
+                <th style="text-align:right">Avg Harga</th>
+                <th style="text-align:right">Revenue</th>
+                <th style="min-width:100px">% Total</th>
+              </tr>
+            </thead>
+            <tbody id="rev-prod-table-body"><tr><td colspan="8" style="padding:1rem;color:var(--txt3);font-size:11px">Memuat...</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -3828,9 +3882,170 @@ function renderRevTrend() {
   });
 }
 
+/* ── REVENUE KPI ROW ─────────────────────────────────────── */
+function _renderRevKPI() {
+  const el = document.getElementById('rev-kpi-row');
+  if (!el || !D) return;
+
+  const summ = D.summary || {};
+  const revThis  = si(summ.revenue_this_month || summ.Revenue_This_Month || 0);
+  const revLast  = si(summ.revenue_last_month || summ.Revenue_Last_Month || 0);
+  const mom      = revLast > 0 ? ((revThis - revLast) / revLast * 100) : null;
+  const momSign  = mom === null ? '' : (mom >= 0 ? '+' : '');
+  const momColor = mom === null ? 'var(--txt3)' : (mom >= 0 ? '#2da870' : '#ef4444');
+
+  // Avg per transaksi from product_detail or summary
+  const prods = D.product_detail || [];
+  const totalTx = prods.reduce((a,r) => a + si(r['Total_Transactions'] || 0), 0);
+  const avgTx   = totalTx > 0 ? revThis / totalTx : si(summ.avg_transaction || summ.Avg_Transaction || 0);
+
+  // YTD: sum all months in revenue where year matches
+  const curYear = new Date().getFullYear();
+  const ytd = (D.revenue||[]).filter(r => {
+    const m = r.Month||r.month||'';
+    return m && m.toString().startsWith(String(curYear));
+  }).reduce((a,r) => a + si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0), 0);
+
+  const kpis = [
+    {label:'Revenue Bulan Ini', val: fIDR(revThis), sub: revLast > 0 ? `vs ${fIDR(revLast)} bln lalu` : '', badge: mom !== null ? `${momSign}${mom.toFixed(1)}%` : '', badgeColor: momColor},
+    {label:'Growth MoM', val: mom !== null ? `${momSign}${mom.toFixed(1)}%` : 'N/A', sub: 'vs bulan lalu', badge: '', badgeColor:''},
+    {label:'Avg per Transaksi', val: fIDR(Math.round(avgTx)), sub: totalTx > 0 ? `${totalTx.toLocaleString()} transaksi` : '', badge:'', badgeColor:''},
+    {label:'Revenue YTD', val: fIDR(ytd), sub: `Jan–${new Date().toLocaleDateString('id-ID',{month:'short'})} ${curYear}`, badge:'', badgeColor:''},
+  ];
+
+  el.innerHTML = kpis.map(k => `
+    <div class="card" style="padding:14px 16px">
+      <div style="font-size:10.5px;color:var(--txt3);font-weight:600;letter-spacing:.3px;margin-bottom:6px;text-transform:uppercase">${k.label}</div>
+      <div style="display:flex;align-items:baseline;gap:6px">
+        <span style="font-size:20px;font-weight:800;color:var(--txt);letter-spacing:-.5px">${k.val}</span>
+        ${k.badge ? `<span style="font-size:10.5px;font-weight:700;color:${k.badgeColor}">${k.badge}</span>` : ''}
+      </div>
+      ${k.sub ? `<div style="font-size:10.5px;color:var(--txt3);margin-top:3px">${k.sub}</div>` : ''}
+    </div>`).join('');
+}
+
+/* ── TOP 10 PRODUK ───────────────────────────────────────── */
+function _renderRevTopProducts() {
+  const el = document.getElementById('rev-top-products');
+  if (!el || !D) return;
+  const prods = (D.product_detail || [])
+    .filter(r => si(r['Total_Revenue'] || 0) > 0)
+    .sort((a,b) => si(b['Total_Revenue']) - si(a['Total_Revenue']))
+    .slice(0, 10);
+
+  if (!prods.length) { el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Tidak ada data</span>'; return; }
+
+  const maxRev = si(prods[0]['Total_Revenue']);
+  el.innerHTML = prods.map((r, i) => {
+    const rev  = si(r['Total_Revenue']);
+    const pct  = maxRev > 0 ? (rev / maxRev * 100) : 0;
+    const col  = PROD_COLORS[i % PROD_COLORS.length];
+    return `
+      <div style="margin-bottom:9px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-size:11.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%">${r['Menu']||'—'}</span>
+          <span style="font-size:11px;color:var(--txt3);font-weight:500">${fIDR(rev)}</span>
+        </div>
+        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct.toFixed(1)}%;background:${col};border-radius:3px;transition:width .6s ease"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* ── SEMUA PRODUK TABLE ───────────────────────────────────── */
+function _renderRevProductTable() {
+  const tbody = document.getElementById('rev-prod-table-body');
+  const cnt   = document.getElementById('rev-prod-count');
+  if (!tbody || !D) return;
+  const prods = (D.product_detail || [])
+    .filter(r => si(r['Total_Revenue'] || 0) > 0)
+    .sort((a,b) => si(b['Total_Revenue']) - si(a['Total_Revenue']));
+
+  if (cnt) cnt.textContent = `(${prods.length} produk)`;
+  if (!prods.length) { tbody.innerHTML = '<tr><td colspan="8" style="padding:1rem;color:var(--txt3);font-size:11px">Tidak ada data</td></tr>'; return; }
+
+  const totalRev = prods.reduce((a,r) => a + si(r['Total_Revenue']), 0);
+  tbody.innerHTML = prods.map((r, i) => {
+    const rev = si(r['Total_Revenue']);
+    const pct = totalRev > 0 ? (rev / totalRev * 100) : 0;
+    const barW = Math.round(pct * 1.2); // scale so 100% isn't the whole bar at 1%
+    return `<tr>
+      <td style="text-align:center;color:var(--txt3);font-size:10.5px">${i+1}</td>
+      <td style="font-weight:600;font-size:11.5px">${r['Menu']||'—'}</td>
+      <td style="font-size:11px;color:var(--txt3)">${r['Menu_Category']||'—'}</td>
+      <td style="text-align:right;font-size:11px">${(si(r['Total_Transactions'])||0).toLocaleString()}</td>
+      <td style="text-align:right;font-size:11px">${(si(r['Unique_Customers'])||0).toLocaleString()}</td>
+      <td style="text-align:right;font-size:11px">${fIDR(si(r['Avg_Price'])||0)}</td>
+      <td style="text-align:right;font-size:11.5px;font-weight:700;color:var(--brand)">${fIDR(rev)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${Math.min(pct*3,100).toFixed(1)}%;background:var(--brand);border-radius:3px"></div>
+          </div>
+          <span style="font-size:10.5px;color:var(--txt3);min-width:32px;text-align:right">${pct.toFixed(1)}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── PAYMENT METHOD (SUPABASE ASYNC) ─────────────────────── */
+async function _renderRevPaymentAsync() {
+  const el = document.getElementById('rev-payment');
+  if (!el) return;
+
+  // 6 months back from today
+  const from6 = new Date();
+  from6.setMonth(from6.getMonth() - 6);
+  const fromStr = from6.toISOString().slice(0,10);
+
+  try {
+    const {data, error} = await _SB.from('transactions')
+      .select('payment_method,gross_amount')
+      .gte('transaction_date', fromStr);
+
+    if (error || !data || !data.length) {
+      el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Data tidak tersedia</span>';
+      return;
+    }
+
+    // Group by payment_method
+    const map = {};
+    data.forEach(r => {
+      const pm = r.payment_method || 'Lainnya';
+      map[pm] = (map[pm] || 0) + si(r.gross_amount);
+    });
+    const total = Object.values(map).reduce((a,v) => a+v, 0);
+    const sorted = Object.entries(map).sort((a,b) => b[1]-a[1]);
+
+    el.innerHTML = sorted.map(([pm, rev], i) => {
+      const pct = total > 0 ? (rev / total * 100) : 0;
+      const col = PROD_COLORS[i % PROD_COLORS.length];
+      return `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+            <span style="font-size:11.5px;font-weight:600;color:var(--txt)">${pm}</span>
+            <span style="font-size:11px;color:var(--txt3)">${pct.toFixed(1)}%</span>
+          </div>
+          <div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${pct.toFixed(1)}%;background:${col};border-radius:4px;transition:width .6s ease"></div>
+          </div>
+          <div style="font-size:10.5px;color:var(--txt3);margin-top:2px">${fIDR(rev)}</div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Gagal memuat</span>';
+  }
+}
+
 function renderRevenue() {
   renderRevTrend();
   renderSBCategoryBreakdown();
+  _renderRevKPI();
+  _renderRevTopProducts();
+  _renderRevProductTable();
+  _renderRevPaymentAsync();
 }
 
 async function renderCoachingSection() {
