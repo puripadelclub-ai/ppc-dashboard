@@ -1058,20 +1058,27 @@ body{
         <span style="font-size:11px;color:var(--txt3)">Memuat...</span>
       </div>
 
-      <!-- ── Section 2: Who Uses What ────────────────────────────────────── -->
+      <!-- ── Section 2: Coaching Sessions ─────────────────────────────────── -->
       <div class="section-eyebrow" style="display:flex;align-items:center;gap:.5rem">
-        Who Uses What
-        <span id="wuw-badge" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 7px;border-radius:4px;font-weight:600"></span>
+        Coaching Sessions
+        <span id="coach-badge" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 7px;border-radius:4px;font-weight:600"></span>
       </div>
       <div class="card" style="margin-bottom:1.4rem">
-        <div class="card-hd" style="margin-bottom:.75rem">
-          <span class="card-hd-lbl">Member ↔ Program</span>
-          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase · 90 hari</span>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <span class="card-hd-lbl">Per package · 90 hari</span>
+          <div id="coach-tabs" style="display:flex;gap:4px"></div>
         </div>
-        <div id="wuw-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        <div id="coach-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
       </div>
 
-      <!-- ── Section 3: Program Affinity ─────────────────────────────────── -->
+      <!-- ── Section 3: Court Pass & Promo ──────────────────────────────── -->
+      <div class="section-eyebrow" style="display:flex;align-items:center;gap:.5rem">
+        Court Pass &amp; Promo Aktif
+        <span id="pass-badge" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 7px;border-radius:4px;font-weight:600"></span>
+      </div>
+      <div id="pass-body" style="margin-bottom:1.4rem"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+
+      <!-- ── Section 4: Program Affinity ─────────────────────────────────── -->
       <div class="section-eyebrow">Program Affinity</div>
       <div class="two-col-wide" style="margin-bottom:1.4rem">
         <div class="card">
@@ -1155,6 +1162,19 @@ body{
     <button class="drawer-close" onclick="closeDrawer()">✕ Tutup</button>
   </div>
   <div id="drawer-content" style="flex:1;overflow-y:auto;padding:18px 20px"></div>
+</div>
+
+<!-- PROG POPUP OVERLAY -->
+<div id="prog-overlay" onclick="closeProgModal()"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9998;align-items:center;justify-content:center;padding:16px">
+  <div id="prog-modal" onclick="event.stopPropagation()"
+    style="background:var(--surface);border-radius:14px;padding:20px 20px 16px;max-width:400px;width:100%;max-height:78vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 id="prog-modal-title" style="font-size:14px;font-weight:700;margin:0;color:var(--txt)"></h3>
+      <button onclick="closeProgModal()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--txt3);line-height:1;padding:2px 6px">✕</button>
+    </div>
+    <div id="prog-modal-body"></div>
+  </div>
 </div>
 
 <!-- INFO POPUP OVERLAY -->
@@ -1448,7 +1468,19 @@ function showInfo(key) {
 function closeInfo() {
   document.getElementById('info-overlay').classList.remove('open');
 }
-document.addEventListener('keydown', e => { if(e.key==='Escape') closeInfo(); });
+
+function openProgModal(title, html) {
+  document.getElementById('prog-modal-title').textContent = title;
+  document.getElementById('prog-modal-body').innerHTML = html;
+  document.getElementById('prog-overlay').style.display = 'flex';
+}
+function closeProgModal() {
+  document.getElementById('prog-overlay').style.display = 'none';
+}
+
+document.addEventListener('keydown', e => {
+  if(e.key==='Escape') { closeInfo(); closeProgModal(); }
+});
 
 // Helper: info icon HTML
 const ii = k => `<i class="info-icon" onclick="event.stopPropagation();showInfo('${k}')">i</i>`;
@@ -3982,7 +4014,7 @@ async function _renderAllProgramSections() {
   try {
     const [passRes, coachRecentRes, coachMonthRes] = await Promise.all([
       _SB.from('programs')
-        .select('member_name,package_type,status,sessions_remaining,expiry_date'),
+        .select('member_name,package_type,status,sessions_total,sessions_remaining,expiry_date'),
       _SB.from('coaching_sessions')
         .select('member_name,package_type,sessions_remaining,status,session_date')
         .gte('session_date', from90),
@@ -3996,10 +4028,11 @@ async function _renderAllProgramSections() {
     const coachMonth  = coachMonthRes.data  || [];
 
     _renderProgPerf(passes, coachMonth);
-    _renderWhoUsesWhat(passes, coachRecent);
+    _renderCoachingSection(passes, coachRecent);
+    _renderPassSection(passes);
     _renderProgramAffinity(passes, coachRecent);
   } catch(e) {
-    ['prog-perf-cards','wuw-body','affinity-ranking','affinity-multi'].forEach(id => {
+    ['prog-perf-cards','coach-body','pass-body','affinity-ranking','affinity-multi'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = `<span style="font-size:11px;color:var(--red,#ef4444)">Error: ${e.message}</span>`;
     });
@@ -4101,108 +4134,198 @@ function _renderProgPerf(passes, coachMonth) {
     </div>`).join('');
 }
 
-// ── Section 2: Who Uses What — per-member program view ────────────────────
+// ── Section 2: Coaching Sessions — tabs per bulan, per package ────────────
 
-function _renderWhoUsesWhat(passes, coachRecent) {
-  const el    = document.getElementById('wuw-body');
-  const badge = document.getElementById('wuw-badge');
-  if (!el) return;
+function _renderCoachingSection(passes, coachRecent) {
+  const tabEl  = document.getElementById('coach-tabs');
+  const bodyEl = document.getElementById('coach-body');
+  const badge  = document.getElementById('coach-badge');
+  if (!bodyEl) return;
 
-  if (!passes.length && !coachRecent.length) {
-    el.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:12px">Belum ada data program. Jalankan pipeline terlebih dahulu.</div>';
+  if (!coachRecent.length) {
+    bodyEl.innerHTML = '<div style="padding:.75rem;color:var(--txt3);font-size:12px">Belum ada data coaching 90 hari terakhir.</div>';
     return;
   }
 
-  // ── Last 3 months as columns ──────────────────────────────────────────
-  const now = new Date();
   const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  const now = new Date();
   const months = [];
   for (let i = 2; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({
-      key:   `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
-      label: `${MO_ID[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-    });
+    months.push({key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,label:`${MO_ID[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`});
   }
 
-  // ── Coaching: count sessions per package_type per month ───────────────
-  const coachMatrix = {};
-  coachRecent.forEach(s => {
-    const pkg = s.package_type || 'FREE_COACHING';
-    const mo  = (s.session_date||'').slice(0,7);
-    if (!coachMatrix[pkg]) coachMatrix[pkg] = {};
-    coachMatrix[pkg][mo] = (coachMatrix[pkg][mo]||0) + 1;
-  });
-  const coachPkgs = Object.entries(coachMatrix)
-    .map(([pkg, byMo]) => ({pkg, byMo, total: Object.values(byMo).reduce((s,v)=>s+v,0)}))
-    .sort((a,b) => b.total - a.total);
+  // Distinct package types across all data for badge
+  const allPkgs = new Set(coachRecent.map(s=>s.package_type||'FREE_COACHING'));
+  if (badge) badge.textContent = `${allPkgs.size} package`;
 
-  // ── Passes: active count per package_type ─────────────────────────────
-  const passCount = {};
-  passes.forEach(p => {
-    const pkg = (p.package_type||'UNKNOWN').replace(/_/g,' ');
-    passCount[pkg] = (passCount[pkg]||0) + 1;
-  });
-  const passPkgs = Object.entries(passCount).sort((a,b)=>b[1]-a[1]);
+  let activeMo = months[months.length-1].key;
 
-  if (badge) badge.textContent = `${coachPkgs.length + passPkgs.length} program`;
+  const TD  = 'padding:6px 12px;border-bottom:1px solid var(--border);font-size:12px';
+  const TH  = 'padding:5px 12px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)';
 
-  // ── Style helpers ─────────────────────────────────────────────────────
-  const TH  = 'padding:6px 12px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border);text-align:right;white-space:nowrap';
-  const THL = 'padding:6px 12px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border);text-align:left';
-  const TD  = 'padding:5px 12px;border-bottom:1px solid var(--border);font-size:12px;text-align:right';
-  const TDL = 'padding:5px 12px;border-bottom:1px solid var(--border);font-size:11.5px;font-weight:600;color:var(--txt)';
-  const SEC = 'padding:5px 12px;border-bottom:1px solid var(--border);font-size:10px;font-weight:700;letter-spacing:.06em;background:var(--bg2,#f5f5f0)';
-  const num = v => v > 0
-    ? `<span style="font-weight:700;color:var(--txt)">${v}</span>`
-    : `<span style="color:var(--border)">—</span>`;
+  const renderMo = (mo) => {
+    const rows = coachRecent.filter(s=>(s.session_date||'').slice(0,7)===mo);
+    const byPkg = {};
+    rows.forEach(s=>{
+      const pk = s.package_type||'FREE_COACHING';
+      if(!byPkg[pk]) byPkg[pk]={n:0,mem:new Set()};
+      byPkg[pk].n++;
+      if(s.member_name) byPkg[pk].mem.add(s.member_name);
+    });
+    const pkgs = Object.entries(byPkg).sort((a,b)=>b[1].n-a[1].n);
+    if(!pkgs.length){
+      bodyEl.innerHTML='<div style="padding:.75rem;color:var(--txt3);font-size:12px">Tidak ada sesi di bulan ini.</div>';
+      return;
+    }
+    const total = rows.length;
+    const uniq  = new Set(rows.map(s=>s.member_name)).size;
+    bodyEl.innerHTML=`
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="${TH};text-align:left">PACKAGE</th>
+          <th style="${TH};text-align:right">SESI</th>
+          <th style="${TH};text-align:right">MEMBER UNIK</th>
+          <th style="${TH};text-align:right;color:transparent">ACT</th>
+        </tr></thead>
+        <tbody>
+          ${pkgs.map(([pk,{n,mem}])=>{
+            const col=_PKG_COLOR[pk]||'#6b7280';
+            const lbl=_PKG_LABEL[pk]||pk.replace(/_/g,' ');
+            const mArr=JSON.stringify([...mem]);
+            return `<tr style="cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
+              onclick="_coachPkgModal('${lbl.replace(/'/g,"\\'")}','${mo}',${mArr})">
+              <td style="${TD}"><span style="background:${col}15;color:${col};border-radius:3px;padding:2px 9px;font-size:10.5px;font-weight:600">${lbl}</span></td>
+              <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${n}</td>
+              <td style="${TD};text-align:right;color:var(--txt2)">${mem.size}</td>
+              <td style="${TD};text-align:right;font-size:11px;color:var(--txt3)">lihat →</td>
+            </tr>`;
+          }).join('')}
+          <tr style="background:var(--bg2,#fafaf8)">
+            <td style="${TD};font-size:11px;font-weight:700;color:var(--txt3)">TOTAL</td>
+            <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${total}</td>
+            <td style="${TD};text-align:right;color:var(--txt2)">${uniq}</td>
+            <td style="${TD}"></td>
+          </tr>
+        </tbody>
+      </table>`;
+  };
 
-  // ── Totals ────────────────────────────────────────────────────────────
-  const totalByMo = {};
-  months.forEach(m => { totalByMo[m.key] = 0; });
-  coachPkgs.forEach(({byMo}) => months.forEach(m => {
-    totalByMo[m.key] = (totalByMo[m.key]||0) + (byMo[m.key]||0);
-  }));
-  const grandCoach = coachPkgs.reduce((s,r)=>s+r.total,0);
-  const NC = months.length + 2; // colspan
+  // Render tabs
+  const renderTabs = () => {
+    if(!tabEl) return;
+    tabEl.innerHTML=months.map(m=>`
+      <button id="ctab-${m.key}" onclick="_switchCoachTab('${m.key}')"
+        style="padding:4px 13px;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;
+        border:1px solid ${m.key===activeMo?'#034842':'var(--border)'};
+        background:${m.key===activeMo?'#034842':'var(--surface)'};
+        color:${m.key===activeMo?'#fff':'var(--txt3)'}">
+        ${m.label}
+      </button>`).join('');
+  };
 
-  el.innerHTML = `
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse">
-      <thead><tr>
-        <th style="${THL}">PROGRAM</th>
-        ${months.map(m=>`<th style="${TH}">${m.label}</th>`).join('')}
-        <th style="${TH}">TOTAL / AKTIF</th>
-      </tr></thead>
-      <tbody>
-        <tr><td colspan="${NC}" style="${SEC};color:#8b5cf6">🏸 COACHING SESSIONS (90 hari)</td></tr>
-        ${coachPkgs.map(({pkg, byMo, total}) => {
-          const col = _PKG_COLOR[pkg] || '#6b7280';
-          const lbl = _PKG_LABEL[pkg] || pkg.replace(/_/g,' ');
-          return `<tr>
-            <td style="${TDL}"><span style="background:${col}15;color:${col};border-radius:3px;padding:1px 7px;font-size:10.5px">${lbl}</span></td>
-            ${months.map(m=>`<td style="${TD}">${num(byMo[m.key]||0)}</td>`).join('')}
-            <td style="${TD};font-weight:700;color:var(--txt)">${total}</td>
-          </tr>`;
-        }).join('')}
-        <tr style="background:var(--bg2,#fafaf8)">
-          <td style="${TDL};font-size:11px;color:var(--txt3)">TOTAL SESI</td>
-          ${months.map(m=>`<td style="${TD};font-weight:700;color:var(--txt)">${totalByMo[m.key]||0}</td>`).join('')}
-          <td style="${TD};font-weight:700;color:var(--txt)">${grandCoach}</td>
-        </tr>
-        ${passPkgs.length ? `
-        <tr><td colspan="${NC}" style="${SEC};color:#0d9488">🎫 COURT PASS AKTIF (snapshot)</td></tr>
-        ${passPkgs.map(([pkg,count])=>`<tr>
-          <td style="${TDL}"><span style="background:#0d948815;color:#0d9488;border-radius:3px;padding:1px 7px;font-size:10.5px">${pkg}</span></td>
-          ${months.map(()=>`<td style="${TD}"><span style="color:var(--border)">—</span></td>`).join('')}
-          <td style="${TD};font-weight:700;color:var(--txt)">${count}</td>
-        </tr>`).join('')}` : ''}
-      </tbody>
-    </table>
-    </div>`;
+  window._switchCoachTab = mo => {
+    activeMo=mo;
+    renderTabs();
+    renderMo(mo);
+  };
+
+  window._coachPkgModal = (lbl, mo, members) => {
+    const [y,mIdx]=mo.split('-');
+    const moLbl=`${MO_ID[parseInt(mIdx)-1]} ${y}`;
+    const html=`
+      <div style="font-size:11px;color:var(--txt3);margin-bottom:10px">${members.length} member · ${moLbl}</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        ${members.sort().map(name=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;
+            background:var(--bg2,#f5f5f2);border-radius:7px;cursor:pointer;transition:background .12s"
+            onmouseover="this.style.background='var(--brand-lt)'" onmouseout="this.style.background='var(--bg2,#f5f5f2)'"
+            onclick="closeProgModal();openMember360('${name.replace(/'/g,"\\'")}')">
+            <span style="font-size:12.5px;font-weight:600;color:var(--txt)">${name}</span>
+            <span style="font-size:11px;color:var(--brand)">360° →</span>
+          </div>`).join('')}
+      </div>`;
+    openProgModal(lbl, html);
+  };
+
+  renderTabs();
+  renderMo(activeMo);
 }
 
-// ── Section 3: Program Affinity — popularity + multi-program members ──────
+// ── Section 3: Court Pass & Promo Aktif ───────────────────────────────────
+
+function _renderPassSection(passes) {
+  const el    = document.getElementById('pass-body');
+  const badge = document.getElementById('pass-badge');
+  if (!el) return;
+
+  const active = passes.filter(p=>p.status==='active');
+  if (!active.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--txt3)">Tidak ada court pass / promo aktif saat ini.</div>';
+    return;
+  }
+
+  const byPkg = {};
+  active.forEach(p=>{
+    const pk=p.package_type||'UNKNOWN';
+    if(!byPkg[pk]) byPkg[pk]=[];
+    byPkg[pk].push(p);
+  });
+  const pkgEntries = Object.entries(byPkg).sort((a,b)=>b[1].length-a[1].length);
+  if (badge) badge.textContent = `${pkgEntries.length} program`;
+
+  const warn14 = new Date(Date.now()+14*864e5).toISOString().slice(0,10);
+
+  el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px">
+    ${pkgEntries.map(([pk,members])=>{
+      const lbl=pk.replace(/_/g,' ');
+      const totalSisa=members.reduce((s,m)=>s+(m.sessions_remaining||0),0);
+      const expiring=members.filter(m=>m.expiry_date&&m.expiry_date<=warn14);
+      return `<div class="card" style="padding:14px 16px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+          <div>
+            <div style="font-size:12.5px;font-weight:700;color:var(--txt);line-height:1.3">${lbl}</div>
+            <div style="font-size:10.5px;color:var(--txt3);margin-top:2px">Sisa total: ${totalSisa} sesi</div>
+          </div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
+            ${expiring.length?`<span style="font-size:10px;font-weight:700;background:#f59e0b20;color:#b45309;border-radius:3px;padding:2px 7px">⚠ ${expiring.length} expire</span>`:''}
+            <span style="font-size:10px;font-weight:700;background:var(--brand-lt);color:var(--brand);border-radius:3px;padding:2px 7px">${members.length} aktif</span>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:8px;display:flex;flex-direction:column;gap:5px">
+          ${members.sort((a,b)=>{
+            // expiring first, then by sessions_remaining asc
+            const aExp=a.expiry_date&&a.expiry_date<=warn14;
+            const bExp=b.expiry_date&&b.expiry_date<=warn14;
+            if(aExp!==bExp) return aExp?-1:1;
+            return (a.sessions_remaining||0)-(b.sessions_remaining||0);
+          }).map(m=>{
+            const isExp=m.expiry_date&&m.expiry_date<=warn14;
+            const pct=m.sessions_total>0?Math.round((m.sessions_remaining||0)/m.sessions_total*100):null;
+            const barCol=isExp?'#f59e0b':'#034842';
+            return `<div style="padding:6px 8px;background:var(--bg2,#f5f5f2);border-radius:6px;${isExp?'border-left:2.5px solid #f59e0b;padding-left:6px':''}">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${pct!==null?'4px':'0'}">
+                <span style="font-size:11.5px;font-weight:600;cursor:pointer;color:var(--brand)"
+                  onclick="openMember360('${m.member_name.replace(/'/g,"\\'")}')">
+                  ${m.member_name}
+                </span>
+                <div style="display:flex;gap:4px;align-items:center">
+                  <span style="font-size:10.5px;color:${isExp?'#b45309':'var(--txt3)'}">sisa ${m.sessions_remaining||0}</span>
+                  ${isExp?`<span style="font-size:9px;background:#f59e0b20;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:600">exp ${m.expiry_date}</span>`:''}
+                </div>
+              </div>
+              ${pct!==null?`<div style="height:3px;background:var(--border);border-radius:2px">
+                <div style="height:3px;border-radius:2px;width:${pct}%;background:${barCol};transition:width .3s"></div>
+              </div>`:''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ── Section 4: Program Affinity — popularity + multi-program members ──────
 
 function _renderProgramAffinity(passes, coachRecent) {
   const rankEl  = document.getElementById('affinity-ranking');
