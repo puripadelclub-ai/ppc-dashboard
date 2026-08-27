@@ -3980,8 +3980,7 @@ async function _renderAllProgramSections() {
   try {
     const [passRes, coachRecentRes, coachMonthRes] = await Promise.all([
       _SB.from('programs')
-        .select('member_name,package_type,status,sessions_remaining,expiry_date')
-        .eq('status','active'),
+        .select('member_name,package_type,status,sessions_remaining,expiry_date'),
       _SB.from('coaching_sessions')
         .select('member_name,package_type,sessions_remaining,status,session_date')
         .gte('session_date', from90),
