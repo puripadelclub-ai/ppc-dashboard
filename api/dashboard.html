@@ -4072,7 +4072,7 @@ function _renderProgPerf(passes, coachMonth) {
       label:'Lainnya', icon:'📦', color:'#6b7280',
       rev: othersRev, supabase: false, s1v: null,
     },
-  ].filter(c => c.rev > 0 || c.supabase);
+  ]; // always show all 4 cards
 
   if (!CARDS.length) {
     el.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:12px">Belum ada data ESB. Jalankan pipeline terlebih dahulu.</div>';
@@ -4108,13 +4108,10 @@ function _renderWhoUsesWhat(passes, coachRecent) {
   const badge = document.getElementById('wuw-badge');
   if (!el) return;
 
-  // Build per-member map
   const memberMap = {};
   const ensure = n => { if (!memberMap[n]) memberMap[n]={passes:[],coachAgg:null}; return memberMap[n]; };
-
   passes.forEach(p => ensure(p.member_name).passes.push(p));
 
-  // Aggregate coaching per member
   const coachByMem = {};
   coachRecent.forEach(s => {
     if (!coachByMem[s.member_name]) coachByMem[s.member_name]={count:0,lastDate:'',pkgSet:new Set()};
@@ -4137,35 +4134,66 @@ function _renderWhoUsesWhat(passes, coachRecent) {
   }
   if (badge) badge.textContent = `${members.length} member`;
 
-  const passPill = p => {
-    const lbl = (p.package_type||'').replace(/_/g,' ')
-      .replace(/COURT PASS/i,'Pass').replace(/INDEPENDENCE WEEK/i,'Indep.Week') || 'Program';
-    const info = p.sessions_remaining!=null ? ` · Sisa ${p.sessions_remaining}` : '';
-    return `<span style="font-size:10px;background:#0d948818;color:#0d9488;padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">${lbl}${info}</span>`;
-  };
+  // Group members
+  const multi     = members.filter(([,d]) => d.passes.length > 0 && d.coachAgg);
+  const passOnly  = members.filter(([,d]) => d.passes.length > 0 && !d.coachAgg);
+  const coachOnly = members.filter(([,d]) => d.passes.length === 0 && d.coachAgg);
 
-  const coachPill = agg => {
-    const pkgs    = [...agg.pkgSet];
-    const primary = pkgs[0] || 'FREE_COACHING';
-    const col     = _PKG_COLOR[primary] || '#6b7280';
-    const lbl     = _PKG_LABEL[primary] || 'Coaching';
-    const bg      = col.startsWith('#') ? col+'18' : 'rgba(100,100,100,.1)';
-    return `<span style="font-size:10px;background:${bg};color:${col};padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">🏸 ${lbl} · ${agg.count}x</span>`;
+  // Row renderers
+  const TD  = 'padding:5px 10px;border-bottom:1px solid var(--border);font-size:11.5px;vertical-align:middle';
+  const passCell = (ps) => ps.map(p => {
+    const lbl  = (p.package_type||'').replace(/_/g,' ').replace(/COURT PASS/i,'Pass').replace(/INDEPENDENCE WEEK/i,'Indep.Week') || 'Program';
+    const sisa = p.sessions_remaining!=null ? ` · Sisa ${p.sessions_remaining}` : '';
+    return `<span style="background:#0d948815;color:#0d9488;border-radius:3px;padding:1px 6px;font-size:10.5px;font-weight:600;margin-right:3px;display:inline-block">${lbl}${sisa}</span>`;
+  }).join('');
+  const coachCell = (agg) => {
+    if (!agg) return '';
+    const primary = [...agg.pkgSet][0] || 'FREE_COACHING';
+    const col = _PKG_COLOR[primary] || '#6b7280';
+    const lbl = _PKG_LABEL[primary] || 'Coaching';
+    return `<span style="background:${col}18;color:${col};border-radius:3px;padding:1px 6px;font-size:10.5px;font-weight:600;display:inline-block">🏸 ${lbl} · ${agg.count}x</span>`;
+  };
+  const mkRow = ([name,data], hidden=false) => {
+    const cls = hidden ? ' class="wuw-coach-more" style="display:none"' : '';
+    return `<tr${cls} onclick="openMember360('${name.replace(/'/g,"\\'")}')">
+      <td style="${TD};font-weight:600;color:var(--txt);white-space:nowrap;cursor:pointer">${name}</td>
+      <td style="${TD}">${passCell(data.passes)}</td>
+      <td style="${TD}">${coachCell(data.coachAgg)}</td>
+    </tr>`;
+  };
+  const mkGroup = (emoji, label, color, rows, collapseAfter=0) => {
+    const shown  = collapseAfter > 0 ? rows.slice(0, collapseAfter) : rows;
+    const rest   = collapseAfter > 0 ? rows.slice(collapseAfter)    : [];
+    return `<tr><td colspan="3" style="padding:5px 10px;background:var(--sidebar,#f0f0ea);font-size:10px;font-weight:700;color:${color};letter-spacing:.06em;border-bottom:1px solid var(--border)">${emoji} ${label.toUpperCase()} · ${rows.length}</td></tr>
+      ${shown.map(r => mkRow(r, false)).join('')}
+      ${rest.map(r => mkRow(r, true)).join('')}
+      ${rest.length ? `<tr class="wuw-coach-btn"><td colspan="3" style="padding:6px 10px;border-bottom:1px solid var(--border)">
+        <button onclick="document.querySelectorAll('.wuw-coach-more').forEach(r=>r.style.display='');document.querySelectorAll('.wuw-coach-btn').forEach(b=>b.style.display='none')"
+          style="font-size:11px;color:var(--brand,#034842);background:none;border:none;cursor:pointer;font-weight:600">
+          + Lihat ${rest.length} coaching member lainnya
+        </button>
+      </td></tr>` : ''}`;
   };
 
   el.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px">
-      ${members.map(([name,data]) => {
-        const total = data.passes.length + (data.coachAgg ? 1 : 0);
-        const pills = data.passes.map(passPill).join('') + (data.coachAgg ? coachPill(data.coachAgg) : '');
-        return `<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
-            <span style="font-size:12px;font-weight:700;color:var(--txt)">${name}</span>
-            ${total>1?`<span style="font-size:9px;font-weight:700;background:var(--brand-lt);color:var(--brand);padding:1px 6px;border-radius:3px">${total} program</span>`:''}
-          </div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px">${pills}</div>
-        </div>`;
-      }).join('')}
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      ${multi.length    ? `<span style="font-size:11px;font-weight:700;background:var(--brand-lt,#e0f7f5);color:var(--brand,#034842);padding:3px 10px;border-radius:12px">⭐ Multi-program: ${multi.length}</span>`    : ''}
+      ${passOnly.length ? `<span style="font-size:11px;font-weight:700;background:#0d948815;color:#0d9488;padding:3px 10px;border-radius:12px">🎫 Pass: ${passOnly.length}</span>` : ''}
+      ${coachOnly.length? `<span style="font-size:11px;font-weight:700;background:#8b5cf615;color:#8b5cf6;padding:3px 10px;border-radius:12px">🏸 Coaching: ${coachOnly.length}</span>` : ''}
+    </div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;padding:5px 10px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)">NAMA</th>
+        <th style="text-align:left;padding:5px 10px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)">PASS / PROGRAM</th>
+        <th style="text-align:left;padding:5px 10px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)">COACHING (90 hari)</th>
+      </tr></thead>
+      <tbody>
+        ${multi.length    ? mkGroup('⭐','Multi-program','var(--brand,#034842)', multi)    : ''}
+        ${passOnly.length ? mkGroup('🎫','Pass Aktif','#0d9488', passOnly)                 : ''}
+        ${coachOnly.length? mkGroup('🏸','Coaching','#8b5cf6', coachOnly, 15)              : ''}
+      </tbody>
+    </table>
     </div>`;
 }
 
