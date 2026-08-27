@@ -4038,7 +4038,7 @@ function _renderProgPerf(passes, coachMonth) {
 
   // Court Pass / Programs — includes court rental (sewa lapangan) revenue
   const passRev     = matchRev('court pass','comeback','upgrade','trial','court_pass',
-                               'lapangan','sewa','court rental','ball machine','booking','reservasi');
+                               'court rent','lapangan','sewa','ball machine','booking','reservasi');
   const passUniq    = new Set(passes.map(p=>p.member_name)).size;
   const totalSessL  = passes.reduce((s,p)=>s+(p.sessions_remaining||0),0);
 
@@ -4468,7 +4468,7 @@ function destroyChart(id) {
 // ── SUPABASE AUTH ─────────────────────────────────
 const _SB = supabase.createClient(
   'https://vdtcrgbrnibyasjjnckw.supabase.co',
-  'sb_publishable_h3DHnVlpekgficXy9lYbTA_A3CHLNzx'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkdGNyZ2JybmlieWFzampuY2t3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NDE5NzIsImV4cCI6MjEwMzExNzk3Mn0.C-gOC19dV1xCjHp4bPUQSb3BGuPPEPYIGFlUPR1Lzno'
 );
 
 const ROLE_PAGES = {
