@@ -1694,6 +1694,8 @@ def run_pipeline():
             f"({len(cp_rows)} parsed from sheet)"
         )
     except Exception as e_cp:
+        try: _lc_cp(log_id_cp, "failed", error=str(e_cp))
+        except Exception: pass
         log.append(f"  ⚠️ Programs sync (non-fatal): {e_cp}")
 
     # ── Coaching Log sheet → Supabase coaching_sessions ───────────────────────
@@ -1719,6 +1721,8 @@ def run_pipeline():
             f"({len(cs_rows)} parsed from sheet)"
         )
     except Exception as e_cs:
+        try: _lc_cs(log_id_cs, "failed", error=str(e_cs))
+        except Exception: pass
         log.append(f"  ⚠️ Coaching sync (non-fatal): {e_cs}")
 
     log.append("✅ All done!")
