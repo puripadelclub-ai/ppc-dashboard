@@ -4466,9 +4466,12 @@ function destroyChart(id) {
 }
 
 // ── SUPABASE AUTH ─────────────────────────────────
+// auth: {persistSession:false} — prevent SDK from using a cached user session from localStorage
+// which would override the anon JWT and cause RLS to block all reads
 const _SB = supabase.createClient(
   'https://vdtcrgbrnibyasjjnckw.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkdGNyZ2JybmlieWFzampuY2t3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NDE5NzIsImV4cCI6MjEwMzExNzk3Mn0.C-gOC19dV1xCjHp4bPUQSb3BGuPPEPYIGFlUPR1Lzno'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkdGNyZ2JybmlieWFzampuY2t3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NDE5NzIsImV4cCI6MjEwMzExNzk3Mn0.C-gOC19dV1xCjHp4bPUQSb3BGuPPEPYIGFlUPR1Lzno',
+  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
 );
 
 const ROLE_PAGES = {
