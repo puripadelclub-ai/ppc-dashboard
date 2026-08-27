@@ -4010,7 +4010,7 @@ function _renderProgPerf(passes, coachMonth) {
   const el = document.getElementById('prog-perf-cards');
   if (!el) return;
 
-  const prods = D.product_detail || [];
+  const prods = (window.D && D.product_detail) ? D.product_detail : [];
   const numOf = (r,k) => Number(r[k])||0;
   const fmtJt = v => {
     const n = Number(v)||0;
