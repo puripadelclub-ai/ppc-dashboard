@@ -4528,14 +4528,17 @@ function _renderProgramAffinity(passes, coachRecent) {
     'Coaching Kids':'#8b5cf6','Private Coaching':'#f59e0b',
     'Court Pass':'#0d9488','Comeback Package':'#3b82f6',
     'Trial':'#60a5fa','Upgrade Membership':'#f97316',
+    'Independence Deal':'#e11d48',
   };
 
   const toPassBucket = pkg => {
     const p = (pkg||'').toUpperCase();
-    if (p.includes('COMEBACK'))  return 'Comeback Package';
-    if (p.includes('UPGRADE'))   return 'Upgrade Membership';
-    if (p.includes('TRIAL'))     return 'Trial';
-    return 'Court Pass';
+    if (/COURT.?PASS/i.test(pkg||'')) return 'Court Pass';
+    if (p.includes('COMEBACK'))       return 'Comeback Package';
+    if (p.includes('UPGRADE'))        return 'Upgrade Membership';
+    if (p.includes('TRIAL'))          return 'Trial';
+    if (p.includes('INDEPENDENCE'))   return 'Independence Deal';
+    return pkg || 'Other';
   };
 
   const toCoachBucket = pkg => {
