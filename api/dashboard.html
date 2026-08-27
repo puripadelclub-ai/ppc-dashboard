@@ -1113,32 +1113,35 @@ body{
       </div>
 
       <!-- ── Sections 2–3: Program Aktif — 3 kolom ────────────────────────── -->
-      <div class="section-eyebrow">Program Aktif</div>
-      <div class="three-col" style="margin-bottom:1.4rem;align-items:start">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="section-eyebrow" style="margin-bottom:0">Program Aktif</div>
+        <div id="prog-month-tabs" style="display:flex;gap:4px"></div>
+      </div>
+      <div class="three-col" style="margin-bottom:1.4rem;align-items:stretch">
 
         <!-- Coaching -->
-        <div class="card" style="min-height:160px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <span class="card-hd-lbl">Coaching Sessions <span id="coach-badge" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:4px"></span></span>
-            <div id="coach-tabs" style="display:flex;gap:3px;flex-shrink:0"></div>
+        <div class="card">
+          <div style="margin-bottom:10px">
+            <span class="card-hd-lbl">Coaching Sessions</span>
+            <span id="coach-badge" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px"></span>
           </div>
           <div id="coach-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
         </div>
 
         <!-- Court Pass -->
-        <div class="card" style="min-height:160px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card">
+          <div style="margin-bottom:10px">
             <span class="card-hd-lbl">Court Pass</span>
-            <span id="courtpass-badge" style="font-size:9px;background:#0d948815;color:#0d9488;padding:2px 6px;border-radius:4px;font-weight:600"></span>
+            <span id="courtpass-badge" style="font-size:9px;background:#0d948815;color:#0d9488;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px"></span>
           </div>
           <div id="courtpass-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
         </div>
 
         <!-- Promo Aktif -->
-        <div class="card" style="min-height:160px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card">
+          <div style="margin-bottom:10px">
             <span class="card-hd-lbl">Promo Aktif</span>
-            <span id="promo-badge" style="font-size:9px;background:#f59e0b20;color:#b45309;padding:2px 6px;border-radius:4px;font-weight:600"></span>
+            <span id="promo-badge" style="font-size:9px;background:#f59e0b20;color:#b45309;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px"></span>
           </div>
           <div id="promo-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
         </div>
@@ -1149,9 +1152,14 @@ body{
       <div class="section-eyebrow">Program Affinity</div>
       <div class="two-col-wide" style="margin-bottom:1.4rem">
         <div class="card">
-          <div class="card-hd">
+          <div class="card-hd" style="flex-wrap:wrap;gap:6px">
             <span class="card-hd-lbl">Program Terpopuler</span>
-            <span id="affinity-period" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">90 hari</span>
+            <div style="display:flex;gap:4px;align-items:center;margin-left:auto">
+              <input type="date" id="affinity-from" style="font-size:10px;border:1px solid var(--border);border-radius:4px;padding:2px 5px;background:var(--surface);color:var(--txt);cursor:pointer" onchange="_affinityFilter()">
+              <span style="font-size:10px;color:var(--txt3)">–</span>
+              <input type="date" id="affinity-to" style="font-size:10px;border:1px solid var(--border);border-radius:4px;padding:2px 5px;background:var(--surface);color:var(--txt);cursor:pointer" onchange="_affinityFilter()">
+              <span id="affinity-period" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;white-space:nowrap"></span>
+            </div>
           </div>
           <div style="font-size:10.5px;color:var(--txt3);margin-top:4px;margin-bottom:8px">Klik program untuk lihat siapa saja member-nya</div>
           <div id="affinity-ranking"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
@@ -4211,10 +4219,22 @@ async function _renderAllProgramSections() {
     const coachRecent = coachRecentRes.data || [];
     const coachMonth  = coachMonthRes.data  || [];
 
+    // Shared month state — compute 3-month window
+    const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    const months = [];
+    for (let i = 2; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      months.push({key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,label:`${MO_ID[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`});
+    }
+    window._progData   = { passes, coachRecent };
+    window._progMonths = months;
+    if (!window._progActiveMo) window._progActiveMo = months[months.length-1].key;
+
     _renderProgPerf(passes, coachMonth);
-    _renderCoachingSection(passes, coachRecent);
-    _renderCourtPassSection(passes);
-    _renderPromoSection(passes);
+    _renderProgSharedTabs();
+    _renderCoachingSection(coachRecent, window._progActiveMo);
+    _renderCourtPassSection(passes, window._progActiveMo);
+    _renderPromoSection(passes, window._progActiveMo);
     _renderProgramAffinity(passes, coachRecent);
   } catch(e) {
     ['prog-perf-cards','coach-body','courtpass-body','promo-body','affinity-ranking','affinity-multi'].forEach(id => {
@@ -4319,103 +4339,96 @@ function _renderProgPerf(passes, coachMonth) {
     </div>`).join('');
 }
 
-// ── Section 2: Coaching Sessions — tabs per bulan, per package ────────────
+// ── Shared month tabs ─────────────────────────────────────────────────────
 
-function _renderCoachingSection(passes, coachRecent) {
-  const tabEl  = document.getElementById('coach-tabs');
+function _renderProgSharedTabs() {
+  const el = document.getElementById('prog-month-tabs');
+  if (!el) return;
+  const months   = window._progMonths || [];
+  const activeMo = window._progActiveMo;
+  el.innerHTML = months.map(m => `
+    <button onclick="_switchProgMonth('${m.key}')"
+      style="padding:4px 13px;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;
+      border:1px solid ${m.key===activeMo?'#034842':'var(--border)'};
+      background:${m.key===activeMo?'#034842':'var(--surface)'};
+      color:${m.key===activeMo?'#fff':'var(--txt3)'}">
+      ${m.label}
+    </button>`).join('');
+}
+
+window._switchProgMonth = mo => {
+  window._progActiveMo = mo;
+  _renderProgSharedTabs();
+  const { passes, coachRecent } = window._progData || {};
+  if (!passes) return;
+  _renderCoachingSection(coachRecent, mo);
+  _renderCourtPassSection(passes, mo);
+  _renderPromoSection(passes, mo);
+};
+
+// ── Section 2: Coaching Sessions — per bulan, per package ────────────────
+
+function _renderCoachingSection(coachRecent, mo) {
   const bodyEl = document.getElementById('coach-body');
   const badge  = document.getElementById('coach-badge');
   if (!bodyEl) return;
 
-  if (!coachRecent.length) {
-    bodyEl.innerHTML = '<div style="padding:.75rem;color:var(--txt3);font-size:12px">Belum ada data coaching 90 hari terakhir.</div>';
+  const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+
+  const rows = (coachRecent||[]).filter(s=>(s.session_date||'').slice(0,7)===mo);
+  const allPkgs = new Set((coachRecent||[]).map(s=>s.package_type||'FREE_COACHING'));
+  if (badge) badge.textContent = `${allPkgs.size} package`;
+
+  if (!rows.length) {
+    bodyEl.innerHTML = '<div style="padding:.75rem;color:var(--txt3);font-size:12px">Tidak ada sesi di bulan ini.</div>';
     return;
   }
 
-  const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-  const now = new Date();
-  const months = [];
-  for (let i = 2; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,label:`${MO_ID[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`});
-  }
+  const TD  = 'padding:6px 10px;border-bottom:1px solid var(--border);font-size:11.5px';
+  const TH  = 'padding:5px 10px;font-size:9.5px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)';
 
-  // Distinct package types across all data for badge
-  const allPkgs = new Set(coachRecent.map(s=>s.package_type||'FREE_COACHING'));
-  if (badge) badge.textContent = `${allPkgs.size} package`;
+  const byPkg = {};
+  rows.forEach(s=>{
+    const pk = s.package_type||'FREE_COACHING';
+    if(!byPkg[pk]) byPkg[pk]={n:0,mem:new Set()};
+    byPkg[pk].n++;
+    if(s.member_name) byPkg[pk].mem.add(s.member_name);
+  });
+  const pkgs = Object.entries(byPkg).sort((a,b)=>b[1].n-a[1].n);
+  const total = rows.length;
+  const uniq  = new Set(rows.map(s=>s.member_name)).size;
 
-  let activeMo = months[months.length-1].key;
-
-  const TD  = 'padding:6px 12px;border-bottom:1px solid var(--border);font-size:12px';
-  const TH  = 'padding:5px 12px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)';
-
-  const renderMo = (mo) => {
-    const rows = coachRecent.filter(s=>(s.session_date||'').slice(0,7)===mo);
-    const byPkg = {};
-    rows.forEach(s=>{
-      const pk = s.package_type||'FREE_COACHING';
-      if(!byPkg[pk]) byPkg[pk]={n:0,mem:new Set()};
-      byPkg[pk].n++;
-      if(s.member_name) byPkg[pk].mem.add(s.member_name);
-    });
-    const pkgs = Object.entries(byPkg).sort((a,b)=>b[1].n-a[1].n);
-    if(!pkgs.length){
-      bodyEl.innerHTML='<div style="padding:.75rem;color:var(--txt3);font-size:12px">Tidak ada sesi di bulan ini.</div>';
-      return;
-    }
-    const total = rows.length;
-    const uniq  = new Set(rows.map(s=>s.member_name)).size;
-    bodyEl.innerHTML=`
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr>
-          <th style="${TH};text-align:left">PACKAGE</th>
-          <th style="${TH};text-align:right">SESI</th>
-          <th style="${TH};text-align:right">MEMBER UNIK</th>
-          <th style="${TH};text-align:right;color:transparent">ACT</th>
-        </tr></thead>
-        <tbody>
-          ${pkgs.map(([pk,{n,mem}])=>{
-            const col=_PKG_COLOR[pk]||'#6b7280';
-            const lbl=_PKG_LABEL[pk]||pk.replace(/_/g,' ');
-            const storeKey='coach_'+pk+'_'+mo;
-            window._progStore = window._progStore||{};
-            window._progStore[storeKey]=[...mem];
-            return `<tr style="cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
-              onclick="_coachPkgModal('${lbl.replace(/'/g,"\\'")}','${mo}','${storeKey}')">
-              <td style="${TD}"><span style="background:${col}15;color:${col};border-radius:3px;padding:2px 9px;font-size:10.5px;font-weight:600">${lbl}</span></td>
-              <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${n}</td>
-              <td style="${TD};text-align:right;color:var(--txt2)">${mem.size}</td>
-              <td style="${TD};text-align:right;font-size:11px;color:var(--txt3)">lihat →</td>
-            </tr>`;
-          }).join('')}
-          <tr style="background:var(--bg2,#fafaf8)">
-            <td style="${TD};font-size:11px;font-weight:700;color:var(--txt3)">TOTAL</td>
-            <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${total}</td>
-            <td style="${TD};text-align:right;color:var(--txt2)">${uniq}</td>
-            <td style="${TD}"></td>
-          </tr>
-        </tbody>
-      </table>`;
-  };
-
-  // Render tabs
-  const renderTabs = () => {
-    if(!tabEl) return;
-    tabEl.innerHTML=months.map(m=>`
-      <button id="ctab-${m.key}" onclick="_switchCoachTab('${m.key}')"
-        style="padding:4px 13px;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;
-        border:1px solid ${m.key===activeMo?'#034842':'var(--border)'};
-        background:${m.key===activeMo?'#034842':'var(--surface)'};
-        color:${m.key===activeMo?'#fff':'var(--txt3)'}">
-        ${m.label}
-      </button>`).join('');
-  };
-
-  window._switchCoachTab = mo => {
-    activeMo=mo;
-    renderTabs();
-    renderMo(mo);
-  };
+  bodyEl.innerHTML=`
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="${TH};text-align:left">PACKAGE</th>
+        <th style="${TH};text-align:right">SESI</th>
+        <th style="${TH};text-align:right">UNIK</th>
+        <th style="${TH};text-align:right;color:transparent">ACT</th>
+      </tr></thead>
+      <tbody>
+        ${pkgs.map(([pk,{n,mem}])=>{
+          const col=_PKG_COLOR[pk]||'#6b7280';
+          const lbl=_PKG_LABEL[pk]||pk.replace(/_/g,' ');
+          const storeKey='coach_'+pk+'_'+mo;
+          window._progStore = window._progStore||{};
+          window._progStore[storeKey]=[...mem];
+          return `<tr style="cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
+            onclick="_coachPkgModal('${lbl.replace(/'/g,"\\'")}','${mo}','${storeKey}')">
+            <td style="${TD}"><span style="background:${col}15;color:${col};border-radius:3px;padding:2px 7px;font-size:10px;font-weight:600">${lbl}</span></td>
+            <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${n}</td>
+            <td style="${TD};text-align:right;color:var(--txt2)">${mem.size}</td>
+            <td style="${TD};text-align:right;font-size:11px;color:var(--txt3)">lihat →</td>
+          </tr>`;
+        }).join('')}
+        <tr style="background:var(--bg2,#fafaf8)">
+          <td style="${TD};font-size:10.5px;font-weight:700;color:var(--txt3)">TOTAL</td>
+          <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${total}</td>
+          <td style="${TD};text-align:right;color:var(--txt2)">${uniq}</td>
+          <td style="${TD}"></td>
+        </tr>
+      </tbody>
+    </table>`;
 
   window._coachPkgModal = (lbl, mo, storeKey) => {
     const members = (window._progStore&&window._progStore[storeKey])||[];
@@ -4423,9 +4436,6 @@ function _renderCoachingSection(passes, coachRecent) {
     const moLbl=`${MO_ID[parseInt(mIdx)-1]} ${y}`;
     _showMemberModal(lbl, `${members.length} member · ${moLbl}`, members);
   };
-
-  renderTabs();
-  renderMo(activeMo);
 }
 
 // ── Shared modal helper ────────────────────────────────────────────────────
@@ -4448,12 +4458,15 @@ function _showMemberModal(title, subtitle, names) {
 
 // ── Section 3a: Court Pass — flat member list ────────────────────────────
 
-function _renderCourtPassSection(passes) {
+function _renderCourtPassSection(passes, mo) {
   const el    = document.getElementById('courtpass-body');
   const badge = document.getElementById('courtpass-badge');
   if (!el) return;
 
-  const courtPasses = passes.filter(p => /COURT.?PASS/i.test(p.package_type||''));
+  const courtPasses = passes.filter(p =>
+    /COURT.?PASS/i.test(p.package_type||'') &&
+    (!mo || (p.purchase_date||'').slice(0,7) === mo)
+  );
   if (badge) badge.textContent = `${courtPasses.length} aktif`;
 
   if (!courtPasses.length) {
@@ -4506,13 +4519,16 @@ function _renderCourtPassSection(passes) {
 
 // ── Section 3b: Promo Aktif — grouped by type, clickable ─────────────────
 
-function _renderPromoSection(passes) {
+function _renderPromoSection(passes, mo) {
   const el    = document.getElementById('promo-body');
   const badge = document.getElementById('promo-badge');
   if (!el) return;
 
-  // Exclude court pass types
-  const promos = passes.filter(p => !/COURT.?PASS/i.test(p.package_type||''));
+  // Exclude court pass types, filter by purchase month
+  const promos = passes.filter(p =>
+    !/COURT.?PASS/i.test(p.package_type||'') &&
+    (!mo || (p.purchase_date||'').slice(0,7) === mo)
+  );
   if (badge) badge.textContent = `${promos.length} aktif`;
 
   if (!promos.length) {
@@ -4649,9 +4665,23 @@ function _renderProgramAffinity(passes, coachRecent) {
   // Period label
   const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
   const now = new Date();
-  const d90 = new Date(now.getFullYear(), now.getMonth()-2, 1);
-  const periodLbl = `${MO_ID[d90.getMonth()]}–${MO_ID[now.getMonth()]} '${String(now.getFullYear()).slice(2)}`;
-  const periodEl = document.getElementById('affinity-period');
+
+  // Init date inputs to 90-day window if not already set
+  const fromInput = document.getElementById('affinity-from');
+  const toInput   = document.getElementById('affinity-to');
+  const d90def    = new Date(Date.now() - 90*864e5);
+  if (fromInput && !fromInput.value) fromInput.value = d90def.toISOString().slice(0,10);
+  if (toInput   && !toInput.value)   toInput.value   = now.toISOString().slice(0,10);
+
+  // Period label from inputs
+  const fromStr = fromInput?.value || d90def.toISOString().slice(0,10);
+  const toStr   = toInput?.value   || now.toISOString().slice(0,10);
+  const fromD   = new Date(fromStr);
+  const toD     = new Date(toStr);
+  const fromLbl = `${fromD.getDate()} ${MO_ID[fromD.getMonth()]} '${String(fromD.getFullYear()).slice(2)}`;
+  const toLbl   = `${toD.getDate()} ${MO_ID[toD.getMonth()]} '${String(toD.getFullYear()).slice(2)}`;
+  const periodLbl = `${fromLbl} – ${toLbl}`;
+  const periodEl  = document.getElementById('affinity-period');
   if (periodEl) periodEl.textContent = periodLbl;
 
   if (!ranking.length) {
@@ -4706,6 +4736,22 @@ function _renderProgramAffinity(passes, coachRecent) {
       </div>`;
     }).join('');
   }
+}
+
+function _affinityFilter() {
+  const from = document.getElementById('affinity-from')?.value;
+  const to   = document.getElementById('affinity-to')?.value;
+  if (!window._progData) return;
+  const { passes, coachRecent } = window._progData;
+  const filteredPasses = passes.filter(p => {
+    const d = (p.purchase_date||'').slice(0,10);
+    return (!from || d >= from) && (!to || d <= to);
+  });
+  const filteredCoach = coachRecent.filter(s => {
+    const d = (s.session_date||'').slice(0,10);
+    return (!from || d >= from) && (!to || d <= to);
+  });
+  _renderProgramAffinity(filteredPasses, filteredCoach);
 }
 
 function renderPrograms() {
