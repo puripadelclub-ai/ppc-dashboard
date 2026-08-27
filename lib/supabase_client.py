@@ -209,6 +209,9 @@ def upsert_daily_summary(row: dict) -> dict:
     return upsert("daily_summaries", [row], on_conflict="summary_date")
 
 
-def upsert_court_passes(rows: list[dict]) -> dict:
-    """Upsert court pass purchases. Dedup key: id (sha256 of date+name+pkg)."""
-    return upsert("court_passes", rows, on_conflict="id")
+def upsert_programs(rows: list[dict]) -> dict:
+    """Upsert program purchases (court pass, comeback, dll). Dedup key: id."""
+    return upsert("programs", rows, on_conflict="id")
+
+# Backward-compat alias
+upsert_court_passes = upsert_programs

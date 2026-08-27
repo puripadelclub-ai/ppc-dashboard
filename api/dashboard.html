@@ -3115,8 +3115,8 @@ async function renderCourtPassSummary() {
   if (!el) return;
   try {
     const today = todayLocal();
-    const {data:passes, error} = await _SB.from('court_passes')
-      .select('member_name,package_type,hours_total,hours_remaining,status,expiry_date')
+    const {data:passes, error} = await _SB.from('programs')
+      .select('member_name,package_type,sessions_total,sessions_remaining,status,expiry_date')
       .eq('status','active')
       .order('expiry_date');
     if (error || !passes?.length) {
@@ -3124,7 +3124,7 @@ async function renderCourtPassSummary() {
       return;
     }
     const pkgLabel = t => (t||'').replace(/_/g,' ').replace('COURT PASS','Pass');
-    const totalHoursLeft = passes.reduce((s,p)=>s+(p.hours_remaining||0),0);
+    const totalHoursLeft = passes.reduce((s,p)=>s+(p.sessions_remaining||0),0);
     const expSoon = passes.filter(p=>p.expiry_date && p.expiry_date<=new Date(Date.now()+14*864e5).toISOString().slice(0,10));
 
     el.innerHTML = `
@@ -3135,7 +3135,7 @@ async function renderCourtPassSummary() {
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
         ${passes.map(p=>{
-          const pct = p.hours_total>0 ? Math.round((p.hours_remaining||0)/p.hours_total*100) : null;
+          const pct = p.sessions_total>0 ? Math.round((p.sessions_remaining||0)/p.sessions_total*100) : null;
           const isExpSoon = p.expiry_date && p.expiry_date<=new Date(Date.now()+14*864e5).toISOString().slice(0,10);
           const barCol = isExpSoon ? 'var(--amber)' : 'var(--green)';
           return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;cursor:pointer" onclick="openMember360('${p.member_name.replace(/'/g,"\\'")}')">
@@ -3144,7 +3144,7 @@ async function renderCourtPassSummary() {
             ${pct!=null?`<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:3px">
               <div style="height:100%;background:${barCol};width:${Math.min(100,100-pct)}%;border-radius:2px"></div>
             </div>
-            <div style="font-size:10px;color:${barCol};font-weight:600">Sisa ${p.hours_remaining||0}/${p.hours_total}h</div>`:''}
+            <div style="font-size:10px;color:${barCol};font-weight:600">Sisa ${p.sessions_remaining||0}/${p.sessions_total}h</div>`:''}
           </div>`;
         }).join('')}
       </div>`;
@@ -3444,8 +3444,8 @@ function openMember360(name) {
       .select('transaction_date,product_name,gross_amount,payment_method')
       .ilike('customer_name',`%${name}%`)
       .order('transaction_date',{ascending:false}).limit(20),
-    _SB.from('court_passes')
-      .select('package_type,package_raw,hours_total,hours_remaining,status,expiry_date,purchase_date')
+    _SB.from('programs')
+      .select('package_type,package_raw,sessions_total,sessions_remaining,status,expiry_date,purchase_date')
       .ilike('member_name',`%${name}%`)
       .order('purchase_date',{ascending:false}).limit(5)
   ]).then(([{data:txns,error:eTx},{data:passes,error:eCp}])=>{
@@ -3458,18 +3458,18 @@ function openMember360(name) {
         cpEl.innerHTML = `
           <div style="font-size:10.5px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🎾 Court Pass</div>
           ${passes.map(p=>{
-            const pct = p.hours_total>0 ? Math.round((p.hours_remaining||0)/p.hours_total*100) : null;
+            const pct = p.sessions_total>0 ? Math.round((p.sessions_remaining||0)/p.sessions_total*100) : null;
             const col = statusCol[p.status]||'var(--txt3)';
             return `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;margin-bottom:6px">
               <div style="display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:11.5px;font-weight:600;color:var(--txt)">${pkgLabel(p.package_type)}</span>
                 <span style="font-size:10px;font-weight:700;color:${col};text-transform:uppercase">${p.status}</span>
               </div>
-              ${p.hours_total!=null?`<div style="margin:5px 0 3px">
+              ${p.sessions_total!=null?`<div style="margin:5px 0 3px">
                 <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
                   <div style="height:100%;background:${col};width:${Math.min(100,100-(pct||0))}%;border-radius:2px"></div>
                 </div>
-                <div style="font-size:10px;color:var(--txt3);margin-top:3px">Sisa ${p.hours_remaining||0}/${p.hours_total}h${p.expiry_date?' · Exp '+p.expiry_date:''}</div>
+                <div style="font-size:10px;color:var(--txt3);margin-top:3px">Sisa ${p.sessions_remaining||0}/${p.sessions_total}h${p.expiry_date?' · Exp '+p.expiry_date:''}</div>
               </div>`:''}
             </div>`;
           }).join('')}
@@ -4157,8 +4157,8 @@ async function evaluateAlerts() {
     const today = todayLocal();
     const in14 = new Date(); in14.setDate(in14.getDate()+14);
     const in14s = localDate(in14);
-    const {data:cpExp} = await _SB.from('court_passes')
-      .select('member_name,package_type,hours_remaining,expiry_date')
+    const {data:cpExp} = await _SB.from('programs')
+      .select('member_name,package_type,sessions_remaining,expiry_date')
       .eq('status','active')
       .gte('expiry_date',today).lte('expiry_date',in14s)
       .order('expiry_date');
