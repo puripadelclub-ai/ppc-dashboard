@@ -1112,25 +1112,38 @@ body{
         <span style="font-size:11px;color:var(--txt3)">Memuat...</span>
       </div>
 
-      <!-- ── Section 2: Coaching Sessions ─────────────────────────────────── -->
-      <div class="section-eyebrow" style="display:flex;align-items:center;gap:.5rem">
-        Coaching Sessions
-        <span id="coach-badge" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 7px;border-radius:4px;font-weight:600"></span>
-      </div>
-      <div class="card" style="margin-bottom:1.4rem">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <span class="card-hd-lbl">Per package · 90 hari</span>
-          <div id="coach-tabs" style="display:flex;gap:4px"></div>
-        </div>
-        <div id="coach-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
-      </div>
+      <!-- ── Sections 2–3: Program Aktif — 3 kolom ────────────────────────── -->
+      <div class="section-eyebrow">Program Aktif</div>
+      <div class="three-col" style="margin-bottom:1.4rem;align-items:start">
 
-      <!-- ── Section 3: Court Pass & Promo ──────────────────────────────── -->
-      <div class="section-eyebrow" style="display:flex;align-items:center;gap:.5rem">
-        Court Pass &amp; Promo Aktif
-        <span id="pass-badge" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 7px;border-radius:4px;font-weight:600"></span>
+        <!-- Coaching -->
+        <div class="card" style="min-height:160px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span class="card-hd-lbl">Coaching Sessions <span id="coach-badge" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:4px"></span></span>
+            <div id="coach-tabs" style="display:flex;gap:3px;flex-shrink:0"></div>
+          </div>
+          <div id="coach-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+
+        <!-- Court Pass -->
+        <div class="card" style="min-height:160px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span class="card-hd-lbl">Court Pass</span>
+            <span id="courtpass-badge" style="font-size:9px;background:#0d948815;color:#0d9488;padding:2px 6px;border-radius:4px;font-weight:600"></span>
+          </div>
+          <div id="courtpass-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+
+        <!-- Promo Aktif -->
+        <div class="card" style="min-height:160px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span class="card-hd-lbl">Promo Aktif</span>
+            <span id="promo-badge" style="font-size:9px;background:#f59e0b20;color:#b45309;padding:2px 6px;border-radius:4px;font-weight:600"></span>
+          </div>
+          <div id="promo-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+
       </div>
-      <div id="pass-body" style="margin-bottom:1.4rem"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
 
       <!-- ── Section 4: Program Affinity ─────────────────────────────────── -->
       <div class="section-eyebrow">Program Affinity</div>
@@ -4200,10 +4213,11 @@ async function _renderAllProgramSections() {
 
     _renderProgPerf(passes, coachMonth);
     _renderCoachingSection(passes, coachRecent);
-    _renderPassSection(passes);
+    _renderCourtPassSection(passes);
+    _renderPromoSection(passes);
     _renderProgramAffinity(passes, coachRecent);
   } catch(e) {
-    ['prog-perf-cards','coach-body','pass-body','affinity-ranking','affinity-multi'].forEach(id => {
+    ['prog-perf-cards','coach-body','courtpass-body','promo-body','affinity-ranking','affinity-multi'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = `<span style="font-size:11px;color:var(--red,#ef4444)">Error: ${e.message}</span>`;
     });
@@ -4432,136 +4446,148 @@ function _showMemberModal(title, subtitle, names) {
   openProgModal(title, html);
 }
 
-// ── Section 3: Court Pass & Promo — 3-month tab view ─────────────────────
+// ── Section 3a: Court Pass — flat member list ────────────────────────────
 
-function _renderPassSection(passes) {
-  const el    = document.getElementById('pass-body');
-  const badge = document.getElementById('pass-badge');
+function _renderCourtPassSection(passes) {
+  const el    = document.getElementById('courtpass-body');
+  const badge = document.getElementById('courtpass-badge');
   if (!el) return;
 
-  if (!passes.length) {
-    el.innerHTML = '<div style="font-size:11px;color:var(--txt3)">Tidak ada court pass / promo.</div>';
+  const courtPasses = passes.filter(p => /COURT.?PASS/i.test(p.package_type||''));
+  if (badge) badge.textContent = `${courtPasses.length} aktif`;
+
+  if (!courtPasses.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--txt3)">Tidak ada court pass aktif.</div>';
     return;
   }
 
-  const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-  const now = new Date();
-  const months = [];
-  for (let i = 2; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-    months.push({key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,label:`${MO_ID[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`});
-  }
-
-  // Distinct package types for badge
-  const allPkgTypes = new Set(passes.map(p=>p.package_type||'UNKNOWN'));
-  if (badge) badge.textContent = `${allPkgTypes.size} program`;
-
-  let activeMo = months[months.length-1].key;
   const warn14 = new Date(Date.now()+14*864e5).toISOString().slice(0,10);
+  const sorted = [...courtPasses].sort((a,b) => {
+    const ea = a.expiry_date||'9999', eb = b.expiry_date||'9999';
+    return ea.localeCompare(eb);
+  });
 
-  // Card styles
-  const TH = 'padding:5px 12px;font-size:10px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)';
-  const TD = 'padding:6px 12px;border-bottom:1px solid var(--border);font-size:12px';
-
-  const renderMo = (mo) => {
-    const rows = passes.filter(p=>(p.purchase_date||'').slice(0,7)===mo);
-    const byPkg = {};
-    rows.forEach(p=>{
-      const pk=p.package_type||'UNKNOWN';
-      if(!byPkg[pk]) byPkg[pk]=[];
-      byPkg[pk].push(p);
-    });
-    const pkgs = Object.entries(byPkg).sort((a,b)=>b[1].length-a[1].length);
-
-    if (!pkgs.length) {
-      el.querySelector('#pass-table-wrap').innerHTML =
-        '<div style="padding:.75rem;color:var(--txt3);font-size:12px">Tidak ada pass / promo dibeli di bulan ini.</div>';
-      return;
-    }
-
-    el.querySelector('#pass-table-wrap').innerHTML = `
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr>
-          <th style="${TH};text-align:left">PROGRAM / PROMO</th>
-          <th style="${TH};text-align:right">DIBELI</th>
-          <th style="${TH};text-align:right">EXPIRE ≤14H</th>
-          <th style="${TH};text-align:right;color:transparent">ACT</th>
-        </tr></thead>
-        <tbody>
-          ${pkgs.map(([pk,members])=>{
-            const lbl=pk.replace(/_/g,' ');
-            const expiring=members.filter(m=>m.expiry_date&&m.expiry_date<=warn14);
-            const storeKey='pass_'+pk+'_'+mo;
-            window._progStore=window._progStore||{};
-            window._progStore[storeKey]=members.map(m=>m.member_name).filter(Boolean);
-            return `<tr style="cursor:pointer;transition:background .12s"
-              onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
-              onclick="_passPkgModal('${lbl.replace(/'/g,"\\'")}','${mo}','${storeKey}')">
-              <td style="${TD}">
-                <span style="background:#0d948815;color:#0d9488;border-radius:3px;padding:2px 9px;font-size:10.5px;font-weight:600">${lbl}</span>
-              </td>
-              <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${members.length}</td>
-              <td style="${TD};text-align:right">
-                ${expiring.length?`<span style="font-weight:700;color:#b45309">⚠ ${expiring.length}</span>`:`<span style="color:var(--border)">—</span>`}
-              </td>
-              <td style="${TD};text-align:right;font-size:11px;color:var(--txt3)">lihat →</td>
-            </tr>`;
-          }).join('')}
-          <tr style="background:var(--bg2,#fafaf8)">
-            <td style="${TD};font-size:11px;font-weight:700;color:var(--txt3)">TOTAL</td>
-            <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${rows.length}</td>
-            <td style="${TD}"></td><td style="${TD}"></td>
-          </tr>
-        </tbody>
-      </table>`;
-  };
-
-  const renderTabs = () => {
-    el.querySelector('#pass-tabs').innerHTML = months.map(m=>`
-      <button id="ptab-${m.key}" onclick="_switchPassTab('${m.key}')"
-        style="padding:4px 13px;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;
-        border:1px solid ${m.key===activeMo?'#0d9488':'var(--border)'};
-        background:${m.key===activeMo?'#0d9488':'var(--surface)'};
-        color:${m.key===activeMo?'#fff':'var(--txt3)'}">
-        ${m.label}
-      </button>`).join('');
-  };
+  const TH = 'padding:5px 8px;font-size:9.5px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border);white-space:nowrap';
+  const TD = 'padding:6px 8px;border-bottom:1px solid var(--border);font-size:11.5px;vertical-align:middle';
 
   el.innerHTML = `
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <span class="card-hd-lbl">Per program · by purchase date</span>
-        <div id="pass-tabs" style="display:flex;gap:4px"></div>
-      </div>
-      <div id="pass-table-wrap"></div>
-    </div>`;
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="${TH};text-align:left">MEMBER</th>
+        <th style="${TH};text-align:right">SISA</th>
+        <th style="${TH};text-align:right">EXPIRE</th>
+      </tr></thead>
+      <tbody>
+        ${sorted.map(m => {
+          const exp = (m.expiry_date||'').slice(0,10);
+          const isExp = exp && exp <= warn14;
+          const nameEsc = (m.member_name||'?').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+          const sisa = m.sessions_remaining;
+          return `<tr style="cursor:pointer;transition:background .12s"
+            onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
+            onclick="closeProgModal();openMember360('${nameEsc}')">
+            <td style="${TD}">
+              <div style="font-weight:600;color:var(--txt)">${m.member_name||'?'}</div>
+              <div style="font-size:9.5px;color:var(--txt3);margin-top:1px">${(m.package_type||'').replace(/_/g,' ')}</div>
+            </td>
+            <td style="${TD};text-align:right">
+              <span style="font-weight:700;color:${sisa===0?'#ef4444':'var(--txt)'}">${sisa??'—'}</span>
+            </td>
+            <td style="${TD};text-align:right">
+              ${isExp
+                ? `<span style="font-size:10.5px;color:#b45309;font-weight:700">⚠ ${exp}</span>`
+                : `<span style="font-size:10.5px;color:var(--txt3)">${exp||'—'}</span>`}
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
 
-  window._switchPassTab = mo => {
-    activeMo=mo;
-    renderTabs();
-    renderMo(mo);
-  };
+// ── Section 3b: Promo Aktif — grouped by type, clickable ─────────────────
 
-  window._passPkgModal = (lbl, mo, storeKey) => {
-    const members=(window._progStore&&window._progStore[storeKey])||[];
-    const [y,mIdx]=mo.split('-');
-    const moLbl=`${MO_ID[parseInt(mIdx)-1]} ${y}`;
-    // Show member detail: name + remaining sessions + expiry
-    const passData=passes.filter(p=>(p.purchase_date||'').slice(0,7)===mo&&(p.package_type||'UNKNOWN').replace(/_/g,' ')===lbl);
-    const html=`
-      <div style="font-size:11px;color:var(--txt3);margin-bottom:10px">${members.length} member · ${moLbl}</div>
+function _renderPromoSection(passes) {
+  const el    = document.getElementById('promo-body');
+  const badge = document.getElementById('promo-badge');
+  if (!el) return;
+
+  // Exclude court pass types
+  const promos = passes.filter(p => !/COURT.?PASS/i.test(p.package_type||''));
+  if (badge) badge.textContent = `${promos.length} aktif`;
+
+  if (!promos.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--txt3)">Tidak ada promo aktif.</div>';
+    return;
+  }
+
+  const warn14 = new Date(Date.now()+14*864e5).toISOString().slice(0,10);
+  const byPkg = {};
+  promos.forEach(p => {
+    const pk = p.package_type||'UNKNOWN';
+    if (!byPkg[pk]) byPkg[pk] = [];
+    byPkg[pk].push(p);
+  });
+  const pkgs = Object.entries(byPkg).sort((a,b) => b[1].length - a[1].length);
+
+  const TH = 'padding:5px 8px;font-size:9.5px;font-weight:700;color:var(--txt3);border-bottom:2px solid var(--border)';
+  const TD = 'padding:6px 8px;border-bottom:1px solid var(--border);font-size:11.5px';
+
+  window._progStore = window._progStore || {};
+
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="${TH};text-align:left">PROGRAM / PROMO</th>
+        <th style="${TH};text-align:right">MEMBER</th>
+        <th style="${TH};text-align:right">≤14H</th>
+        <th style="${TH};text-align:right;color:transparent">ACT</th>
+      </tr></thead>
+      <tbody>
+        ${pkgs.map(([pk, members]) => {
+          const lbl = pk.replace(/_/g,' ');
+          const expiring = members.filter(m => m.expiry_date && m.expiry_date.slice(0,10) <= warn14);
+          const storeKey = 'promo_'+pk;
+          window._progStore[storeKey] = members.map(m => m.member_name).filter(Boolean);
+          const lblEsc = lbl.replace(/'/g,"\\'");
+          return `<tr style="cursor:pointer;transition:background .12s"
+            onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''"
+            onclick="_promoModal('${lblEsc}','${storeKey}')">
+            <td style="${TD}">
+              <span style="background:#f59e0b18;color:#b45309;border-radius:3px;padding:2px 7px;font-size:10px;font-weight:600">${lbl}</span>
+            </td>
+            <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${members.length}</td>
+            <td style="${TD};text-align:right">
+              ${expiring.length ? `<span style="font-weight:700;color:#b45309">⚠ ${expiring.length}</span>` : `<span style="color:var(--border)">—</span>`}
+            </td>
+            <td style="${TD};text-align:right;font-size:11px;color:var(--txt3)">lihat →</td>
+          </tr>`;
+        }).join('')}
+        <tr style="background:var(--bg2,#fafaf8)">
+          <td style="${TD};font-size:10.5px;font-weight:700;color:var(--txt3)">TOTAL</td>
+          <td style="${TD};text-align:right;font-weight:700;color:var(--txt)">${promos.length}</td>
+          <td style="${TD}"></td><td style="${TD}"></td>
+        </tr>
+      </tbody>
+    </table>`;
+
+  window._promoModal = (lbl, storeKey) => {
+    const members = (window._progStore && window._progStore[storeKey]) || [];
+    const pk = storeKey.replace('promo_','');
+    const passData = promos.filter(p => (p.package_type||'UNKNOWN') === pk);
+    const html = `
       <div style="display:flex;flex-direction:column;gap:5px">
-        ${(passData.length?passData:members.map(n=>({member_name:n}))).sort((a,b)=>(a.member_name||'').localeCompare(b.member_name||'')).map(m=>{
-          const name=m.member_name||m;
-          const isExp=m.expiry_date&&m.expiry_date<=warn14;
+        ${(passData.length ? passData : members.map(n=>({member_name:n}))).sort((a,b)=>(a.member_name||'').localeCompare(b.member_name||'')).map(m => {
+          const name = m.member_name || m;
+          const isExp = m.expiry_date && m.expiry_date.slice(0,10) <= warn14;
+          const nameEsc = (typeof name==='string'?name:'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
           return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;
-            background:var(--bg2,#f5f5f2);border-radius:7px;cursor:pointer;${isExp?'border-left:2.5px solid #f59e0b':''};"
+            background:var(--bg2,#f5f5f2);border-radius:7px;cursor:pointer"
             onmouseover="this.style.background='var(--brand-lt)'" onmouseout="this.style.background='var(--bg2,#f5f5f2)'"
-            onclick="closeProgModal();openMember360('${name.replace(/'/g,"\\'")}')">
+            onclick="closeProgModal();openMember360('${nameEsc}')">
             <span style="font-size:12px;font-weight:600;color:var(--txt)">${name}</span>
             <div style="display:flex;gap:5px;align-items:center">
               ${m.sessions_remaining!=null?`<span style="font-size:10.5px;color:var(--txt3)">sisa ${m.sessions_remaining}</span>`:''}
-              ${isExp?`<span style="font-size:9px;background:#f59e0b20;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:600">exp ${m.expiry_date}</span>`:''}
+              ${isExp?`<span style="font-size:9px;background:#f59e0b20;color:#b45309;border-radius:3px;padding:1px 5px;font-weight:600">exp ${(m.expiry_date||'').slice(0,10)}</span>`:''}
               <span style="font-size:11px;color:var(--brand)">360° →</span>
             </div>
           </div>`;
@@ -4569,9 +4595,6 @@ function _renderPassSection(passes) {
       </div>`;
     openProgModal(lbl, html);
   };
-
-  renderTabs();
-  renderMo(activeMo);
 }
 
 // ── Section 4: Program Affinity — popularity + multi-program members ──────
