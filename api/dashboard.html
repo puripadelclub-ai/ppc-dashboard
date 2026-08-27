@@ -1889,6 +1889,8 @@ async function reloadData() {
 }
 
 function renderPage(page) {
+  // Always refresh Supabase-backed sections for Programs (independent of D)
+  if (page === 'programs') _renderAllProgramSections();
   if(!D) return;
   const fn = {
     home: renderHome, operations: renderOperations,
@@ -4025,7 +4027,6 @@ function _renderProgPerf(passes, coachMonth) {
     const c = (r['Menu_Category']||'Lainnya').trim().toLowerCase();
     catRev[c] = (catRev[c]||0) + numOf(r,'Total_Revenue');
   });
-  window._catRev = catRev; // DEBUG: lihat via console → Object.entries(_catRev).sort((a,b)=>b[1]-a[1])
   const matchRev = (...kws) => Object.entries(catRev)
     .filter(([c]) => kws.some(k => c.includes(k.toLowerCase())))
     .reduce((s,[,v]) => s+v, 0);
@@ -4261,9 +4262,8 @@ function _renderProgramAffinity(passes, coachRecent) {
 }
 
 function renderPrograms() {
-  _renderAllProgramSections();   // async: Program Performance + Who Uses What + Affinity
-  // ── legacy calls removed (sections replaced above) ──
-  const prods = D.product_detail || [];
+  // _renderAllProgramSections() is called from renderPage() before this — no need to call again
+  const prods = (window.D && D.product_detail) ? D.product_detail : [];
   const fmtRp  = v => 'Rp' + (Number(v)||0).toLocaleString('id-ID');
   const fmtJt  = v => { const n=Number(v)||0; return n>=1e9?'Rp'+(n/1e9).toFixed(1)+'M':n>=1e6?'Rp'+(n/1e6).toFixed(0)+'jt':fmtRp(n); };
   const numOf  = (r, k) => Number(r[k]) || 0;
