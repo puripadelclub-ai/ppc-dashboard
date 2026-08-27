@@ -4193,7 +4193,7 @@ async function _renderAllProgramSections() {
   const y     = now.getFullYear();
   const m     = String(now.getMonth()+1).padStart(2,'0');
   const fromMonth = `${y}-${m}-01`;
-  const from90    = new Date(Date.now() - 90*864e5).toISOString().slice(0,10);
+  const PPC_OPEN  = '2026-03-01';
 
   try {
     const [passRes, coachRecentRes, coachMonthRes] = await Promise.all([
@@ -4201,7 +4201,7 @@ async function _renderAllProgramSections() {
         .select('member_name,package_type,status,sessions_total,sessions_remaining,expiry_date,purchase_date'),
       _SB.from('coaching_sessions')
         .select('member_name,package_type,sessions_remaining,status,session_date')
-        .gte('session_date', from90),
+        .gte('session_date', PPC_OPEN),
       _SB.from('coaching_sessions')
         .select('member_name,package_type,persons,sessions_remaining,status,session_date')
         .gte('session_date', fromMonth),
@@ -4211,11 +4211,12 @@ async function _renderAllProgramSections() {
     const coachRecent = coachRecentRes.data || [];
     const coachMonth  = coachMonthRes.data  || [];
 
-    // Shared month state — compute 3-month window
+    // Shared month state — all months since PPC opened (Mar 2026)
     const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
     const months = [];
-    for (let i = 2; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const startMo = new Date(2026, 2, 1); // March 2026
+    const currMo  = new Date(now.getFullYear(), now.getMonth(), 1);
+    for (let d = new Date(startMo); d <= currMo; d.setMonth(d.getMonth()+1)) {
       months.push({key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,label:`${MO_ID[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`});
     }
     window._progData   = { passes, coachRecent };
@@ -4242,14 +4243,11 @@ function _renderProgSharedTabs() {
   if (!el) return;
   const months   = window._progMonths || [];
   const activeMo = window._progActiveMo;
-  el.innerHTML = months.map(m => `
-    <button onclick="_switchProgMonth('${m.key}')"
-      style="padding:4px 13px;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;
-      border:1px solid ${m.key===activeMo?'#034842':'var(--border)'};
-      background:${m.key===activeMo?'#034842':'var(--surface)'};
-      color:${m.key===activeMo?'#fff':'var(--txt3)'}">
-      ${m.label}
-    </button>`).join('');
+  el.innerHTML = `<select onchange="_switchProgMonth(this.value)"
+    style="font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:5px;
+    border:1px solid var(--border);background:var(--surface);color:var(--txt);cursor:pointer">
+    ${months.map(m=>`<option value="${m.key}"${m.key===activeMo?' selected':''}>${m.label}</option>`).join('')}
+  </select>`;
 }
 
 window._switchProgMonth = mo => {
@@ -4577,15 +4575,14 @@ function _renderProgramAffinity(passes, coachRecent) {
   const MO_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
   const now = new Date();
 
-  // Init date inputs to 90-day window if not already set
+  // Init date inputs: from PPC open (Mar 2026) to today
   const fromInput = document.getElementById('affinity-from');
   const toInput   = document.getElementById('affinity-to');
-  const d90def    = new Date(Date.now() - 90*864e5);
-  if (fromInput && !fromInput.value) fromInput.value = d90def.toISOString().slice(0,10);
+  if (fromInput && !fromInput.value) fromInput.value = '2026-03-01';
   if (toInput   && !toInput.value)   toInput.value   = now.toISOString().slice(0,10);
 
   // Period label from inputs
-  const fromStr = fromInput?.value || d90def.toISOString().slice(0,10);
+  const fromStr = fromInput?.value || '2026-03-01';
   const toStr   = toInput?.value   || now.toISOString().slice(0,10);
   const fromD   = new Date(fromStr);
   const toD     = new Date(toStr);
