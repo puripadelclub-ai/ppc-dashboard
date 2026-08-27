@@ -1099,19 +1099,6 @@ body{
         <p>Court Pass, Coaching, Membership, Promo — semua program & paket PPC</p>
       </div>
 
-      <!-- KPI -->
-      <div class="section-eyebrow">Overview Produk</div>
-      <div class="four-col" id="prog-kpi-row"></div>
-
-      <!-- ── Section 1: Program Performance Cards ───────────────────────── -->
-      <div class="section-eyebrow" style="display:flex;align-items:center;justify-content:space-between">
-        Program Performance
-        <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 7px;border-radius:4px;font-weight:600">ESB + Supabase</span>
-      </div>
-      <div id="prog-perf-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:1.4rem">
-        <span style="font-size:11px;color:var(--txt3)">Memuat...</span>
-      </div>
-
       <!-- ── Sections 2–3: Program Aktif — 3 kolom ────────────────────────── -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div class="section-eyebrow" style="margin-bottom:0">Program Aktif</div>
@@ -4230,113 +4217,17 @@ async function _renderAllProgramSections() {
     window._progMonths = months;
     if (!window._progActiveMo) window._progActiveMo = months[months.length-1].key;
 
-    _renderProgPerf(passes, coachMonth);
     _renderProgSharedTabs();
     _renderCoachingSection(coachRecent, window._progActiveMo);
     _renderCourtPassSection(passes, window._progActiveMo);
     _renderPromoSection(passes, window._progActiveMo);
     _renderProgramAffinity(passes, coachRecent);
   } catch(e) {
-    ['prog-perf-cards','coach-body','courtpass-body','promo-body','affinity-ranking','affinity-multi'].forEach(id => {
+    ['coach-body','courtpass-body','promo-body','affinity-ranking','affinity-multi'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = `<span style="font-size:11px;color:var(--red,#ef4444)">Error: ${e.message}</span>`;
     });
   }
-}
-
-// ── Section 1: Program Performance Cards (ESB revenue + Supabase usage) ──
-
-function _renderProgPerf(passes, coachMonth) {
-  const el = document.getElementById('prog-perf-cards');
-  if (!el) return;
-
-  const prods = (window.D && D.product_detail) ? D.product_detail : [];
-  const numOf = (r,k) => Number(r[k])||0;
-  const fmtJt = v => {
-    const n = Number(v)||0;
-    return n>=1e9 ? 'Rp'+(n/1e9).toFixed(1)+'M'
-         : n>=1e6 ? 'Rp'+(n/1e6).toFixed(0)+'jt'
-         : n>=1e3 ? 'Rp'+(n/1e3).toFixed(0)+'rb' : 'Rp0';
-  };
-
-  // ESB revenue grouped by normalised category
-  const catRev = {};
-  prods.forEach(r => {
-    const c = (r['Menu_Category']||'Lainnya').trim().toLowerCase();
-    catRev[c] = (catRev[c]||0) + numOf(r,'Total_Revenue');
-  });
-  const matchRev = (...kws) => Object.entries(catRev)
-    .filter(([c]) => kws.some(k => c.includes(k.toLowerCase())))
-    .reduce((s,[,v]) => s+v, 0);
-
-  // Coaching
-  const coachRev   = matchRev('coaching');
-  const coachSess  = coachMonth.length;
-  const coachUniq  = new Set(coachMonth.map(s=>s.member_name)).size;
-  const bundlingAct= passes.filter(p=>['BUNDLING_4X','BUNDLING_6X','BUNDLING'].includes(p.package_type));
-
-  // Court Pass / Programs — includes court rental (sewa lapangan) revenue
-  const passRev     = matchRev('court pass','comeback','upgrade','trial','court_pass',
-                               'court rent','lapangan','sewa','ball machine','booking','reservasi');
-  const passUniq    = new Set(passes.map(p=>p.member_name)).size;
-  const totalSessL  = passes.reduce((s,p)=>s+(p.sessions_remaining||0),0);
-
-  // Other ESB categories
-  const memberRev   = matchRev('membership');
-  const knownRev    = coachRev + passRev + memberRev;
-  const totalRev    = Object.values(catRev).reduce((s,v)=>s+v,0);
-  const othersRev   = Math.max(0, totalRev - knownRev);
-
-  const CARDS = [
-    {
-      label:'Coaching', icon:'🏸', color:'#8b5cf6',
-      rev: coachRev, supabase: true,
-      s1v: `${coachSess}`, s1l:'Sesi bulan ini',
-      s2v: `${coachUniq}`, s2l:'Member aktif',
-      note: bundlingAct.length ? `${bundlingAct.length} bundling aktif` : null,
-    },
-    {
-      label:'Court Pass', icon:'🎫', color:'#0d9488',
-      rev: passRev, supabase: true,
-      s1v: `${passes.length}`, s1l:'Pass aktif',
-      s2v: `${passUniq}`,       s2l:'Member unik',
-      note: totalSessL > 0 ? `${totalSessL} sesi tersisa` : null,
-    },
-    {
-      label:'Membership', icon:'👑', color:'#f59e0b',
-      rev: memberRev, supabase: false, s1v: null,
-    },
-    {
-      label:'Lainnya', icon:'📦', color:'#6b7280',
-      rev: othersRev, supabase: false, s1v: null,
-    },
-  ]; // always show all 4 cards
-
-  if (!CARDS.length) {
-    el.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:12px">Belum ada data ESB. Jalankan pipeline terlebih dahulu.</div>';
-    return;
-  }
-
-  el.innerHTML = CARDS.map(c => `
-    <div style="background:var(--surface,var(--card));border:1px solid var(--border);border-top:3px solid ${c.color};border-radius:10px;padding:14px 16px;display:flex;flex-direction:column">
-      <div style="font-size:1.15rem;margin-bottom:3px">${c.icon}</div>
-      <div style="font-size:11px;font-weight:700;color:var(--txt);letter-spacing:.02em;margin-bottom:.5rem">${c.label}</div>
-      <div style="font-size:21px;font-weight:800;color:${c.color};line-height:1">${fmtJt(c.rev)}</div>
-      <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin:.25rem 0 ${c.s1v?'.75rem':'.25rem'}">Revenue ESB</div>
-      ${c.s1v ? `
-        <div style="display:flex;gap:1rem;padding:.6rem 0 .4rem;border-top:1px solid var(--border)">
-          <div>
-            <div style="font-size:15px;font-weight:800;color:var(--txt)">${c.s1v}</div>
-            <div style="font-size:9px;color:var(--txt3);margin-top:1px">${c.s1l}</div>
-          </div>
-          <div>
-            <div style="font-size:15px;font-weight:800;color:var(--txt)">${c.s2v}</div>
-            <div style="font-size:9px;color:var(--txt3);margin-top:1px">${c.s2l}</div>
-          </div>
-        </div>
-        ${c.note ? `<div style="font-size:10px;color:${c.color};font-weight:600;margin-top:3px">${c.note}</div>` : ''}
-      ` : `<div style="font-size:10px;color:var(--txt3);margin-top:auto;font-style:italic">Dari ESB</div>`}
-    </div>`).join('');
 }
 
 // ── Shared month tabs ─────────────────────────────────────────────────────
@@ -4755,164 +4646,12 @@ function _affinityFilter() {
 }
 
 function renderPrograms() {
-  // _renderAllProgramSections() is called from renderPage() before this — no need to call again
-  const prods = (window.D && D.product_detail) ? D.product_detail : [];
-  const fmtRp  = v => 'Rp' + (Number(v)||0).toLocaleString('id-ID');
-  const fmtJt  = v => { const n=Number(v)||0; return n>=1e9?'Rp'+(n/1e9).toFixed(1)+'M':n>=1e6?'Rp'+(n/1e6).toFixed(0)+'jt':fmtRp(n); };
-  const numOf  = (r, k) => Number(r[k]) || 0;
-
-  if (!prods.length) {
-    document.getElementById('prog-kpi-row').innerHTML =
-      '<div style="padding:2rem;color:var(--txt-muted)">Belum ada data produk. Jalankan pipeline terlebih dahulu.</div>';
-    return;
-  }
-
-  // ── Category map (always from all prods, not filtered) ───────────────
-  const catRevMap = {}, catTrxMap = {}, catColorMap = {};
-  prods.forEach(r => {
-    const c = r['Menu_Category'] || 'Other';
-    catRevMap[c] = (catRevMap[c]||0) + numOf(r,'Total_Revenue');
-    catTrxMap[c] = (catTrxMap[c]||0) + numOf(r,'Total_Transactions');
-  });
-  const catEntries = Object.entries(catRevMap).sort((a,b)=>b[1]-a[1]);
-  catEntries.forEach(([c],i) => catColorMap[c] = PROD_COLORS[i % PROD_COLORS.length]);
-  const grandTotal = catEntries.reduce((s,e)=>s+e[1],0);
-
-  // Revenue share bar + pills moved to Revenue page — elements no longer in Programs HTML
-  const setEl = (id, html) => { const e=document.getElementById(id); if(e) e.innerHTML=html; };
-  setEl('prod-share-bar', catEntries.map(([c,v]) => {
-    const pct = grandTotal>0?(v/grandTotal*100).toFixed(1):0;
-    return `<div title="${c}: ${fmtRp(v)} (${pct}%)" style="flex:${pct};background:${catColorMap[c]};transition:flex .3s;cursor:pointer" onclick="filterProdCat('${c}')"></div>`;
-  }).join(''));
-  setEl('prod-share-legend', catEntries.map(([c,v]) => {
-    const pct = grandTotal>0?(v/grandTotal*100).toFixed(1):0;
-    return `<div onclick="filterProdCat('${c}')" style="cursor:pointer;display:flex;align-items:center;gap:.3rem"><span style="width:10px;height:10px;border-radius:50%;background:${catColorMap[c]};display:inline-block;flex-shrink:0"></span><span>${c}</span><strong>${pct}%</strong></div>`;
-  }).join(''));
-  const cats = ['ALL', ...catEntries.map(e=>e[0])];
-  setEl('prod-cat-pills', cats.map(c=>`<div class="pill${c===_activeProdCat?' active':''}" onclick="filterProdCat('${c}')">${c}</div>`).join(''));
-
-  const filtered = _activeProdCat==='ALL' ? prods
-    : prods.filter(r => r['Menu_Category']===_activeProdCat);
-  const filtTotal = filtered.reduce((s,r)=>s+numOf(r,'Total_Revenue'),0);
-
-  // ── KPI ─────────────────────────────────────────────────────────────
-  const totalSKU = filtered.length;
-  const totalTrx = filtered.reduce((s,r)=>s+numOf(r,'Total_Transactions'),0);
-  const topProd  = filtered[0];
-  const avgTrx   = totalSKU>0?(totalTrx/totalSKU).toFixed(0):0;
-
-  document.getElementById('prog-kpi-row').innerHTML = `
-    <div class="kpi-card">
-      <div class="kpi-label">Total SKU</div>
-      <div class="kpi-val">${totalSKU}</div>
-      <div class="kpi-sub">${_activeProdCat==='ALL'?cats.length-1+' kategori':_activeProdCat}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Total Transaksi</div>
-      <div class="kpi-val">${totalTrx.toLocaleString('id-ID')}</div>
-      <div class="kpi-sub">avg ${Number(avgTrx).toLocaleString('id-ID')} trx/SKU</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Total Revenue</div>
-      <div class="kpi-val">${fmtJt(filtTotal)}</div>
-      <div class="kpi-sub">${_activeProdCat==='ALL'?'semua kategori':((filtTotal/grandTotal)*100).toFixed(1)+'% dari total'}</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Top Produk</div>
-      <div class="kpi-val" style="font-size:.95rem;line-height:1.3">${topProd?topProd['Menu']:'—'}</div>
-      <div class="kpi-sub">${topProd?fmtJt(topProd['Total_Revenue']):''}</div>
-    </div>`;
-
-  // ── Chart 1: Revenue per kategori (horizontal bar) ───────────────────
-  if (_prodChartCat) _prodChartCat.destroy();
-  _prodChartCat = new Chart(document.getElementById('chart-prod-cat'), {
-    type: 'bar',
-    data: {
-      labels: catEntries.map(e=>e[0]),
-      datasets: [{
-        label: 'Revenue',
-        data: catEntries.map(e=>e[1]),
-        backgroundColor: catEntries.map(e=>catColorMap[e[0]]),
-        borderRadius: 5
-      }]
-    },
-    options: {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => fmtRp(ctx.raw) } }
-      },
-      scales: {
-        x: { ticks: { callback: v => 'Rp'+(v/1e6).toFixed(0)+'jt', font:{size:10} }, grid:{color:'rgba(0,0,0,.05)'} },
-        y: { ticks: { font:{size:11} } }
-      }
-    }
-  });
-
-  // ── Chart 2: Top 10 produk horizontal bar ────────────────────────────
-  const top10 = [...filtered].sort((a,b)=>numOf(b,'Total_Revenue')-numOf(a,'Total_Revenue')).slice(0,10);
-  const top10Colors = top10.map(r => catColorMap[r['Menu_Category']] || PROD_COLORS[0]);
-  if (_prodChartTop) _prodChartTop.destroy();
-  _prodChartTop = new Chart(document.getElementById('chart-prod-top'), {
-    type: 'bar',
-    data: {
-      labels: top10.map(r => r['Menu'].length>28?r['Menu'].slice(0,26)+'…':r['Menu']),
-      datasets: [{
-        label: 'Revenue',
-        data: top10.map(r => numOf(r,'Total_Revenue')),
-        backgroundColor: top10Colors, borderRadius: 5
-      }]
-    },
-    options: {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => fmtRp(ctx.raw) } }
-      },
-      scales: {
-        x: { ticks: { callback: v => 'Rp'+(v/1e6).toFixed(0)+'jt', font:{size:10} }, grid:{color:'rgba(0,0,0,.05)'} },
-        y: { ticks: { font:{size:10} } }
-      }
-    }
-  });
-
-  // ── Table ────────────────────────────────────────────────────────────
-  document.getElementById('prod-count').textContent = `${filtered.length} produk`;
-  document.getElementById('prog-table-body').innerHTML = filtered.map((r,i) => {
-    const pct   = Number(r['Pct_Revenue']||0);
-    const color = catColorMap[r['Menu_Category']] || PROD_COLORS[0];
-    const isTop = i < 3;
-    return `<tr style="${isTop?'background:rgba(3,72,66,.04)':''}">
-      <td style="text-align:center;color:var(--txt-muted);font-size:.82rem">${i+1}</td>
-      <td>
-        <div style="font-weight:600;font-size:.88rem">${r['Menu']||'—'}</div>
-        ${r['Menu_Code']?`<div style="font-size:.74rem;color:var(--txt-muted)">${r['Menu_Code']}</div>`:''}
-      </td>
-      <td>
-        <span style="font-size:.74rem;background:${color}22;color:${color};padding:2px 7px;border-radius:4px;font-weight:600;white-space:nowrap">
-          ${r['Menu_Category']||'—'}
-        </span>
-      </td>
-      <td style="text-align:right">${numOf(r,'Total_Transactions').toLocaleString('id-ID')}</td>
-      <td style="text-align:right">${numOf(r,'Total_Qty').toLocaleString('id-ID')}</td>
-      <td style="text-align:right">${numOf(r,'Unique_Customers').toLocaleString('id-ID')}</td>
-      <td style="text-align:right;font-size:.85rem">${fmtRp(r['Avg_Price'])}</td>
-      <td style="text-align:right;font-weight:600">${fmtJt(r['Total_Revenue'])}</td>
-      <td>
-        <div style="display:flex;align-items:center;gap:.4rem">
-          <div style="flex:1;height:6px;background:#eee;border-radius:3px;overflow:hidden">
-            <div style="width:${Math.min(pct,100)}%;height:100%;background:${color};border-radius:3px"></div>
-          </div>
-          <span style="font-size:.78rem;color:var(--txt-muted);min-width:34px;text-align:right">${pct.toFixed(1)}%</span>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
+  // Programs page rendering is fully handled by _renderAllProgramSections()
+  // Product data (ESB) sections removed — no longer shown on this page
 }
 
 function filterProdCat(cat) {
   _activeProdCat = cat;
-  renderPrograms();
 }
 
 // ── AI COPILOT (stub — halaman dihapus, fungsi dipertahankan untuk compat) ──
