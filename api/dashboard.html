@@ -1073,6 +1073,18 @@ body{
       <div class="section-eyebrow">Posisi Pasar</div>
       <div class="four-col" id="intel-kpi-row"></div>
 
+      <div class="section-eyebrow">Trend & Gap</div>
+      <div class="two-col-wide" style="margin-bottom:1.4rem">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-lbl">Ranking PPC — Tren Waktu</span><span class="card-meta">Urutan occupancy vs kompetitor</span></div>
+          <div class="chart-wrap-lg"><canvas id="chart-intel-rank-trend"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-lbl">Gap Analysis</span><span class="card-meta" id="intel-gap-date"></span></div>
+          <div id="intel-gap-body" style="padding-top:6px"></div>
+        </div>
+      </div>
+
       <div class="section-eyebrow">Ranking & Benchmark</div>
       <div class="two-col-wide">
         <div class="card">
@@ -1702,9 +1714,33 @@ async function fetchSupabaseKPIs(period) {
     renderKPIProgress();
     renderFunnel();
     renderSBCategoryBreakdown();
-    // Sprint 5: run alerts + attach drill handlers after KPI data is ready
     attachDrillHandlers();
     evaluateAlerts();
+
+    // Extra: fetch top category + churn proxy for IntelBrief (no ESB dependency)
+    try {
+      const now = new Date();
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+      const [catRes, progRes] = await Promise.all([
+        _SB.from('transactions').select('category,gross_amount').gte('transaction_date', monthStart),
+        _SB.from('programs').select('status'),
+      ]);
+      const txns  = catRes.data  || [];
+      const progs = progRes.data || [];
+      // Top category by revenue this month
+      const catMap = {};
+      txns.forEach(r => { const c = r.category||'Other'; catMap[c]=(catMap[c]||0)+sf(r.gross_amount||0); });
+      const catEntries = Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
+      const totalRev   = catEntries.reduce((s,e)=>s+e[1],0);
+      const topCatEntry= catEntries[0];
+      // Churn proxy: expired/habis passes ratio
+      const expiredCnt = progs.filter(p=>['habis','hangus'].includes(p.status)).length;
+      SB._intel = {
+        topCat: topCatEntry ? { name: topCatEntry[0], pct: totalRev>0?(topCatEntry[1]/totalRev*100).toFixed(0):0 } : null,
+        churnPct: progs.length>0 ? (expiredCnt/progs.length*100).toFixed(0) : 0,
+      };
+    } catch(_) { SB._intel = null; }
+
     renderIntelBrief();
   } catch(e) {
     console.warn('Supabase KPI fetch failed:', e);
@@ -3614,21 +3650,11 @@ function renderIntelBrief() {
   const runRate = _dom>0&&rev>0 ? Math.round(rev/_dom*_dim) : 0;
   const _mn = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][_t.getMonth()];
 
-  // Top category from product_detail
-  const cats={};
-  (D.product_detail||[]).forEach(p=>{
-    const cat=p.Product_Category||p.category||mapCatLabel(p.product_type||'Other');
-    cats[cat]=(cats[cat]||0)+sf(p.Total_Revenue||p.revenue_total||0);
-  });
-  const topCat=Object.entries(cats).sort((a,b)=>b[1]-a[1])[0];
-  const totalCatRev=Object.values(cats).reduce((s,v)=>s+v,0);
-  const topCatPct=topCat&&totalCatRev>0?(topCat[1]/totalCatRev*100).toFixed(0):0;
-
-  // Churn signal
-  const segs=D.rfm_segments||[];
-  const totalSeg=segs.reduce((s,r)=>s+r.count,0);
-  const lostCnt=(segs.find(s=>/lost/i.test(s.segment))||{}).count||0;
-  const churnPct=totalSeg>0?(lostCnt/totalSeg*100).toFixed(0):0;
+  // Top category + churn — dari Supabase (SB._intel), bukan ESB
+  const _intel   = SB._intel || {};
+  const topCat   = _intel.topCat ? [_intel.topCat.name] : null;
+  const topCatPct= _intel.topCat?.pct || 0;
+  const churnPct = Number(_intel.churnPct) || 0;
 
   // Narrative generation
   const vsRev = revVs!=null ? (revVs>=0?` ↑${revVs}%`:` ↓${Math.abs(revVs)}%`) : '';
@@ -3844,6 +3870,114 @@ function renderIntelligence() {
     <thead><tr><th>Venue</th><th class="r">Rev Captured${ii('rev-captured')}</th><th class="r">Rev Ceiling${ii('rev-ceiling')}</th><th class="r">Value Capture ${ii('value-capture')}</th><th class="r">Value Index ${ii('value-index')}</th></tr></thead>
     <tbody>${revTop10.map(revRowHtml).join('')}${ppcExtraHtml}</tbody>
   </table>`;
+
+  // ── Trend Ranking ─────────────────────────────────────────────────────
+  const dateGroups = {};
+  allComps.forEach(r => {
+    const d = r.date || r.snapshot_date || '';
+    if (!d) return;
+    if (!dateGroups[d]) dateGroups[d] = [];
+    dateGroups[d].push(r);
+  });
+  const trendDates = Object.keys(dateGroups).sort().slice(-16);
+  const trendData  = trendDates.map(d => {
+    const venues = [...dateGroups[d]];
+    // inject PPC if missing from snapshot
+    if (!venues.find(r => (r.Venue||'').includes('Puri Padel'))) {
+      const avmEntry = (D.avm||[]).find(a=>a.date===d) || (D.occupancy||[]).find(o=>o.date===d) || {};
+      const ppcVal   = nOcc(avmEntry['Overall Occ %']||0);
+      if (ppcVal > 0) venues.push({Venue:'Puri Padel Club','Overall Occ %':ppcVal,'Morning Occ %':avmEntry['Morning Occ %']||0,'Evening Occ %':avmEntry['Evening Occ %']||0,_injected:true});
+    }
+    const sorted = [...venues].sort((a,b) => nOcc(b['Overall Occ %']||0) - nOcc(a['Overall Occ %']||0));
+    const rank   = sorted.findIndex(r => (r.Venue||'').includes('Puri Padel')) + 1;
+    return { d, rank: rank > 0 ? rank : null, total: sorted.length };
+  });
+  const validTrend = trendData.filter(t => t.rank);
+  destroyChart('chart-intel-rank-trend');
+  if (document.getElementById('chart-intel-rank-trend') && validTrend.length > 1) {
+    CHARTS['chart-intel-rank-trend'] = new Chart(document.getElementById('chart-intel-rank-trend'), {
+      type: 'line',
+      data: {
+        labels: validTrend.map(t => {
+          const dt = new Date(t.d); return `${dt.getDate()}/${dt.getMonth()+1}`;
+        }),
+        datasets: [{
+          label: 'Ranking PPC',
+          data: validTrend.map(t => t.rank),
+          borderColor: '#034842',
+          backgroundColor: 'rgba(3,72,66,0.08)',
+          fill: true, tension: 0.3,
+          pointRadius: 5,
+          pointBackgroundColor: validTrend.map(t =>
+            t.rank === 1 ? '#034842' : t.rank <= 3 ? '#2da870' : '#f59e0b'
+          ),
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `Ranking #${ctx.raw} dari ${validTrend[ctx.dataIndex]?.total} venue` } }
+        },
+        scales: {
+          y: {
+            reverse: true, min: 1,
+            ticks: { stepSize: 1, callback: v => '#'+v },
+            grid: { color: 'rgba(0,0,0,0.04)' }
+          },
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  } else if (document.getElementById('chart-intel-rank-trend')) {
+    const ctx = document.getElementById('chart-intel-rank-trend').getContext('2d');
+    ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
+  }
+
+  // ── Gap Analysis ──────────────────────────────────────────────────────
+  const gapEl   = document.getElementById('intel-gap-body');
+  const gapDate = document.getElementById('intel-gap-date');
+  if (gapEl) {
+    if (gapDate) gapDate.textContent = _intelDate || '';
+    const mktMorning = comps.length > 0
+      ? comps.reduce((s,r) => s + nOcc(r['Morning Occ %']||0), 0) / comps.length : 0;
+    const mktEvening = comps.length > 0
+      ? comps.reduce((s,r) => s + nOcc(r['Evening Occ %']||0), 0) / comps.length : 0;
+    const ppcMrn = nOcc(ppcRow['Morning Occ %']||0);
+    const ppcEvn = nOcc(ppcRow['Evening Occ %']||0);
+    const topComp = sorted.find(r => !(r.Venue||'').includes('Puri Padel')) || {};
+
+    const slotBar = (label, ppcVal, mktVal, topVal, topName) => {
+      const gapPct = ((ppcVal - mktVal)*100).toFixed(1);
+      const isAhead = ppcVal >= mktVal;
+      const col = isAhead ? 'var(--green)' : 'var(--red)';
+      const rows = [
+        {name:'PPC', val:ppcVal*100, isPPC:true},
+        {name:'Market avg', val:mktVal*100, isPPC:false},
+        {name:(topName||'').split(' ').slice(0,2).join(' '), val:topVal*100, isPPC:false},
+      ].filter(r => r.val > 0 || r.isPPC);
+      return `<div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--txt)">${label}</span>
+          <span style="font-size:11px;font-weight:700;color:${col}">${isAhead?'▲':'▼'} ${Math.abs(gapPct)}% vs market</span>
+        </div>
+        ${rows.map(r=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+            <span style="font-size:10px;color:var(--txt2);width:82px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</span>
+            <div style="flex:1;height:7px;background:var(--border);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${Math.min(r.val,100)}%;background:${r.isPPC?'#034842':'rgba(3,72,66,0.22)'};border-radius:4px"></div>
+            </div>
+            <span style="font-size:10px;font-weight:${r.isPPC?700:400};color:${r.isPPC?'var(--brand)':'var(--txt2)'};min-width:30px;text-align:right">${r.val.toFixed(0)}%</span>
+          </div>`).join('')}
+      </div>`;
+    };
+
+    gapEl.innerHTML = Object.keys(ppcRow).length
+      ? slotBar('Morning', ppcMrn, mktMorning, nOcc(topComp['Morning Occ %']||0), topComp.Venue||'')
+        + `<div style="border-top:1px solid var(--border);margin:4px 0 14px"></div>`
+        + slotBar('Evening', ppcEvn, mktEvening, nOcc(topComp['Evening Occ %']||0), topComp.Venue||'')
+      : '<div style="font-size:11px;color:var(--txt3);padding:12px 0">Data PPC tidak tersedia untuk tanggal ini.</div>';
+  }
 }
 
 // ── INTELLIGENCE state ─────────────────────────────
