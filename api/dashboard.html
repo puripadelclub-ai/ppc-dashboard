@@ -1049,31 +1049,42 @@ body{
       <div class="section-eyebrow">Overview Produk</div>
       <div class="four-col" id="prog-kpi-row"></div>
 
-      <!-- Court Pass Aktif -->
-      <div class="section-eyebrow">Court Pass Aktif</div>
-      <div class="card" style="margin-bottom:12px">
-        <div class="card-hd">
-          <span class="card-hd-lbl">Court Pass Aktif</span>
-          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
-        </div>
-        <div id="mem-court-pass-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+      <!-- ── Section 1: Program Performance Cards ───────────────────────── -->
+      <div class="section-eyebrow" style="display:flex;align-items:center;justify-content:space-between">
+        Program Performance
+        <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 7px;border-radius:4px;font-weight:600">ESB + Supabase</span>
+      </div>
+      <div id="prog-perf-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:1.4rem">
+        <span style="font-size:11px;color:var(--txt3)">Memuat...</span>
       </div>
 
-      <!-- Coaching Sessions -->
-      <div class="section-eyebrow">Coaching Bulan Ini</div>
-      <div class="card" style="margin-bottom:12px">
-        <div class="card-hd">
-          <span class="card-hd-lbl">Coaching Overview</span>
-          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase</span>
-        </div>
-        <div id="coaching-stats-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+      <!-- ── Section 2: Who Uses What ────────────────────────────────────── -->
+      <div class="section-eyebrow" style="display:flex;align-items:center;gap:.5rem">
+        Who Uses What
+        <span id="wuw-badge" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 7px;border-radius:4px;font-weight:600"></span>
       </div>
-      <div class="card" style="margin-bottom:12px" id="coaching-bundling-card">
-        <div class="card-hd">
-          <span class="card-hd-lbl">Active Bundling</span>
-          <span id="coaching-bundling-badge" style="font-size:9px;background:rgba(245,158,11,.12);color:#B45309;padding:2px 7px;border-radius:4px;font-weight:600;margin-left:auto"></span>
+      <div class="card" style="margin-bottom:1.4rem">
+        <div class="card-hd" style="margin-bottom:.75rem">
+          <span class="card-hd-lbl">Member ↔ Program</span>
+          <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">Supabase · 90 hari</span>
         </div>
-        <div id="coaching-bundling-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        <div id="wuw-body"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+      </div>
+
+      <!-- ── Section 3: Program Affinity ─────────────────────────────────── -->
+      <div class="section-eyebrow">Program Affinity</div>
+      <div class="two-col-wide" style="margin-bottom:1.4rem">
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-hd-lbl">Program Terpopuler</span>
+            <span style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;margin-left:auto">by member unik</span>
+          </div>
+          <div id="affinity-ranking" style="margin-top:.75rem"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-lbl">Multi-Program Members</span></div>
+          <div id="affinity-multi" style="margin-top:.75rem"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
       </div>
 
       <!-- Revenue share bar -->
@@ -3941,9 +3952,321 @@ async function renderCoachingSection() {
   }
 }
 
+// ── PROGRAM PAGE: shared label/color maps ─────────────────────────────────
+
+const _PKG_LABEL = {
+  FREE_COACHING:'Free Coaching', FREE_1X:'Free 1x',
+  BUNDLING_4X:'Bundling 4x', BUNDLING_6X:'Bundling 6x', BUNDLING:'Bundling',
+  COACHING_KIDS:'Coaching Kids', PRIVATE:'Private',
+  ADDON_FREE:'Add-on Free', ADDON_PLAYER:'Add-on Player',
+  TRIAL:'Trial', OTHER:'Lainnya',
+};
+const _PKG_COLOR = {
+  BUNDLING_4X:'#034842', BUNDLING_6X:'#034842', BUNDLING:'#034842',
+  COACHING_KIDS:'#8b5cf6', PRIVATE:'#f59e0b', TRIAL:'#3b82f6',
+  FREE_COACHING:'#9ca3af', FREE_1X:'#9ca3af',
+  ADDON_FREE:'#9ca3af', ADDON_PLAYER:'#9ca3af',
+};
+
+// ── Section orchestrator: single Supabase fetch → 3 renders ──────────────
+
+async function _renderAllProgramSections() {
+  const now   = new Date();
+  const y     = now.getFullYear();
+  const m     = String(now.getMonth()+1).padStart(2,'0');
+  const fromMonth = `${y}-${m}-01`;
+  const from90    = new Date(Date.now() - 90*864e5).toISOString().slice(0,10);
+
+  try {
+    const [passRes, coachRecentRes, coachMonthRes] = await Promise.all([
+      _SB.from('programs')
+        .select('member_name,package_type,status,sessions_remaining,expiry_date')
+        .eq('status','active'),
+      _SB.from('coaching_sessions')
+        .select('member_name,package_type,sessions_remaining,status,session_date')
+        .gte('session_date', from90),
+      _SB.from('coaching_sessions')
+        .select('member_name,package_type,persons,sessions_remaining,status,session_date')
+        .gte('session_date', fromMonth),
+    ]);
+
+    const passes      = passRes.data      || [];
+    const coachRecent = coachRecentRes.data || [];
+    const coachMonth  = coachMonthRes.data  || [];
+
+    _renderProgPerf(passes, coachMonth);
+    _renderWhoUsesWhat(passes, coachRecent);
+    _renderProgramAffinity(passes, coachRecent);
+  } catch(e) {
+    ['prog-perf-cards','wuw-body','affinity-ranking','affinity-multi'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<span style="font-size:11px;color:var(--red,#ef4444)">Error: ${e.message}</span>`;
+    });
+  }
+}
+
+// ── Section 1: Program Performance Cards (ESB revenue + Supabase usage) ──
+
+function _renderProgPerf(passes, coachMonth) {
+  const el = document.getElementById('prog-perf-cards');
+  if (!el) return;
+
+  const prods = D.product_detail || [];
+  const numOf = (r,k) => Number(r[k])||0;
+  const fmtJt = v => {
+    const n = Number(v)||0;
+    return n>=1e9 ? 'Rp'+(n/1e9).toFixed(1)+'M'
+         : n>=1e6 ? 'Rp'+(n/1e6).toFixed(0)+'jt'
+         : n>=1e3 ? 'Rp'+(n/1e3).toFixed(0)+'rb' : 'Rp0';
+  };
+
+  // ESB revenue grouped by normalised category
+  const catRev = {};
+  prods.forEach(r => {
+    const c = (r['Menu_Category']||'Lainnya').trim().toLowerCase();
+    catRev[c] = (catRev[c]||0) + numOf(r,'Total_Revenue');
+  });
+  const matchRev = (...kws) => Object.entries(catRev)
+    .filter(([c]) => kws.some(k => c.includes(k.toLowerCase())))
+    .reduce((s,[,v]) => s+v, 0);
+
+  // Coaching
+  const coachRev   = matchRev('coaching');
+  const coachSess  = coachMonth.length;
+  const coachUniq  = new Set(coachMonth.map(s=>s.member_name)).size;
+  const bundlingAct= passes.filter(p=>['BUNDLING_4X','BUNDLING_6X','BUNDLING'].includes(p.package_type));
+
+  // Court Pass / Programs
+  const passRev     = matchRev('court pass','comeback','upgrade','trial','court_pass');
+  const passUniq    = new Set(passes.map(p=>p.member_name)).size;
+  const totalSessL  = passes.reduce((s,p)=>s+(p.sessions_remaining||0),0);
+
+  // Other ESB categories
+  const memberRev   = matchRev('membership');
+  const courtRev    = matchRev('court rental','ball machine','sewa court');
+  const knownRev    = coachRev + passRev + memberRev + courtRev;
+  const totalRev    = Object.values(catRev).reduce((s,v)=>s+v,0);
+  const othersRev   = Math.max(0, totalRev - knownRev);
+
+  const CARDS = [
+    {
+      label:'Coaching', icon:'🏸', color:'#8b5cf6',
+      rev: coachRev, supabase: true,
+      s1v: `${coachSess}`, s1l:'Sesi bulan ini',
+      s2v: `${coachUniq}`, s2l:'Member aktif',
+      note: bundlingAct.length ? `${bundlingAct.length} bundling aktif` : null,
+    },
+    {
+      label:'Court Pass', icon:'🎫', color:'#0d9488',
+      rev: passRev, supabase: true,
+      s1v: `${passes.length}`, s1l:'Pass aktif',
+      s2v: `${passUniq}`,       s2l:'Member unik',
+      note: totalSessL > 0 ? `${totalSessL} sesi tersisa` : null,
+    },
+    {
+      label:'Membership', icon:'👑', color:'#f59e0b',
+      rev: memberRev, supabase: false, s1v: null,
+    },
+    {
+      label:'Court Rental', icon:'🏟️', color:'#3b82f6',
+      rev: courtRev, supabase: false, s1v: null,
+    },
+    {
+      label:'Lainnya', icon:'📦', color:'#6b7280',
+      rev: othersRev, supabase: false, s1v: null,
+    },
+  ].filter(c => c.rev > 0 || c.supabase);
+
+  if (!CARDS.length) {
+    el.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:12px">Belum ada data ESB. Jalankan pipeline terlebih dahulu.</div>';
+    return;
+  }
+
+  el.innerHTML = CARDS.map(c => `
+    <div style="background:var(--surface,var(--card));border:1px solid var(--border);border-top:3px solid ${c.color};border-radius:10px;padding:14px 16px;display:flex;flex-direction:column">
+      <div style="font-size:1.15rem;margin-bottom:3px">${c.icon}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--txt);letter-spacing:.02em;margin-bottom:.5rem">${c.label}</div>
+      <div style="font-size:21px;font-weight:800;color:${c.color};line-height:1">${fmtJt(c.rev)}</div>
+      <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin:.25rem 0 ${c.s1v?'.75rem':'.25rem'}">Revenue ESB</div>
+      ${c.s1v ? `
+        <div style="display:flex;gap:1rem;padding:.6rem 0 .4rem;border-top:1px solid var(--border)">
+          <div>
+            <div style="font-size:15px;font-weight:800;color:var(--txt)">${c.s1v}</div>
+            <div style="font-size:9px;color:var(--txt3);margin-top:1px">${c.s1l}</div>
+          </div>
+          <div>
+            <div style="font-size:15px;font-weight:800;color:var(--txt)">${c.s2v}</div>
+            <div style="font-size:9px;color:var(--txt3);margin-top:1px">${c.s2l}</div>
+          </div>
+        </div>
+        ${c.note ? `<div style="font-size:10px;color:${c.color};font-weight:600;margin-top:3px">${c.note}</div>` : ''}
+      ` : `<div style="font-size:10px;color:var(--txt3);margin-top:auto;font-style:italic">Dari ESB</div>`}
+    </div>`).join('');
+}
+
+// ── Section 2: Who Uses What — per-member program view ────────────────────
+
+function _renderWhoUsesWhat(passes, coachRecent) {
+  const el    = document.getElementById('wuw-body');
+  const badge = document.getElementById('wuw-badge');
+  if (!el) return;
+
+  // Build per-member map
+  const memberMap = {};
+  const ensure = n => { if (!memberMap[n]) memberMap[n]={passes:[],coachAgg:null}; return memberMap[n]; };
+
+  passes.forEach(p => ensure(p.member_name).passes.push(p));
+
+  // Aggregate coaching per member
+  const coachByMem = {};
+  coachRecent.forEach(s => {
+    if (!coachByMem[s.member_name]) coachByMem[s.member_name]={count:0,lastDate:'',pkgSet:new Set()};
+    const a = coachByMem[s.member_name];
+    a.count++;
+    if (s.session_date > a.lastDate) a.lastDate = s.session_date;
+    if (s.package_type) a.pkgSet.add(s.package_type);
+  });
+  Object.entries(coachByMem).forEach(([name,agg]) => { ensure(name).coachAgg = agg; });
+
+  const members = Object.entries(memberMap).sort((a,b) => {
+    const sa = (a[1].passes.length>0?2:0) + (a[1].coachAgg?1:0);
+    const sb = (b[1].passes.length>0?2:0) + (b[1].coachAgg?1:0);
+    return sb - sa || a[0].localeCompare(b[0]);
+  });
+
+  if (!members.length) {
+    el.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:12px">Belum ada data program. Jalankan pipeline terlebih dahulu.</div>';
+    return;
+  }
+  if (badge) badge.textContent = `${members.length} member`;
+
+  const passPill = p => {
+    const lbl = (p.package_type||'').replace(/_/g,' ')
+      .replace(/COURT PASS/i,'Pass').replace(/INDEPENDENCE WEEK/i,'Indep.Week') || 'Program';
+    const info = p.sessions_remaining!=null ? ` · Sisa ${p.sessions_remaining}` : '';
+    return `<span style="font-size:10px;background:#0d948818;color:#0d9488;padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">${lbl}${info}</span>`;
+  };
+
+  const coachPill = agg => {
+    const pkgs    = [...agg.pkgSet];
+    const primary = pkgs[0] || 'FREE_COACHING';
+    const col     = _PKG_COLOR[primary] || '#6b7280';
+    const lbl     = _PKG_LABEL[primary] || 'Coaching';
+    const bg      = col.startsWith('#') ? col+'18' : 'rgba(100,100,100,.1)';
+    return `<span style="font-size:10px;background:${bg};color:${col};padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">🏸 ${lbl} · ${agg.count}x</span>`;
+  };
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px">
+      ${members.map(([name,data]) => {
+        const total = data.passes.length + (data.coachAgg ? 1 : 0);
+        const pills = data.passes.map(passPill).join('') + (data.coachAgg ? coachPill(data.coachAgg) : '');
+        return `<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+            <span style="font-size:12px;font-weight:700;color:var(--txt)">${name}</span>
+            ${total>1?`<span style="font-size:9px;font-weight:700;background:var(--brand-lt);color:var(--brand);padding:1px 6px;border-radius:3px">${total} program</span>`:''}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">${pills}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+// ── Section 3: Program Affinity — popularity + multi-program members ──────
+
+function _renderProgramAffinity(passes, coachRecent) {
+  const rankEl  = document.getElementById('affinity-ranking');
+  const multiEl = document.getElementById('affinity-multi');
+  if (!rankEl) return;
+
+  const BUCKET_COLOR = {
+    'Coaching Bundling':'#034842','Free Coaching':'#9ca3af',
+    'Coaching Kids':'#8b5cf6','Private Coaching':'#f59e0b',
+    'Court Pass':'#0d9488','Comeback Package':'#3b82f6',
+    'Trial':'#60a5fa','Upgrade Membership':'#f97316',
+  };
+
+  const toPassBucket = pkg => {
+    const p = (pkg||'').toUpperCase();
+    if (p.includes('COMEBACK'))  return 'Comeback Package';
+    if (p.includes('UPGRADE'))   return 'Upgrade Membership';
+    if (p.includes('TRIAL'))     return 'Trial';
+    return 'Court Pass';
+  };
+
+  const toCoachBucket = pkg => {
+    if (['BUNDLING_4X','BUNDLING_6X','BUNDLING'].includes(pkg)) return 'Coaching Bundling';
+    if (pkg === 'COACHING_KIDS') return 'Coaching Kids';
+    if (pkg === 'PRIVATE')       return 'Private Coaching';
+    return 'Free Coaching';
+  };
+
+  const bucketMems    = {}; // bucket → Set<name>
+  const memberBuckets = {}; // name → Set<bucket>
+
+  const add = (name, bucket) => {
+    if (!bucketMems[bucket])   bucketMems[bucket]   = new Set();
+    if (!memberBuckets[name])  memberBuckets[name]  = new Set();
+    bucketMems[bucket].add(name);
+    memberBuckets[name].add(bucket);
+  };
+
+  passes.forEach(p      => add(p.member_name, toPassBucket(p.package_type)));
+  coachRecent.forEach(s => add(s.member_name, toCoachBucket(s.package_type)));
+
+  const ranking = Object.entries(bucketMems)
+    .map(([b,s]) => ({bucket:b, count:s.size}))
+    .sort((a,b) => b.count - a.count);
+
+  const maxCount = ranking[0]?.count || 1;
+
+  if (!ranking.length) {
+    rankEl.innerHTML = '<div style="padding:1rem;color:var(--txt3);font-size:11px">Belum ada data. Jalankan pipeline terlebih dahulu.</div>';
+  } else {
+    rankEl.innerHTML = ranking.map(({bucket,count},i) => {
+      const col = BUCKET_COLOR[bucket] || '#6b7280';
+      const pct = (count/maxCount*100).toFixed(0);
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+          <span style="font-size:11px;font-weight:600;color:var(--txt)">${i+1}. ${bucket}</span>
+          <span style="font-size:13px;font-weight:800;color:${col}">${count}</span>
+        </div>
+        <div style="height:6px;background:var(--border,#e5e7eb);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${col};border-radius:3px;transition:width .4s"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const multiMembers = Object.entries(memberBuckets)
+    .filter(([,s]) => s.size > 1)
+    .sort((a,b) => b[1].size - a[1].size)
+    .slice(0,10);
+
+  if (!multiMembers.length) {
+    multiEl.innerHTML = '<div style="padding:.75rem 0;color:var(--txt3);font-size:11px">Belum ada member dengan multi-program.</div>';
+  } else {
+    multiEl.innerHTML = multiMembers.map(([name,buckets],i) => {
+      const arr = [...buckets];
+      return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:11px;font-weight:700;color:var(--txt3);width:16px;text-align:right;flex-shrink:0;margin-top:2px">${i+1}</span>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px">${name}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:3px">
+            ${arr.map(b=>{
+              const col = BUCKET_COLOR[b]||'#6b7280';
+              return `<span style="font-size:10px;background:${col}18;color:${col};padding:2px 7px;border-radius:4px;font-weight:600">${b}</span>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
 function renderPrograms() {
-  renderCourtPassSummary();
-  renderCoachingSection();
+  _renderAllProgramSections();   // async: Program Performance + Who Uses What + Affinity
+  // ── legacy calls removed (sections replaced above) ──
   const prods = D.product_detail || [];
   const fmtRp  = v => 'Rp' + (Number(v)||0).toLocaleString('id-ID');
   const fmtJt  = v => { const n=Number(v)||0; return n>=1e9?'Rp'+(n/1e9).toFixed(1)+'M':n>=1e6?'Rp'+(n/1e6).toFixed(0)+'jt':fmtRp(n); };
