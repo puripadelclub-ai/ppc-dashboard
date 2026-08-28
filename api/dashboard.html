@@ -4848,8 +4848,8 @@ const _SB = supabase.createClient(
 
 const ROLE_PAGES = {
   owner:      ['home','operations','revenue','programs','marketing','members','intelligence'],
-  superadmin: ['home','operations','programs','members','intelligence'],
-  admin:      ['home','operations','programs'],
+  superadmin: ['operations','programs','members','intelligence'],
+  admin:      ['operations','programs'],
 };
 
 function applyRole(role, email) {
@@ -4897,11 +4897,12 @@ async function doLogin() {
     return;
   }
 
-  const role = data.user?.user_metadata?.role || 'marketing';
+  const role = data.user?.user_metadata?.role || 'admin';
   applyRole(role, data.user?.email);
   document.getElementById('login-overlay').style.display = 'none';
-  if (role === 'member') { nav('member-portal'); }
-  else { nav('home'); reloadData(); }
+  const landingPage = ROLE_PAGES[role]?.[0] || 'operations';
+  nav(landingPage);
+  reloadData();
 }
 
 async function doLogout() {
@@ -4912,11 +4913,12 @@ async function doLogout() {
 async function checkAuth() {
   const { data: { session } } = await _SB.auth.getSession();
   if (session) {
-    const role = session.user?.user_metadata?.role || 'marketing';
+    const role = session.user?.user_metadata?.role || 'admin';
     applyRole(role, session.user?.email);
     document.getElementById('login-overlay').style.display = 'none';
-    if (role === 'member') { nav('member-portal'); }
-    else { nav('home'); reloadData(); }
+    const landingPage = ROLE_PAGES[role]?.[0] || 'operations';
+    nav(landingPage);
+    reloadData();
   }
   // No session → login overlay stays visible
 }
