@@ -4847,14 +4847,13 @@ const _SB = supabase.createClient(
 );
 
 const ROLE_PAGES = {
-  owner:       ['home','operations','revenue','programs','marketing','members','intelligence'],
-  marketing:   ['home','marketing','intelligence','members'],
-  operasional: ['home','operations','programs','intelligence'],
-  member:      ['member-portal'],
+  owner:      ['home','operations','revenue','programs','marketing','members','intelligence'],
+  superadmin: ['home','operations','programs','members','intelligence'],
+  admin:      ['home','operations','programs'],
 };
 
 function applyRole(role, email) {
-  const allowed = ROLE_PAGES[role] || ROLE_PAGES['marketing'];
+  const allowed = ROLE_PAGES[role] || ROLE_PAGES['admin'];
   document.querySelectorAll('.nav-item[data-page]').forEach(el => {
     el.style.display = allowed.includes(el.dataset.page) ? '' : 'none';
   });
