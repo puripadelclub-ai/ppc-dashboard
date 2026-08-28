@@ -1088,7 +1088,7 @@ body{
       <div class="section-eyebrow">Ranking & Benchmark</div>
       <div class="two-col-wide">
         <div class="card">
-          <div class="card-hd"><span class="card-hd-lbl">Ranking Occupancy</span><select id="intel-date-sel" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--txt);cursor:pointer" onchange="_intelDate=this.value;renderIntelligence()"></select></div>
+          <div class="card-hd"><span class="card-hd-lbl">Ranking Occupancy</span><select id="intel-date-sel" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--txt);cursor:pointer" onchange="_intelDate=this.value;renderIntelligence()"></select><label style="font-size:10.5px;color:var(--txt3);margin-left:8px;cursor:pointer;user-select:none"><input type="checkbox" id="intel-padel-only" checked onchange="renderIntelligence()" style="margin-right:3px">Padel saja</label></div>
           <div style="overflow-x:auto;max-height:320px;overflow-y:auto"><div id="intel-comp-tbl"></div></div>
         </div>
         <div class="card">
@@ -3289,14 +3289,14 @@ function renderMembers() {
 
   // ── Segment summary cards (replace doughnut) ─────
   const segColors = {Champions:'#034842',Loyal:'#5cb8b0',New:'#4ade80','Needs Attention':'#f59e0b','At Risk':'#f97316','Cannot Lose':'#ef4444',Lost:'#dc2626'};
-  const segActions = {
-    Champions:'Berikan VIP experience & early access event',
-    Loyal:'Upsell coaching & ball machine premium',
-    New:'Onboarding — pastikan 2 sesi pertama berkesan',
-    'Needs Attention':'Kirim promo personal sebelum churn',
-    'At Risk':'Win-back campaign + diskon renewal',
-    'Cannot Lose':'Hubungi langsung — high-value member',
-    Lost:'Re-engagement offer atau survei penyebab churn'
+  const segDesc = {
+    Champions:      'Member terbaik: sering datang, spend tinggi, baru-baru ini aktif. Aset terbesar — pertahankan dengan VIP experience & early access.',
+    Loyal:          'Datang rutin dan spend konsisten. Backbone revenue klub. Kandidat upsell coaching & ball machine.',
+    New:            'Member baru yang baru bergabung. Kunci: pastikan 2 sesi pertama berkesan agar tidak churn di bulan pertama.',
+    'Needs Attention':'Mulai jarang datang. Kirim promo personal atau reminder sebelum mereka benar-benar churn.',
+    'At Risk':      'Frekuensi turun signifikan. Win-back campaign + diskon renewal masih bisa menyelamatkan mereka.',
+    'Cannot Lose':  'High-value member yang aktivitasnya menurun drastis. Hubungi langsung via WhatsApp — jangan biarkan churn.',
+    Lost:           'Sudah tidak aktif dalam waktu lama. Re-engagement offer atau survei penyebab churn untuk data improvement.',
   };
   const segEl = document.getElementById('seg-summary');
   if (segEl) {
@@ -3307,18 +3307,23 @@ function renderMembers() {
       segEl.innerHTML = rfmSegs.map(r=>{
         const pct = total>0?(r.count/total*100).toFixed(1):0;
         const col = segColors[r.segment]||'#9CA3AF';
-        const act = segActions[r.segment]||'—';
-        return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        const desc = segDesc[r.segment]||'';
+        const seg  = r.segment;
+        return `<div onclick="filterBySeg('${seg}');document.getElementById('mem-dir-tbl').scrollIntoView({behavior:'smooth',block:'start'})"
+          style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;transition:background .1s"
+          onmouseover="this.style.background='var(--bg)';this.style.padding='8px 6px';this.style.margin='0 -6px'"
+          onmouseout="this.style.cssText='display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;transition:background .1s'">
           <span style="width:8px;height:8px;border-radius:50%;background:${col};display:inline-block;flex-shrink:0;margin-top:4px"></span>
           <div style="flex:1;min-width:0">
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
-              <span style="font-size:12px;font-weight:600;color:var(--txt)">${r.segment}</span>
+              <span style="font-size:12px;font-weight:600;color:var(--txt)">${seg}</span>
               <span style="font-size:13px;font-weight:700;color:var(--txt);flex-shrink:0;margin-left:8px">${fN(r.count)} <span style="font-size:10px;font-weight:400;color:var(--txt3)">(${pct}%)</span></span>
             </div>
-            <div style="height:3px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:3px">
+            <div style="height:3px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:4px">
               <div style="height:100%;width:${pct}%;background:${col};opacity:.7;border-radius:2px"></div>
             </div>
-            <div style="font-size:10.5px;color:var(--txt3)">${act}</div>
+            <div style="font-size:10.5px;color:var(--txt3);line-height:1.4">${desc}</div>
+            <div style="font-size:9.5px;color:${col};font-weight:600;margin-top:3px">Klik untuk lihat member →</div>
           </div>
         </div>`;
       }).join('');
@@ -3400,6 +3405,25 @@ function renderMembers() {
   filteredMembers = [...members];
   activeSeg = 'ALL';
   activePref = 'ALL';
+
+  // Fallback: jika D.members kosong, load dari Supabase members table
+  if (!members.length) {
+    _SB.from('members')
+      .select('name,join_date,membership_type')
+      .order('join_date', {ascending: false})
+      .limit(500)
+      .then(({data}) => {
+        if (!data?.length) return;
+        filteredMembers = data.map(m => ({
+          'Member Name': m.name || '',
+          join_date:     m.join_date || '',
+          Membership_Type: m.membership_type || '',
+          total_spending: 0, last_visit: '', RFM_Segment: '',
+        }));
+        document.getElementById('mem-dir-count').textContent = `(${fN(filteredMembers.length)} member · Supabase)`;
+        renderMemberTable();
+      });
+  }
   const segs = ['ALL',...new Set(members.map(m=>m.RFM_Segment||'').filter(Boolean))];
   document.getElementById('mem-seg-pills').innerHTML = segs.map(sg=>`<div class="pill ${sg===activeSeg?'active':''}" onclick="filterBySeg('${sg}')">${sg==='ALL'?'Semua':sg}</div>`).join('');
 
@@ -3554,7 +3578,7 @@ function openMember360(name) {
     <div id="drawer-360-cp"></div>
     <div id="drawer-360-txn"></div>`;
 
-  // Parallel: transactions + court passes
+  // Parallel: transactions + programs + coaching sessions
   Promise.all([
     _SB.from('transactions')
       .select('transaction_date,product_name,gross_amount,payment_method')
@@ -3563,29 +3587,48 @@ function openMember360(name) {
     _SB.from('programs')
       .select('package_type,package_raw,sessions_total,sessions_remaining,status,expiry_date,purchase_date')
       .ilike('member_name',`%${name}%`)
-      .order('purchase_date',{ascending:false}).limit(5)
-  ]).then(([{data:txns,error:eTx},{data:passes,error:eCp}])=>{
-    // ── Court Pass section ──────────────────────────────
+      .order('purchase_date',{ascending:false}).limit(10),
+    _SB.from('coaching_sessions')
+      .select('session_date,start_time,end_time,coach_name,status,notes')
+      .ilike('member_name',`%${name}%`)
+      .order('session_date',{ascending:false}).limit(30),
+  ]).then(([{data:txns,error:eTx},{data:passes,error:eCp},{data:sessions}])=>{
+    // ── Programs section ──────────────────────────────
     const cpEl = document.getElementById('drawer-360-cp');
     if (cpEl) {
       if (passes?.length) {
-        const pkgLabel = t => (t||'').replace(/_/g,' ').replace('COURT PASS','Pass');
+        const pkgLabel = t => (t||'').replace(/_/g,' ');
         const statusCol = {active:'var(--green)',habis:'var(--txt3)',hangus:'var(--red)'};
+        const isCoaching = p => /coaching|bundling/i.test(p.package_type||'');
+        // Group coaching sessions by approximate purchase (associate all to most recent coaching pass for now)
+        const coachSess = (sessions||[]).filter(s=>s.session_date);
+
         cpEl.innerHTML = `
-          <div style="font-size:10.5px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🎾 Court Pass</div>
+          <div style="font-size:10.5px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">📋 Program Aktif</div>
           ${passes.map(p=>{
             const pct = p.sessions_total>0 ? Math.round((p.sessions_remaining||0)/p.sessions_total*100) : null;
             const col = statusCol[p.status]||'var(--txt3)';
+            const usedSessions = isCoaching(p) ? coachSess : [];
             return `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;margin-bottom:6px">
               <div style="display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:11.5px;font-weight:600;color:var(--txt)">${pkgLabel(p.package_type)}</span>
                 <span style="font-size:10px;font-weight:700;color:${col};text-transform:uppercase">${p.status}</span>
               </div>
+              <div style="font-size:10px;color:var(--txt3);margin-top:2px">Dibeli: ${p.purchase_date||'—'}${p.expiry_date?' · Exp '+p.expiry_date:''}</div>
               ${p.sessions_total!=null?`<div style="margin:5px 0 3px">
                 <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
                   <div style="height:100%;background:${col};width:${Math.min(100,100-(pct||0))}%;border-radius:2px"></div>
                 </div>
-                <div style="font-size:10px;color:var(--txt3);margin-top:3px">Sisa ${p.sessions_remaining||0}/${p.sessions_total}h${p.expiry_date?' · Exp '+p.expiry_date:''}</div>
+                <div style="font-size:10px;color:var(--txt3);margin-top:3px">Sisa ${p.sessions_remaining||0} / ${p.sessions_total} sesi</div>
+              </div>`:''}
+              ${usedSessions.length?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+                <div style="font-size:9.5px;font-weight:600;color:var(--txt3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Riwayat Sesi</div>
+                ${usedSessions.slice(0,8).map(s=>`
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--txt2);padding:2px 0;border-bottom:1px solid var(--border)">
+                    <span>${s.session_date||''}${s.start_time?' '+s.start_time.slice(0,5):''}${s.end_time?'–'+s.end_time.slice(0,5):''}</span>
+                    <span style="color:var(--txt3)">${s.coach_name||''}</span>
+                  </div>`).join('')}
+                ${usedSessions.length>8?`<div style="font-size:9.5px;color:var(--txt3);margin-top:3px">+${usedSessions.length-8} sesi lainnya</div>`:''}
               </div>`:''}
             </div>`;
           }).join('')}
@@ -3747,7 +3790,13 @@ function renderIntelligence() {
   }
 
   // Filter comps untuk tanggal yang dipilih
-  const comps = allComps.filter(r=>(r.date||r.snapshot_date||'')=== _intelDate);
+  const _padelOnly = document.getElementById('intel-padel-only')?.checked !== false;
+  const _isTennis  = r => /tennis/i.test(r.Venue||'');
+  const comps = allComps.filter(r=>{
+    if ((r.date||r.snapshot_date||'') !== _intelDate) return false;
+    if (_padelOnly && _isTennis(r)) return false;
+    return true;
+  });
 
   // Inject PPC hanya untuk hari ini atau masa lalu — jangan gunakan data AVM untuk tanggal besok
   const _todayStr = todayLocal();
@@ -3790,14 +3839,16 @@ function renderIntelligence() {
   document.getElementById('intel-comp-tbl').innerHTML = `<table class="tbl">
     <thead><tr><th>#</th><th>Venue</th><th class="r">Court</th><th>Occupancy</th><th class="r">Morning</th><th class="r">Evening</th></tr></thead>
     <tbody>${sorted.map((r,i)=>{
-      const isPPC = (r.Venue||'').includes('Puri Padel');
+      const isPPC    = (r.Venue||'').includes('Puri Padel');
+      const isTennis = _isTennis(r);
       const injLabel = r._injected?' <span style="font-size:9px;color:var(--txt3)">(live)</span>':'';
+      const tennisLabel = isTennis?' <span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#fef3c7;color:#92400e;font-weight:600">Tennis</span>':'';
       const occPct = nOcc(r['Overall Occ %']||0)*100;
       const fillClass = occPct>=60?'good':occPct>=30?'':'low';
       const rankEl = i<3?`<span class="rank-badge rank-${i+1}">${i+1}</span>`:isPPC?`<span class="rank-badge rank-top">${i+1}</span>`:`<span style="font-size:11px;color:var(--txt3)">${i+1}</span>`;
       return `<tr style="${isPPC?'background:var(--brand-lt);font-weight:500':''}">
         <td>${rankEl}</td>
-        <td>${r.Venue||'—'}${injLabel}</td>
+        <td>${r.Venue||'—'}${tennisLabel}${injLabel}</td>
         <td class="r mono">${si(r.Courts||0)}</td>
         <td><div class="occ-bar-wrap"><div class="occ-bar-track"><div class="occ-bar-fill ${fillClass}" style="width:${Math.min(occPct,100)}%"></div></div><span class="occ-val">${occPct.toFixed(0)}%</span></div></td>
         <td class="r mono">${(nOcc(r['Morning Occ %']||0)*100).toFixed(0)}%</td>
@@ -4035,8 +4086,9 @@ function _renderRevKPI() {
   if (!el || !D) return;
 
   const summ = D.summary || {};
-  const revThis  = si(summ.revenue_this_month || summ.Revenue_This_Month || 0);
-  const revLast  = si(summ.revenue_last_month || summ.Revenue_Last_Month || 0);
+  // Prefer Supabase (same source as Home PENCAPAIAN KPI) for consistency
+  const revThis  = SB?.kpis?.revenue?.value || si(summ.revenue_this_month || summ.Revenue_This_Month || 0);
+  const revLast  = SB?.kpis?.revenue?.prev_value || si(summ.revenue_last_month || summ.Revenue_Last_Month || 0);
   const mom      = revLast > 0 ? ((revThis - revLast) / revLast * 100) : null;
   const momSign  = mom === null ? '' : (mom >= 0 ? '+' : '');
   const momColor = mom === null ? 'var(--txt3)' : (mom >= 0 ? '#2da870' : '#ef4444');
