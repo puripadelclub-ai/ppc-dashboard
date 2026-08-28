@@ -3281,7 +3281,7 @@ function renderMembers() {
   const bmUsers = prefs.filter(p=>sf(p.AVM_BM_30d||0)>=1||sf(p.Sess_BM||0)>=1).length;
   const coachUsers = prefs.filter(p=>sf(p.AVM_Coaching_30d||0)>=1||sf(p.Sess_Coaching||0)>=1).length;
   document.getElementById('mem-kpi-row').innerHTML = `
-    <div class="kpi"><div class="kpi-lbl">Total Member${ii('total-member')}</div><div class="kpi-val">${fN(si(s.total_members))}</div><div class="kpi-d">${fN(si(s.matched))} matched POS</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Member${ii('total-member')}</div><div class="kpi-val" id="mem-total-kpi">${fN(si(s.total_members)||0)}</div><div class="kpi-d">${fN(si(s.matched))} matched POS</div></div>
     <div class="kpi"><div class="kpi-lbl">Avg CLV 6 Bulan${ii('avg-clv')}</div><div class="kpi-val">${fIDR(si(s.avg_clv_moderate||0))}</div><div class="kpi-d">Moderate estimate</div></div>
     <div class="kpi"><div class="kpi-lbl">Ball Machine User${ii('ball-machine-user')}</div><div class="kpi-val">${fN(bmUsers)}</div><div class="kpi-d">≥1 sesi (30 hari)</div></div>
     <div class="kpi"><div class="kpi-lbl">Coaching User${ii('coaching-user')}</div><div class="kpi-val">${fN(coachUsers)}</div><div class="kpi-d">≥1 sesi (30 hari)</div></div>
@@ -3405,6 +3405,12 @@ function renderMembers() {
   filteredMembers = [...members];
   activeSeg = 'ALL';
   activePref = 'ALL';
+
+  // Selalu fetch count aktual dari Supabase members table (lebih akurat dari ESB summary)
+  _SB.from('members').select('id', {count:'exact', head:true}).then(({count}) => {
+    const el = document.getElementById('mem-total-kpi');
+    if (el && count > 0) el.textContent = fN(count);
+  });
 
   // Fallback: jika D.members kosong, load dari Supabase members table
   if (!members.length) {
@@ -3585,7 +3591,7 @@ function openMember360(name) {
       .ilike('customer_name',`%${name}%`)
       .order('transaction_date',{ascending:false}).limit(20),
     _SB.from('programs')
-      .select('package_type,package_raw,sessions_total,sessions_remaining,status,expiry_date,purchase_date')
+      .select('package_type,package_raw,sessions_total,sessions_remaining,status,expiry_date,purchase_date,session_dates')
       .ilike('member_name',`%${name}%`)
       .order('purchase_date',{ascending:false}).limit(10),
     _SB.from('coaching_sessions')
@@ -3599,16 +3605,22 @@ function openMember360(name) {
       if (passes?.length) {
         const pkgLabel = t => (t||'').replace(/_/g,' ');
         const statusCol = {active:'var(--green)',habis:'var(--txt3)',hangus:'var(--red)'};
-        const isCoaching = p => /coaching|bundling/i.test(p.package_type||'');
-        // Group coaching sessions by approximate purchase (associate all to most recent coaching pass for now)
-        const coachSess = (sessions||[]).filter(s=>s.session_date);
+        // coaching_sessions keyed by member for cross-reference
+        const coachSessByDate = {};
+        (sessions||[]).forEach(s=>{ if(s.session_date) coachSessByDate[s.session_date] = s; });
 
         cpEl.innerHTML = `
           <div style="font-size:10.5px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">📋 Program Aktif</div>
           ${passes.map(p=>{
             const pct = p.sessions_total>0 ? Math.round((p.sessions_remaining||0)/p.sessions_total*100) : null;
             const col = statusCol[p.status]||'var(--txt3)';
-            const usedSessions = isCoaching(p) ? coachSess : [];
+            // Parse session_dates from programs table (JSON string from parser)
+            let usedDates = [];
+            try { usedDates = p.session_dates ? JSON.parse(p.session_dates) : []; } catch(_){}
+            // Fallback: if coaching, also look in coaching_sessions
+            const isCoach = /coaching|bundling/i.test(p.package_type||'');
+            const coachRows = isCoach ? (sessions||[]).filter(s=>s.session_date) : [];
+            const hasHistory = usedDates.length > 0 || coachRows.length > 0;
             return `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;margin-bottom:6px">
               <div style="display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:11.5px;font-weight:600;color:var(--txt)">${pkgLabel(p.package_type)}</span>
@@ -3621,14 +3633,19 @@ function openMember360(name) {
                 </div>
                 <div style="font-size:10px;color:var(--txt3);margin-top:3px">Sisa ${p.sessions_remaining||0} / ${p.sessions_total} sesi</div>
               </div>`:''}
-              ${usedSessions.length?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
-                <div style="font-size:9.5px;font-weight:600;color:var(--txt3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Riwayat Sesi</div>
-                ${usedSessions.slice(0,8).map(s=>`
-                  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--txt2);padding:2px 0;border-bottom:1px solid var(--border)">
+              ${hasHistory?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+                <div style="font-size:9.5px;font-weight:600;color:var(--txt3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Riwayat Pemakaian</div>
+                ${usedDates.slice(0,10).map((d,i)=>`
+                  <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--txt2);padding:3px 0;border-bottom:1px solid var(--border)">
+                    <span style="font-size:9px;color:var(--txt3);width:14px;flex-shrink:0">${i+1}</span>
+                    <span>${d}</span>
+                  </div>`).join('')}
+                ${coachRows.slice(0,10).map((s,i)=>`
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--txt2);padding:3px 0;border-bottom:1px solid var(--border)">
                     <span>${s.session_date||''}${s.start_time?' '+s.start_time.slice(0,5):''}${s.end_time?'–'+s.end_time.slice(0,5):''}</span>
                     <span style="color:var(--txt3)">${s.coach_name||''}</span>
                   </div>`).join('')}
-                ${usedSessions.length>8?`<div style="font-size:9.5px;color:var(--txt3);margin-top:3px">+${usedSessions.length-8} sesi lainnya</div>`:''}
+                ${(usedDates.length+coachRows.length)>10?`<div style="font-size:9.5px;color:var(--txt3);margin-top:3px">+${(usedDates.length+coachRows.length)-10} sesi lainnya</div>`:''}
               </div>`:''}
             </div>`;
           }).join('')}

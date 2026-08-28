@@ -103,6 +103,12 @@ def _finalize(cur: dict) -> dict:
         cur.get('member_name', ''),
         cur.get('package_type', ''),
     )
+    # Serialize session usage dates as JSON string for Supabase text column
+    if 'session_dates' in cur:
+        import json as _json
+        cur['session_dates'] = _json.dumps(cur['session_dates'])
+    else:
+        cur['session_dates'] = None
     return cur
 
 # ── Core parser ───────────────────────────────────────────────────────────────
@@ -180,8 +186,16 @@ def _process_side(all_values: list, col_start: int) -> list[dict]:
 
         # Continuation row for the current purchase
         if cur:
+            # Capture usage date: c0 has a date, c1 is empty → session usage row
+            if _is_date(c0) and not c1:
+                usage_date = _parse_date(c0)
+                # c2 may contain time slot (e.g. "10:00-12:00") or court info
+                time_info = c2.strip() if c2 and not re.match(r'^[\d,]+$', c2.replace(',', '')) else ''
+                entry = usage_date + (f" {time_info}" if time_info else '')
+                cur.setdefault('session_dates', []).append(entry)
+
             # Package name may appear in c2 of a continuation row (after price row)
-            if c2 and not cur.get('package_raw') and not re.match(r'^[\d,]+$', c2.replace(',', '')):
+            if c2 and not cur.get('package_raw') and not re.match(r'^[\d,]+$', c2.replace(',', '')) and not _is_date(c0):
                 cur['package_raw'] = c2
                 cur['package_type'] = _normalise_pkg(c2)
                 cur['hours_total'] = _extract_hours(c2)

@@ -107,6 +107,11 @@ def _finalize(cur: dict) -> dict:
         cur.get('member_name', ''),
         cur.get('package_type', ''),
     )
+    if 'session_dates' in cur:
+        import json as _json
+        cur['session_dates'] = _json.dumps(cur['session_dates'])
+    else:
+        cur['session_dates'] = None
     return cur
 
 # ── Court Pass tab parser (2-column layout) ───────────────────────────────────
@@ -257,6 +262,13 @@ def _parse_generic_tab(all_values: list, package_type_hint: str = None) -> list[
             continue
 
         if cur:
+            # Capture usage date: c0 has a date, c1 is empty → session usage row
+            if _is_date(c0) and not c1:
+                usage_date = _parse_date(c0)
+                time_info = c2.strip() if c2 and not re.match(r'^[\d,]+$', c2.replace(',', '')) else ''
+                entry = usage_date + (f" {time_info}" if time_info else '')
+                cur.setdefault('session_dates', []).append(entry)
+
             c2_up = c2.upper()
             c4_up = c4.upper()
             if 'HANGUS' in c2_up:
