@@ -204,6 +204,88 @@ def debug_coaching():
         return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
 
 
+@app.route("/api/sync-members", methods=["GET", "POST"])
+def sync_members():
+    """
+    Standalone sync: Membership List sheet → Supabase members table.
+    Dipanggil oleh Vercel Cron (setiap 4 jam) agar count member selalu up-to-date
+    tanpa menunggu full ESB pipeline.
+    """
+    import re as _re, io as _io
+    import requests as _req
+    import pandas as _pd
+
+    log = []
+    try:
+        from supabase_client import upsert_members, log_start as _ls, log_complete as _lc
+
+        SHEET_ID = "1MAlR1WG7184GTCBmCTPUcX4OZKd09H1gx_0aSTKjt4k"
+        csv_url  = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+        resp = _req.get(csv_url, timeout=30)
+        resp.raise_for_status()
+
+        df = _pd.read_csv(_io.StringIO(resp.text), header=0)
+        df.columns = df.columns.str.strip()
+        df = df.dropna(how="all")
+
+        def _norm(raw):
+            if not raw: return None
+            p = _re.sub(r"[-\s.\(\)]", "", str(raw).strip())
+            if p.startswith("62"): p = "0" + p[2:]
+            elif not p.startswith("0") and p.isdigit(): p = "0" + p
+            if not p.isdigit() or not p.startswith("0") or not (10 <= len(p) <= 13): return None
+            return p
+
+        log_id = _ls("MEMBERS", "sync_members_cron")
+        seen_phones: dict = {}
+        seen_codes:  set  = set()
+
+        for _, row in df.iterrows():
+            name      = str(row.get("Member Name", "") or "").strip()
+            phone_raw = str(row.get("Phone Number", "") or "").strip()
+            if not name or not phone_raw: continue
+            phone = _norm(phone_raw)
+            if not phone or phone in seen_phones: continue
+
+            join_raw = str(row.get("Join Date", "") or "").strip()
+            try:
+                _jd = _pd.to_datetime(join_raw, dayfirst=True, errors="coerce")
+                join_date = None if _pd.isna(_jd) else _jd.strftime("%Y-%m-%d")
+            except Exception:
+                join_date = None
+
+            code = str(row.get("Member Code", "") or "").strip() or None
+            if code and code in seen_codes: code = None
+
+            seen_phones[phone] = {
+                "phone":              phone,
+                "name":               name,
+                "member_code":        code,
+                "email":              f"{phone}@puripadelclub.com",
+                "join_date":          join_date,
+                "membership_type":    str(row.get("Membership Type", "") or "").strip() or None,
+                "acquisition_source": str(row.get("Source", "") or "").strip() or None,
+                "kode_ads":           str(row.get("Kode ads", "") or row.get("Kode Ads", "") or "").strip() or None,
+            }
+            if code: seen_codes.add(code)
+
+        rows = list(seen_phones.values())
+        total = 0
+        for i in range(0, len(rows), 500):
+            res = upsert_members(rows[i:i+500])
+            total += res.get("inserted", 0)
+            if res.get("error"):
+                log.append(f"batch {i//500+1} error: {res['error'][:120]}")
+                break
+
+        _lc(log_id, "success", {"rows_inserted": total})
+        log.append(f"OK: {total} upserted ({len(rows)} valid dari {len(df)} baris)")
+        return jsonify({"status": "ok", "upserted": total, "valid": len(rows), "total_sheet": len(df), "log": log})
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
+
+
 @app.route("/api/fetch-ads", methods=["GET", "POST"])
 def fetch_ads():
     """
