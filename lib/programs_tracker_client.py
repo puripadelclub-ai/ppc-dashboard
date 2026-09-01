@@ -42,8 +42,20 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-EXPIRE_DAYS    = 90   # Court Pass & Comeback validity
+EXPIRE_DAYS    = 90   # Comeback validity (default)
 UM_EXPIRE_DAYS = 30   # Upgrade Membership validity
+
+# Court Pass validity by pass size
+def _cp_expire_days(paket):
+    """Return validity days for a Court Pass based on package name."""
+    p = str(paket).upper()
+    if "50H" in p:
+        return 180
+    if "20H" in p:
+        return 90
+    if "8H" in p:
+        return 30
+    return 90  # fallback
 WARN_DAYS      = 14
 TODAY          = date.today()
 
@@ -219,7 +231,8 @@ def parse_court_pass():
 
             tgl_beli_str = str(row[2]).strip()
             tb = _parse_date(tgl_beli_str)
-            tgl_expire = (tb + timedelta(days=EXPIRE_DAYS)) if tb else None
+            paket_str = str(row[3]).strip()
+            tgl_expire = (tb + timedelta(days=_cp_expire_days(paket_str))) if tb else None
             tgl_expire_str = tgl_expire.isoformat() if tgl_expire else str(row[6]).strip()
 
             current_beli = {
@@ -227,7 +240,7 @@ def parse_court_pass():
                 "sheet_row": sheet_row,
                 "nama": str(row[1]).strip(),
                 "tgl_beli": tgl_beli_str,
-                "paket": str(row[3]).strip(),
+                "paket": paket_str,
                 "harga": harga,
                 "kuota": kuota,
                 "tgl_expire": tgl_expire_str,
@@ -569,14 +582,15 @@ def build_court_pass_beli_row(data):
     data keys: nama, tgl_beli, paket, harga, kuota, catatan
     """
     tgl_beli = data.get("tgl_beli", "")
+    paket    = data.get("paket", "")
     tb = _parse_date(tgl_beli)
-    tgl_expire = (tb + timedelta(days=EXPIRE_DAYS)).isoformat() if tb else ""
+    tgl_expire = (tb + timedelta(days=_cp_expire_days(paket))).isoformat() if tb else ""
     kuota = int(data.get("kuota", 0))
     return [
         "BELI",
         data.get("nama", "").upper(),
         tgl_beli,
-        data.get("paket", ""),
+        paket,
         int(data.get("harga", 0)),
         kuota,
         tgl_expire,
