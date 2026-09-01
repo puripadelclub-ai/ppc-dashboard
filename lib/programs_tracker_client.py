@@ -232,8 +232,12 @@ def parse_court_pass():
             tgl_beli_str = str(row[2]).strip()
             tb = _parse_date(tgl_beli_str)
             paket_str = str(row[3]).strip()
-            tgl_expire = (tb + timedelta(days=_cp_expire_days(paket_str))) if tb else None
-            tgl_expire_str = tgl_expire.isoformat() if tgl_expire else str(row[6]).strip()
+            # Gunakan nilai formula TGL_EXPIRE dari sheet (col G) — lebih akurat
+            # karena sheet tahu format TGL_BELI-nya sendiri (bisa MM/DD atau DD/MM).
+            # Hanya hitung ulang jika cell kosong.
+            tgl_expire_str = str(row[6]).strip() if len(row) > 6 else ""
+            if not tgl_expire_str and tb:
+                tgl_expire_str = (tb + timedelta(days=_cp_expire_days(paket_str))).isoformat()
 
             current_beli = {
                 "type": "BELI",
