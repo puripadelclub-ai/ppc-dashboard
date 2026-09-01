@@ -5089,6 +5089,15 @@ function _ptActions(sheetRow, type, rowData) {
   </span>`;
 }
 
+/** Toggle PAKAI rows untuk satu BELI group */
+function togglePTGroup(groupId) {
+  const rows = document.querySelectorAll(`[data-pt-group="${groupId}"]`);
+  const chevron = document.getElementById(`ptchev-${groupId}`);
+  const open = rows.length > 0 && rows[0].style.display !== 'none';
+  rows.forEach(r => { r.style.display = open ? 'none' : ''; });
+  if (chevron) chevron.textContent = open ? '▶' : '▼';
+}
+
 /** Render tabel BELI/PAKAI untuk COURT PASS & COMEBACK */
 function _renderBeliPakaiTable(rows, tabKey) {
   const isCB = tabKey === 'COMEBACK';
@@ -5110,11 +5119,16 @@ function _renderBeliPakaiTable(rows, tabKey) {
       <th></th>
     </tr></thead><tbody>`;
 
-  rows.forEach(beli => {
+  rows.forEach((beli, idx) => {
     const pakai = beli.pakai_rows || [];
-    const beliData = JSON.stringify(beli);
+    const gid = `${tabKey}-${idx}`;
+    const hasDetail = pakai.length > 0;
     html += `<tr class="pt-row-beli">
-      <td>${beli.nama}</td>
+      <td style="cursor:${hasDetail?'pointer':'default'};white-space:nowrap"
+          ${hasDetail ? `onclick="togglePTGroup('${gid}')"` : ''}>
+        ${hasDetail ? `<span id="ptchev-${gid}" style="font-size:9px;margin-right:4px;color:var(--brand)">▶</span>` : ''}
+        ${beli.nama}
+      </td>
       <td>${beli.tgl_beli}</td>
       ${isCB ? `<td>${beli.bulan||''}</td>` : ''}
       <td>${beli.paket}</td>
@@ -5127,7 +5141,7 @@ function _renderBeliPakaiTable(rows, tabKey) {
       <td style="white-space:nowrap">${_ptActions(beli.sheet_row,'BELI',beli)}</td>
     </tr>`;
     pakai.forEach(p => {
-      html += `<tr class="pt-row-pakai">
+      html += `<tr class="pt-row-pakai" data-pt-group="${gid}" style="display:none">
         <td></td>
         <td></td>
         ${isCB ? '<td></td>' : ''}
