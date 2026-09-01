@@ -5590,7 +5590,7 @@ function openPTEdit(type, sheetRow, dataJson) {
   const tabLabel = {'COURT_PASS':'Court Pass','COMEBACK':'Comeback','TRIAL_STUDENT':'Trial Student','UPGRADE_MEMBERSHIP':'Upgrade Membership'}[_ptTab] || _ptTab;
   title.textContent = `Edit ${type} — ${tabLabel}`;
   if (errEl) errEl.style.display = 'none';
-  if (submitBtn) submitBtn.textContent = 'Update ke Sheet';
+  if (submitBtn) { submitBtn.textContent = 'Update ke Sheet'; submitBtn.disabled = false; }
 
   body.innerHTML = _buildPTForm(type, _ptTab);
   overlay.style.display = 'flex';
@@ -5599,49 +5599,60 @@ function openPTEdit(type, sheetRow, dataJson) {
   requestAnimationFrame(() => _ptPrefill(data, type));
 }
 
+/** Convert DD/MM/YYYY → YYYY-MM-DD untuk HTML date input */
+function _toInputDate(s) {
+  if (!s) return '';
+  const parts = String(s).split('/');
+  if (parts.length === 3 && parts[2].length === 4) {
+    return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+  }
+  return s; // sudah YYYY-MM-DD atau format lain
+}
+
 /** Pre-fill form fields dari data yang ada */
 function _ptPrefill(data, type) {
   function s(id, val) {
     const el = document.getElementById(id);
     if (el && val !== undefined && val !== null) el.value = val;
   }
+  function sd(id, val) { s(id, _toInputDate(val)); } // khusus date fields
   if (_ptTab === 'COURT_PASS') {
     if (type === 'BELI') {
-      s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
+      s('ptf-nama', data.nama); sd('ptf-tgl_beli', data.tgl_beli);
       s('ptf-paket', data.paket); s('ptf-harga', data.harga);
       s('ptf-kuota', data.kuota); s('ptf-catatan', data.catatan);
     } else {
-      s('ptf-nama', data.nama); s('ptf-tgl_pakai', data.tgl_pakai);
+      s('ptf-nama', data.nama); sd('ptf-tgl_pakai', data.tgl_pakai);
       s('ptf-jumlah_court', data.jumlah_court); s('ptf-jam_mulai', data.jam_mulai);
       s('ptf-jam_selesai', data.jam_selesai); s('ptf-catatan', data.catatan);
     }
   } else if (_ptTab === 'COMEBACK') {
     if (type === 'BELI') {
-      s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
+      s('ptf-nama', data.nama); sd('ptf-tgl_beli', data.tgl_beli);
       s('ptf-bulan', data.bulan); s('ptf-harga', data.harga);
       s('ptf-kuota', data.kuota); s('ptf-catatan', data.catatan);
     } else {
-      s('ptf-nama', data.nama); s('ptf-tgl_pakai', data.tgl_pakai);
+      s('ptf-nama', data.nama); sd('ptf-tgl_pakai', data.tgl_pakai);
       s('ptf-jumlah_court', data.jumlah_court); s('ptf-jam_mulai', data.jam_mulai);
       s('ptf-jam_selesai', data.jam_selesai); s('ptf-catatan', data.catatan);
     }
   } else if (_ptTab === 'TRIAL_STUDENT') {
     if (type === 'BELI') {
-      s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
+      s('ptf-nama', data.nama); sd('ptf-tgl_beli', data.tgl_beli);
       s('ptf-paket', data.paket); s('ptf-harga', data.harga);
       s('ptf-catatan', data.catatan);
     } else {
-      s('ptf-nama', data.nama); s('ptf-tgl_pakai', data.tgl_pakai);
+      s('ptf-nama', data.nama); sd('ptf-tgl_pakai', data.tgl_pakai);
       s('ptf-court', data.court); s('ptf-jam_mulai', data.jam_mulai);
       s('ptf-jam_selesai', data.jam_selesai); s('ptf-catatan', data.catatan);
     }
   } else if (_ptTab === 'UPGRADE_MEMBERSHIP') {
     if (type === 'BELI') {
-      s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
+      s('ptf-nama', data.nama); sd('ptf-tgl_beli', data.tgl_beli);
       s('ptf-paket', data.paket); s('ptf-harga', data.harga);
       s('ptf-catatan', data.catatan);
     } else {
-      s('ptf-nama', data.nama); s('ptf-tgl_pakai', data.tgl_pakai);
+      s('ptf-nama', data.nama); sd('ptf-tgl_pakai', data.tgl_pakai);
       s('ptf-benefit', data.benefit); s('ptf-jam_mulai', data.jam_mulai);
       s('ptf-jam_selesai', data.jam_selesai); s('ptf-catatan', data.catatan);
     }
@@ -5693,29 +5704,36 @@ async function submitPTForm() {
   if (btn) { btn.textContent = 'Menyimpan...'; btn.disabled = true; }
 
   function g(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+  // Convert YYYY-MM-DD (HTML date input) → DD/MM/YYYY (sheet format)
+  function gd(id) {
+    const v = g(id); if (!v) return '';
+    const parts = v.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return v;
+  }
   let formData = {};
   const tab  = _ptTab;
   const type = _ptFormType;
 
   if (tab === 'COURT_PASS') {
     formData = type === 'BELI'
-      ? { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), paket: g('ptf-paket'), harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') }
-      : { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      ? { nama: g('ptf-nama'), tgl_beli: gd('ptf-tgl_beli'), paket: g('ptf-paket'), harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') }
+      : { nama: g('ptf-nama'), tgl_pakai: gd('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
   } else if (tab === 'COMEBACK') {
     formData = type === 'BELI'
-      ? { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), bulan: g('ptf-bulan'), harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') }
-      : { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      ? { nama: g('ptf-nama'), tgl_beli: gd('ptf-tgl_beli'), bulan: g('ptf-bulan'), harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') }
+      : { nama: g('ptf-nama'), tgl_pakai: gd('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
   } else if (tab === 'TRIAL_STUDENT') {
     if (type === 'BELI') {
-      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
+      formData = { nama: g('ptf-nama'), tgl_beli: gd('ptf-tgl_beli'), paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
     } else {
-      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), court: g('ptf-court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      formData = { nama: g('ptf-nama'), tgl_pakai: gd('ptf-tgl_pakai'), court: g('ptf-court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
     }
   } else if (tab === 'UPGRADE_MEMBERSHIP') {
     if (type === 'BELI') {
-      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
+      formData = { nama: g('ptf-nama'), tgl_beli: gd('ptf-tgl_beli'), paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
     } else {
-      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), benefit: g('ptf-benefit'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      formData = { nama: g('ptf-nama'), tgl_pakai: gd('ptf-tgl_pakai'), benefit: g('ptf-benefit'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
     }
   }
 
