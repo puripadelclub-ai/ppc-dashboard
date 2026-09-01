@@ -5180,26 +5180,36 @@ function _renderTrialTable(rows) {
       <th>Tgl Beli</th>
       <th>Paket</th>
       <th>Harga</th>
-      <th>Tgl Pakai</th>
-      <th>Court</th>
-      <th>Jam</th>
       <th>Status</th>
       <th>Catatan</th>
       <th></th>
     </tr></thead><tbody>`;
-  rows.forEach(r => {
+  rows.forEach((beli, i) => {
+    const gid = 'ts_' + i;
+    const hasPakai = beli.pakai_rows && beli.pakai_rows.length > 0;
+    const chevron = hasPakai ? `<span id="ptchev-${gid}" style="cursor:pointer;margin-right:4px">▶</span>` : '<span style="margin-right:4px;color:var(--txt3)">–</span>';
+    const nameClick = hasPakai ? `onclick="togglePTGroup('${gid}')" style="cursor:pointer"` : '';
     html += `<tr>
-      <td>${r.nama}</td>
-      <td>${r.tgl_beli}</td>
-      <td>${r.paket}</td>
-      <td>${_ptRp(r.harga)}</td>
-      <td>${r.tgl_pakai}</td>
-      <td style="text-align:center">${r.court}</td>
-      <td>${r.jam_mulai}–${r.jam_selesai}</td>
-      <td>${_ptBadge(r.status)}</td>
-      <td style="font-size:10.5px;color:var(--txt3)">${r.catatan||''}</td>
-      <td style="white-space:nowrap">${_ptActions(r.sheet_row,'BELI',r)}</td>
+      <td ${nameClick}>${chevron}${beli.nama}</td>
+      <td>${beli.tgl_beli}</td>
+      <td>${beli.paket}</td>
+      <td>${_ptRp(beli.harga)}</td>
+      <td>${_ptBadge(beli.status)}</td>
+      <td style="font-size:10.5px;color:var(--txt3)">${beli.catatan||''}</td>
+      <td style="white-space:nowrap">${_ptActions(beli.sheet_row,'BELI',beli)}</td>
     </tr>`;
+    if (hasPakai) {
+      beli.pakai_rows.forEach(p => {
+        html += `<tr data-pt-group="${gid}" style="display:none;background:var(--bg2)">
+          <td style="padding-left:28px;color:var(--txt2);font-size:11px">↳ Pakai</td>
+          <td style="color:var(--txt2);font-size:11px">${p.tgl_pakai}</td>
+          <td style="color:var(--txt2);font-size:11px">${p.jam_mulai||''}–${p.jam_selesai||''} (${p.jam_pakai||0}H)</td>
+          <td colspan="2" style="color:var(--txt2);font-size:11px">Court ${p.court||1}</td>
+          <td style="font-size:10.5px;color:var(--txt3)">${p.catatan||''}</td>
+          <td style="white-space:nowrap">${_ptActions(p.sheet_row,'PAKAI',{...p,nama:beli.nama})}</td>
+        </tr>`;
+      });
+    }
   });
   html += '</tbody></table>';
   return html;
@@ -5207,29 +5217,51 @@ function _renderTrialTable(rows) {
 
 /** Render tabel UPGRADE MEMBERSHIP */
 function _renderUpgradeTable(rows) {
-  rows = [...rows].sort((a,b)=>((b.tgl_upgrade||'').split('/').reverse().join('')).localeCompare((a.tgl_upgrade||'').split('/').reverse().join('')));
+  rows = [...rows].sort((a,b)=>((b.tgl_beli||'').split('/').reverse().join('')).localeCompare((a.tgl_beli||'').split('/').reverse().join('')));
   let html = `<table class="pt-tbl">
     <thead><tr>
       <th>Nama</th>
-      <th>Tgl Upgrade</th>
-      <th>Dari</th>
-      <th>Ke</th>
+      <th>Tgl Beli</th>
+      <th>Paket</th>
       <th>Harga</th>
+      <th>Expire</th>
+      <th>Sisa Benefit</th>
       <th>Status</th>
-      <th>Catatan</th>
       <th></th>
     </tr></thead><tbody>`;
-  rows.forEach(r => {
+  rows.forEach((beli, i) => {
+    const gid = 'um_' + i;
+    const hasPakai = beli.pakai_rows && beli.pakai_rows.length > 0;
+    const chevron = hasPakai ? `<span id="ptchev-${gid}" style="cursor:pointer;margin-right:4px">▶</span>` : '<span style="margin-right:4px;color:var(--txt3)">–</span>';
+    const nameClick = hasPakai ? `onclick="togglePTGroup('${gid}')" style="cursor:pointer"` : '';
+    const sisaCoaching = beli.sisa_coaching ?? beli.include_coaching ?? 0;
+    const sisaRacket   = beli.sisa_racket   ?? beli.include_racket   ?? 0;
+    const sisaParts = [];
+    if ((beli.include_coaching ?? 1) > 0) sisaParts.push(`Coaching: ${sisaCoaching}/${beli.include_coaching??1}`);
+    if ((beli.include_racket  ?? 0) > 0) sisaParts.push(`Raket: ${sisaRacket}/${beli.include_racket}`);
+    const sisaStr = sisaParts.join(' · ') || '—';
     html += `<tr>
-      <td>${r.nama}</td>
-      <td>${r.tgl_upgrade}</td>
-      <td>${r.dari}</td>
-      <td>${r.ke}</td>
-      <td>${_ptRp(r.harga)}</td>
-      <td>${_ptBadge(r.status)}</td>
-      <td style="font-size:10.5px;color:var(--txt3)">${r.catatan||''}</td>
-      <td style="white-space:nowrap">${_ptActions(r.sheet_row,'BELI',r)}</td>
+      <td ${nameClick}>${chevron}${beli.nama}</td>
+      <td>${beli.tgl_beli}</td>
+      <td style="font-size:11px">${beli.paket}</td>
+      <td>${_ptRp(beli.harga)}</td>
+      <td style="font-size:11px;color:var(--txt2)">${beli.tgl_expire||'—'}</td>
+      <td style="font-size:11px">${beli.sisa_benefit_str||sisaStr}</td>
+      <td>${_ptBadge(beli.status)}</td>
+      <td style="white-space:nowrap">${_ptActions(beli.sheet_row,'BELI',beli)}</td>
     </tr>`;
+    if (hasPakai) {
+      beli.pakai_rows.forEach(p => {
+        html += `<tr data-pt-group="${gid}" style="display:none;background:var(--bg2)">
+          <td style="padding-left:28px;color:var(--txt2);font-size:11px">↳ Pakai</td>
+          <td style="color:var(--txt2);font-size:11px">${p.tgl_pakai}</td>
+          <td colspan="2" style="color:var(--txt2);font-size:11px">${p.benefit||'—'}</td>
+          <td style="color:var(--txt2);font-size:11px">${p.jam_mulai||''}${p.jam_selesai?'–'+p.jam_selesai:''}</td>
+          <td colspan="2" style="font-size:10.5px;color:var(--txt3)">${p.catatan||''}</td>
+          <td style="white-space:nowrap">${_ptActions(p.sheet_row,'PAKAI',{...p,nama:beli.nama})}</td>
+        </tr>`;
+      });
+    }
   });
   html += '</tbody></table>';
   return html;
@@ -5348,80 +5380,108 @@ function _buildPTForm(type, tab) {
   }
 
   if (tab === 'TRIAL_STUDENT') {
-    return `
-      <div class="pt-form-row"><label>Nama Student</label>
-        <input id="ptf-nama" type="text" placeholder="CLEO ADRINA S" style="text-transform:uppercase"></div>
-      <div class="pt-form-2col">
+    if (type === 'BELI') {
+      return `
+        <div class="pt-form-row"><label>Nama Student</label>
+          <input id="ptf-nama" type="text" placeholder="CLEO ADRINA S" style="text-transform:uppercase"></div>
         <div class="pt-form-row"><label>Tanggal Beli</label>
           <input id="ptf-tgl_beli" type="date" value="${today}"></div>
+        <div class="pt-form-row"><label>Paket</label>
+          <select id="ptf-paket" onchange="_ptAutoFill()">
+            <option>Court 50rb</option>
+            <option>Coaching 100rb</option>
+            <option>Ball Machine 50rb</option>
+          </select></div>
+        <div class="pt-form-row"><label>Harga (Rp)</label>
+          <input id="ptf-harga" type="number" value="50000"></div>
+        <div class="pt-form-row"><label>Catatan</label>
+          <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+    } else {
+      return `
+        <div class="pt-form-row"><label>Nama Student</label>
+          <select id="ptf-nama">${nameOptions}</select></div>
         <div class="pt-form-row"><label>Tanggal Pakai</label>
           <input id="ptf-tgl_pakai" type="date" value="${today}"></div>
-      </div>
-      <div class="pt-form-row"><label>Paket</label>
-        <input id="ptf-paket" type="text" value="Trial Student 1 Jam"></div>
-      <div class="pt-form-2col">
-        <div class="pt-form-row"><label>Harga (Rp)</label>
-          <input id="ptf-harga" type="number" value="150000"></div>
         <div class="pt-form-row"><label>Jumlah Court</label>
           <input id="ptf-court" type="number" min="1" max="4" value="1"></div>
-      </div>
-      <div class="pt-form-2col">
-        <div class="pt-form-row"><label>Jam Mulai</label>
-          <input id="ptf-jam_mulai" type="time" value="16:00"></div>
-        <div class="pt-form-row"><label>Jam Selesai</label>
-          <input id="ptf-jam_selesai" type="time" value="17:00"></div>
-      </div>
-      <div class="pt-form-row"><label>Status</label>
-        <select id="ptf-status">
-          <option>TERJADWAL</option>
-          <option>SUDAH DILAKUKAN</option>
-        </select></div>
-      <div class="pt-form-row"><label>Catatan</label>
-        <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+        <div class="pt-form-2col">
+          <div class="pt-form-row"><label>Jam Mulai</label>
+            <input id="ptf-jam_mulai" type="time" value="16:00"></div>
+          <div class="pt-form-row"><label>Jam Selesai</label>
+            <input id="ptf-jam_selesai" type="time" value="17:00"></div>
+        </div>
+        <div class="pt-form-row"><label>Catatan</label>
+          <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+    }
   }
 
   if (tab === 'UPGRADE_MEMBERSHIP') {
-    return `
-      <div class="pt-form-row"><label>Nama Member</label>
-        <input id="ptf-nama" type="text" placeholder="BUDI SANTOSO" style="text-transform:uppercase"></div>
-      <div class="pt-form-row"><label>Tanggal Upgrade</label>
-        <input id="ptf-tgl_upgrade" type="date" value="${today}"></div>
-      <div class="pt-form-2col">
-        <div class="pt-form-row"><label>Dari Membership</label>
-          <input id="ptf-dari" type="text" placeholder="Silver"></div>
-        <div class="pt-form-row"><label>Ke Membership</label>
-          <input id="ptf-ke" type="text" placeholder="Gold"></div>
-      </div>
-      <div class="pt-form-row"><label>Harga Upgrade (Rp)</label>
-        <input id="ptf-harga" type="number" value="0"></div>
-      <div class="pt-form-row"><label>Status</label>
-        <select id="ptf-status">
-          <option>SELESAI</option>
-          <option>PROSES</option>
-        </select></div>
-      <div class="pt-form-row"><label>Catatan</label>
-        <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+    if (type === 'BELI') {
+      return `
+        <div class="pt-form-row"><label>Nama Member</label>
+          <input id="ptf-nama" type="text" placeholder="BUDI SANTOSO" style="text-transform:uppercase"></div>
+        <div class="pt-form-row"><label>Tanggal Beli</label>
+          <input id="ptf-tgl_beli" type="date" value="${today}"></div>
+        <div class="pt-form-row"><label>Paket</label>
+          <select id="ptf-paket" onchange="_ptAutoFill()">
+            <option>Upgrade Membership 165k</option>
+            <option>Upgrade Membership 215k</option>
+          </select></div>
+        <div class="pt-form-row"><label>Harga (Rp)</label>
+          <input id="ptf-harga" type="number" value="165000"></div>
+        <div class="pt-form-row" style="font-size:11px;color:var(--txt2);padding:4px 0">
+          Berlaku 30 hari. 165k = 1x Coaching Gratis · 215k = 1x Coaching + 1x Racket Rental</div>
+        <div class="pt-form-row"><label>Catatan</label>
+          <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+    } else {
+      return `
+        <div class="pt-form-row"><label>Nama Member</label>
+          <select id="ptf-nama">${nameOptions}</select></div>
+        <div class="pt-form-row"><label>Tanggal Pakai</label>
+          <input id="ptf-tgl_pakai" type="date" value="${today}"></div>
+        <div class="pt-form-row"><label>Tipe Benefit</label>
+          <select id="ptf-benefit">
+            <option>1x Coaching Gratis</option>
+            <option>1x Racket Rental</option>
+          </select></div>
+        <div class="pt-form-2col">
+          <div class="pt-form-row"><label>Jam Mulai</label>
+            <input id="ptf-jam_mulai" type="time" value="07:00"></div>
+          <div class="pt-form-row"><label>Jam Selesai</label>
+            <input id="ptf-jam_selesai" type="time" value="08:00"></div>
+        </div>
+        <div class="pt-form-row"><label>Catatan</label>
+          <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+    }
   }
 
   return '<p style="color:var(--txt3)">Tab tidak dikenali.</p>';
 }
 
-/** Auto-fill harga & kuota berdasarkan paket COURT PASS */
+/** Auto-fill harga & kuota berdasarkan paket yang dipilih */
 function _ptAutoFill() {
   const paket = document.getElementById('ptf-paket')?.value || '';
   const defaults = {
+    // Court Pass
     '20H Off-Peak Pass': {harga: 184500, kuota: 20},
     '50H Weekend Pass':  {harga: 175500, kuota: 50},
     '8H Evening Pass':   {harga: 243000, kuota: 8},
     '8H Off-PH Pass':    {harga: 193500, kuota: 8},
     '8H Off-Peak Pass':  {harga: 193500, kuota: 8},
+    // Trial Student
+    'Court 50rb':        {harga: 50000},
+    'Coaching 100rb':    {harga: 100000},
+    'Ball Machine 50rb': {harga: 50000},
+    // Upgrade Membership
+    'Upgrade Membership 165k': {harga: 165000},
+    'Upgrade Membership 215k': {harga: 215000},
   };
   const d = defaults[paket];
   if (d) {
     const h = document.getElementById('ptf-harga');
     const k = document.getElementById('ptf-kuota');
     if (h) h.value = d.harga;
-    if (k) k.value = d.kuota;
+    if (k && d.kuota !== undefined) k.value = d.kuota;
   }
 }
 
@@ -5460,15 +5520,26 @@ async function submitPTForm() {
       if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
     }
   } else if (tab === 'TRIAL_STUDENT') {
-    formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), tgl_pakai: g('ptf-tgl_pakai'),
-                 paket: g('ptf-paket'), harga: g('ptf-harga'), court: g('ptf-court'),
-                 jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'),
-                 status: g('ptf-status'), catatan: g('ptf-catatan') };
-    if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'),
+                   paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
+      if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), court: g('ptf-court'),
+                   jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
+    }
   } else if (tab === 'UPGRADE_MEMBERSHIP') {
-    formData = { nama: g('ptf-nama'), tgl_upgrade: g('ptf-tgl_upgrade'), dari: g('ptf-dari'),
-                 ke: g('ptf-ke'), harga: g('ptf-harga'), status: g('ptf-status'), catatan: g('ptf-catatan') };
-    if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'),
+                   paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
+      if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'),
+                   benefit: g('ptf-benefit'), jam_mulai: g('ptf-jam_mulai'),
+                   jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
+    }
   }
 
   try {
@@ -5555,16 +5626,25 @@ function _ptPrefill(data, type) {
       s('ptf-jam_selesai', data.jam_selesai); s('ptf-catatan', data.catatan);
     }
   } else if (_ptTab === 'TRIAL_STUDENT') {
-    s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
-    s('ptf-tgl_pakai', data.tgl_pakai); s('ptf-paket', data.paket);
-    s('ptf-harga', data.harga); s('ptf-court', data.court);
-    s('ptf-jam_mulai', data.jam_mulai); s('ptf-jam_selesai', data.jam_selesai);
-    s('ptf-status', data.status); s('ptf-catatan', data.catatan);
+    if (type === 'BELI') {
+      s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
+      s('ptf-paket', data.paket); s('ptf-harga', data.harga);
+      s('ptf-catatan', data.catatan);
+    } else {
+      s('ptf-nama', data.nama); s('ptf-tgl_pakai', data.tgl_pakai);
+      s('ptf-court', data.court); s('ptf-jam_mulai', data.jam_mulai);
+      s('ptf-jam_selesai', data.jam_selesai); s('ptf-catatan', data.catatan);
+    }
   } else if (_ptTab === 'UPGRADE_MEMBERSHIP') {
-    s('ptf-nama', data.nama); s('ptf-tgl_upgrade', data.tgl_upgrade);
-    s('ptf-dari', data.dari); s('ptf-ke', data.ke);
-    s('ptf-harga', data.harga); s('ptf-status', data.status);
-    s('ptf-catatan', data.catatan);
+    if (type === 'BELI') {
+      s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
+      s('ptf-paket', data.paket); s('ptf-harga', data.harga);
+      s('ptf-catatan', data.catatan);
+    } else {
+      s('ptf-nama', data.nama); s('ptf-tgl_pakai', data.tgl_pakai);
+      s('ptf-benefit', data.benefit); s('ptf-jam_mulai', data.jam_mulai);
+      s('ptf-jam_selesai', data.jam_selesai); s('ptf-catatan', data.catatan);
+    }
   }
 }
 
@@ -5626,9 +5706,17 @@ async function submitPTForm() {
       ? { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), bulan: g('ptf-bulan'), harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') }
       : { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
   } else if (tab === 'TRIAL_STUDENT') {
-    formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), tgl_pakai: g('ptf-tgl_pakai'), paket: g('ptf-paket'), harga: g('ptf-harga'), court: g('ptf-court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), status: g('ptf-status'), catatan: g('ptf-catatan') };
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), court: g('ptf-court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+    }
   } else if (tab === 'UPGRADE_MEMBERSHIP') {
-    formData = { nama: g('ptf-nama'), tgl_upgrade: g('ptf-tgl_upgrade'), dari: g('ptf-dari'), ke: g('ptf-ke'), harga: g('ptf-harga'), status: g('ptf-status'), catatan: g('ptf-catatan') };
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), benefit: g('ptf-benefit'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+    }
   }
 
   try {
@@ -5681,15 +5769,26 @@ async function _submitPTFormNew() {
       if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
     }
   } else if (tab === 'TRIAL_STUDENT') {
-    formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), tgl_pakai: g('ptf-tgl_pakai'),
-                 paket: g('ptf-paket'), harga: g('ptf-harga'), court: g('ptf-court'),
-                 jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'),
-                 status: g('ptf-status'), catatan: g('ptf-catatan') };
-    if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'),
+                   paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
+      if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), court: g('ptf-court'),
+                   jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
+    }
   } else if (tab === 'UPGRADE_MEMBERSHIP') {
-    formData = { nama: g('ptf-nama'), tgl_upgrade: g('ptf-tgl_upgrade'), dari: g('ptf-dari'),
-                 ke: g('ptf-ke'), harga: g('ptf-harga'), status: g('ptf-status'), catatan: g('ptf-catatan') };
-    if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'),
+                   paket: g('ptf-paket'), harga: g('ptf-harga'), catatan: g('ptf-catatan') };
+      if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'),
+                   benefit: g('ptf-benefit'), jam_mulai: g('ptf-jam_mulai'),
+                   jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
+    }
   }
 
   try {

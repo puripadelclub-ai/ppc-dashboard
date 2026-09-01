@@ -1995,7 +1995,8 @@ def post_programs_tracker():
         from programs_tracker_client import (
             build_court_pass_beli_row, build_court_pass_pakai_row,
             build_comeback_beli_row, build_comeback_pakai_row,
-            build_trial_student_row, build_upgrade_membership_row,
+            build_trial_student_beli_row, build_trial_student_pakai_row,
+            build_upgrade_membership_beli_row, build_upgrade_membership_pakai_row,
             append_beli, append_pakai,
         )
 
@@ -2032,12 +2033,38 @@ def post_programs_tracker():
                 return jsonify({"status": "error", "error": f"Type tidak valid: {typ}"}), 400
 
         elif tab == "TRIAL_STUDENT":
-            row = build_trial_student_row(data)
-            result = append_beli("TRIAL_STUDENT", row)
+            if typ == "BELI":
+                row = build_trial_student_beli_row(data)
+                result = append_beli("TRIAL_STUDENT", row)
+            elif typ == "PAKAI":
+                row = build_trial_student_pakai_row(data)
+                result = append_pakai("TRIAL_STUDENT", data.get("nama", ""), row)
+            else:
+                return jsonify({"status": "error", "error": f"Type tidak valid: {typ}"}), 400
 
         elif tab == "UPGRADE_MEMBERSHIP":
-            row = build_upgrade_membership_row(data)
-            result = append_beli("UPGRADE_MEMBERSHIP", row)
+            if typ == "BELI":
+                row = build_upgrade_membership_beli_row(data)
+                result = append_beli("UPGRADE_MEMBERSHIP", row)
+            elif typ == "PAKAI":
+                # Look up parent BELI to get TGL_BELI & PAKET for row repetition
+                from programs_tracker_client import read_raw_tab
+                _, um_rows = read_raw_tab("UPGRADE_MEMBERSHIP")
+                nama_upper = data.get("nama", "").strip().upper()
+                parent_tgl_beli = ""
+                parent_paket = ""
+                for r in um_rows:
+                    if len(r) > 3 and str(r[0]).strip().upper() == "BELI" \
+                            and str(r[1]).strip().upper() == nama_upper:
+                        parent_tgl_beli = str(r[2]).strip()
+                        parent_paket = str(r[3]).strip()
+                        # Continue iterating to pick the LAST (most recent) BELI
+                data["tgl_beli_parent"] = parent_tgl_beli
+                data["paket_parent"] = parent_paket
+                row = build_upgrade_membership_pakai_row(data)
+                result = append_pakai("UPGRADE_MEMBERSHIP", data.get("nama", ""), row)
+            else:
+                return jsonify({"status": "error", "error": f"Type tidak valid: {typ}"}), 400
 
         return jsonify({"status": "ok", "result": result, "row": row})
 
@@ -2063,7 +2090,8 @@ def put_programs_tracker():
         from programs_tracker_client import (
             build_court_pass_beli_row, build_court_pass_pakai_row,
             build_comeback_beli_row, build_comeback_pakai_row,
-            build_trial_student_row, build_upgrade_membership_row,
+            build_trial_student_beli_row, build_trial_student_pakai_row,
+            build_upgrade_membership_beli_row, build_upgrade_membership_pakai_row,
             update_row,
         )
 
@@ -2084,9 +2112,9 @@ def put_programs_tracker():
         elif tab == "COMEBACK":
             row = build_comeback_beli_row(data) if typ == "BELI" else build_comeback_pakai_row(data)
         elif tab == "TRIAL_STUDENT":
-            row = build_trial_student_row(data)
+            row = build_trial_student_beli_row(data) if typ == "BELI" else build_trial_student_pakai_row(data)
         elif tab == "UPGRADE_MEMBERSHIP":
-            row = build_upgrade_membership_row(data)
+            row = build_upgrade_membership_beli_row(data) if typ == "BELI" else build_upgrade_membership_pakai_row(data)
         else:
             return jsonify({"status": "error", "error": f"Tab tidak valid: {tab}"}), 400
 
