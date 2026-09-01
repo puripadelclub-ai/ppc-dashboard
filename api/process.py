@@ -2046,6 +2046,92 @@ def post_programs_tracker():
         return jsonify({"status": "error", "error": str(e), "traceback": tb}), 500
 
 
+@app.route("/api/programs-tracker", methods=["PUT"])
+def put_programs_tracker():
+    """
+    Update satu baris di sheet berdasarkan sheet_row.
+
+    Body JSON:
+    {
+      "tab": "COURT_PASS" | "COMEBACK" | "TRIAL_STUDENT" | "UPGRADE_MEMBERSHIP",
+      "type": "BELI" | "PAKAI",
+      "sheet_row": <int>,
+      "data": { ... field sesuai tab }
+    }
+    """
+    try:
+        from programs_tracker_client import (
+            build_court_pass_beli_row, build_court_pass_pakai_row,
+            build_comeback_beli_row, build_comeback_pakai_row,
+            build_trial_student_row, build_upgrade_membership_row,
+            update_row,
+        )
+
+        body = request.get_json(force=True)
+        if not body:
+            return jsonify({"status": "error", "error": "Body kosong"}), 400
+
+        tab      = str(body.get("tab", "")).upper()
+        typ      = str(body.get("type", "BELI")).upper()
+        sheet_row = int(body.get("sheet_row", 0))
+        data     = body.get("data", {})
+
+        if not sheet_row:
+            return jsonify({"status": "error", "error": "sheet_row wajib diisi"}), 400
+
+        if tab == "COURT_PASS":
+            row = build_court_pass_beli_row(data) if typ == "BELI" else build_court_pass_pakai_row(data)
+        elif tab == "COMEBACK":
+            row = build_comeback_beli_row(data) if typ == "BELI" else build_comeback_pakai_row(data)
+        elif tab == "TRIAL_STUDENT":
+            row = build_trial_student_row(data)
+        elif tab == "UPGRADE_MEMBERSHIP":
+            row = build_upgrade_membership_row(data)
+        else:
+            return jsonify({"status": "error", "error": f"Tab tidak valid: {tab}"}), 400
+
+        result = update_row(tab, sheet_row, row)
+        return jsonify({"status": "ok", "result": result})
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        return jsonify({"status": "error", "error": str(e), "traceback": tb}), 500
+
+
+@app.route("/api/programs-tracker", methods=["DELETE"])
+def delete_programs_tracker():
+    """
+    Hapus satu baris dari sheet berdasarkan sheet_row.
+
+    Body JSON:
+    {
+      "tab": "COURT_PASS" | "COMEBACK" | "TRIAL_STUDENT" | "UPGRADE_MEMBERSHIP",
+      "sheet_row": <int>
+    }
+    """
+    try:
+        from programs_tracker_client import delete_row
+
+        body = request.get_json(force=True)
+        if not body:
+            return jsonify({"status": "error", "error": "Body kosong"}), 400
+
+        tab       = str(body.get("tab", "")).upper()
+        sheet_row = int(body.get("sheet_row", 0))
+
+        if tab not in ("COURT_PASS", "COMEBACK", "TRIAL_STUDENT", "UPGRADE_MEMBERSHIP"):
+            return jsonify({"status": "error", "error": f"Tab tidak valid: {tab}"}), 400
+        if not sheet_row:
+            return jsonify({"status": "error", "error": "sheet_row wajib diisi"}), 400
+
+        result = delete_row(tab, sheet_row)
+        return jsonify({"status": "ok", "result": result})
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        return jsonify({"status": "error", "error": str(e), "traceback": tb}), 500
+
+
 # ── LOCAL DEV ENTRY POINT ──────────────────────
 if __name__ == "__main__":
     print("Running pipeline locally...")

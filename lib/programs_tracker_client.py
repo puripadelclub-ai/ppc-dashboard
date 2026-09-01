@@ -139,42 +139,14 @@ def read_raw_tab(tab_key):
 def parse_court_pass():
     """
     Parse tab COURT PASS → list of member dicts dengan BELI + PAKAI rows.
-    Komputes running SISA dan STATUS.
-
-    Return format:
-    [
-      {
-        "type": "BELI",
-        "nama": "HERYATI",
-        "tgl_beli": "2026-05-28",
-        "paket": "50H Weekend Pass",
-        "harga": 175500,
-        "kuota": 50,
-        "tgl_expire": "2026-08-26",
-        "status": "HANGUS",
-        "catatan": "...",
-        "pakai_rows": [
-          {
-            "type": "PAKAI",
-            "tgl_pakai": "2026-06-10",
-            "jumlah_court": 2,
-            "jam_mulai": "07:00",
-            "jam_selesai": "09:00",
-            "jam_pakai": 4,
-            "sisa": 46,
-          },
-          ...
-        ]
-      },
-      ...
-    ]
+    Setiap entry menyertakan sheet_row (1-indexed, termasuk header di row 1).
     """
     _, rows = read_raw_tab("COURT_PASS")
     result = []
     current_beli = None
 
-    for row in rows:
-        # Pad baris kalau kurang dari 15 kolom
+    for idx, row in enumerate(rows):
+        sheet_row = idx + 2  # row 1 = header, data mulai row 2
         while len(row) < 15:
             row.append("")
 
@@ -197,6 +169,7 @@ def parse_court_pass():
 
             current_beli = {
                 "type": "BELI",
+                "sheet_row": sheet_row,
                 "nama": str(row[1]).strip(),
                 "tgl_beli": tgl_beli_str,
                 "paket": str(row[3]).strip(),
@@ -206,7 +179,7 @@ def parse_court_pass():
                 "status": str(row[13]).strip() or "AKTIF",
                 "catatan": str(row[14]).strip() if len(row) > 14 else "",
                 "pakai_rows": [],
-                "_sisa_running": kuota,  # sementara, akan dihitung ulang dari PAKAI
+                "_sisa_running": kuota,
             }
             result.append(current_beli)
 
@@ -225,6 +198,7 @@ def parse_court_pass():
 
             pakai = {
                 "type": "PAKAI",
+                "sheet_row": sheet_row,
                 "tgl_pakai": str(row[7]).strip(),
                 "jumlah_court": courts,
                 "jam_mulai": jm,
@@ -235,7 +209,6 @@ def parse_court_pass():
             }
             current_beli["pakai_rows"].append(pakai)
 
-    # Hitung ulang status dari sisa aktual
     for beli in result:
         sisa_final = beli["_sisa_running"]
         exp = _parse_date(beli["tgl_expire"])
@@ -247,12 +220,13 @@ def parse_court_pass():
 
 
 def parse_comeback():
-    """Parse tab COMEBACK → list of member dicts."""
+    """Parse tab COMEBACK → list of member dicts dengan sheet_row."""
     _, rows = read_raw_tab("COMEBACK")
     result = []
     current_beli = None
 
-    for row in rows:
+    for idx, row in enumerate(rows):
+        sheet_row = idx + 2
         while len(row) < 16:
             row.append("")
         typ = str(row[0]).strip().upper()
@@ -273,6 +247,7 @@ def parse_comeback():
 
             current_beli = {
                 "type": "BELI",
+                "sheet_row": sheet_row,
                 "nama": str(row[1]).strip(),
                 "tgl_beli": tgl_beli_str,
                 "bulan": str(row[3]).strip(),
@@ -301,6 +276,7 @@ def parse_comeback():
 
             pakai = {
                 "type": "PAKAI",
+                "sheet_row": sheet_row,
                 "tgl_pakai": str(row[8]).strip(),
                 "jumlah_court": courts,
                 "jam_mulai": jm,
@@ -322,10 +298,11 @@ def parse_comeback():
 
 
 def parse_trial_student():
-    """Parse tab TRIAL STUDENT → list of entry dicts."""
+    """Parse tab TRIAL STUDENT → list of entry dicts dengan sheet_row."""
     _, rows = read_raw_tab("TRIAL_STUDENT")
     result = []
-    for row in rows:
+    for idx, row in enumerate(rows):
+        sheet_row = idx + 2
         while len(row) < 12:
             row.append("")
         typ = str(row[0]).strip().upper()
@@ -337,6 +314,7 @@ def parse_trial_student():
             harga = 0
         result.append({
             "type": typ,
+            "sheet_row": sheet_row,
             "nama": str(row[1]).strip(),
             "tgl_beli": str(row[2]).strip(),
             "paket": str(row[3]).strip(),
@@ -353,10 +331,11 @@ def parse_trial_student():
 
 
 def parse_upgrade_membership():
-    """Parse tab UPGRADE MEMBERSHIP → list of entry dicts."""
+    """Parse tab UPGRADE MEMBERSHIP → list of entry dicts dengan sheet_row."""
     _, rows = read_raw_tab("UPGRADE_MEMBERSHIP")
     result = []
-    for row in rows:
+    for idx, row in enumerate(rows):
+        sheet_row = idx + 2
         while len(row) < 7:
             row.append("")
         nama = str(row[0]).strip()
@@ -367,6 +346,7 @@ def parse_upgrade_membership():
         except Exception:
             harga = 0
         result.append({
+            "sheet_row": sheet_row,
             "nama": nama,
             "tgl_upgrade": str(row[1]).strip(),
             "dari": str(row[2]).strip(),
@@ -613,3 +593,31 @@ def build_upgrade_membership_row(data):
         data.get("status", "SELESAI"),
         data.get("catatan", ""),
     ]
+
+
+# ─── UPDATE & DELETE ─────────────────────────────────────────────────────────
+
+def update_row(tab_key, sheet_row, row_data):
+    """
+    Update baris tertentu di sheet (sheet_row = 1-indexed termasuk header).
+    row_data = list nilai sesuai kolom tab.
+    """
+    gc = _gc()
+    sh = gc.open_by_key(TRACKER_SHEET_ID)
+    ws = sh.worksheet(TAB_NAMES[tab_key])
+    # Tentukan range: mulai dari kolom A, panjang sesuai row_data
+    col_end = chr(ord('A') + len(row_data) - 1)
+    cell_range = f"A{sheet_row}:{col_end}{sheet_row}"
+    ws.update(cell_range, [row_data], value_input_option="USER_ENTERED")
+    return {"ok": True, "action": "updated", "sheet_row": sheet_row}
+
+
+def delete_row(tab_key, sheet_row):
+    """
+    Hapus baris tertentu dari sheet (sheet_row = 1-indexed termasuk header).
+    """
+    gc = _gc()
+    sh = gc.open_by_key(TRACKER_SHEET_ID)
+    ws = sh.worksheet(TAB_NAMES[tab_key])
+    ws.delete_rows(sheet_row)
+    return {"ok": True, "action": "deleted", "sheet_row": sheet_row}

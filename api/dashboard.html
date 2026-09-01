@@ -1182,35 +1182,10 @@ body{
 
       </div>
 
-      <!-- ── Section 4: Program Affinity ─────────────────────────────────── -->
-      <div class="section-eyebrow">Program Affinity</div>
-      <div class="two-col-wide" style="margin-bottom:1.4rem">
-        <div class="card">
-          <div class="card-hd" style="flex-wrap:wrap;gap:6px">
-            <span class="card-hd-lbl">Program Terpopuler</span>
-            <div style="display:flex;gap:4px;align-items:center;margin-left:auto">
-              <input type="date" id="affinity-from" style="font-size:10px;border:1px solid var(--border);border-radius:4px;padding:2px 5px;background:var(--surface);color:var(--txt);cursor:pointer" onchange="_affinityFilter()">
-              <span style="font-size:10px;color:var(--txt3)">–</span>
-              <input type="date" id="affinity-to" style="font-size:10px;border:1px solid var(--border);border-radius:4px;padding:2px 5px;background:var(--surface);color:var(--txt);cursor:pointer" onchange="_affinityFilter()">
-              <span id="affinity-period" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;white-space:nowrap"></span>
-            </div>
-          </div>
-          <div style="font-size:10.5px;color:var(--txt3);margin-top:4px;margin-bottom:8px">Klik program untuk lihat siapa saja member-nya</div>
-          <div id="affinity-ranking"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
-        </div>
-        <div class="card">
-          <div class="card-hd">
-            <span class="card-hd-lbl">Multi-Program Members</span>
-          </div>
-          <div style="font-size:10.5px;color:var(--txt3);margin-top:4px;margin-bottom:8px">Member yang aktif di 2+ program — target upsell & retensi tertinggi</div>
-          <div id="affinity-multi"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
-        </div>
-      </div>
-
       <!-- Revenue sections moved to Revenue page -->
 
       <!-- ── Programs Tracker (admin input) ───────────────────────────────── -->
-      <div id="prog-tracker-wrap" style="display:none">
+      <div id="prog-tracker-wrap" style="display:none;margin-bottom:1.4rem">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
           <div class="section-eyebrow" style="margin-bottom:0">Programs Tracker</div>
           <div style="display:flex;gap:6px">
@@ -1244,7 +1219,32 @@ body{
         </div>
       </div>
 
-      <!-- PT Input Modal -->
+      <!-- ── Section 4: Program Affinity ─────────────────────────────────── -->
+      <div class="section-eyebrow">Program Affinity</div>
+      <div class="two-col-wide" style="margin-bottom:1.4rem">
+        <div class="card">
+          <div class="card-hd" style="flex-wrap:wrap;gap:6px">
+            <span class="card-hd-lbl">Program Terpopuler</span>
+            <div style="display:flex;gap:4px;align-items:center;margin-left:auto">
+              <input type="date" id="affinity-from" style="font-size:10px;border:1px solid var(--border);border-radius:4px;padding:2px 5px;background:var(--surface);color:var(--txt);cursor:pointer" onchange="_affinityFilter()">
+              <span style="font-size:10px;color:var(--txt3)">–</span>
+              <input type="date" id="affinity-to" style="font-size:10px;border:1px solid var(--border);border-radius:4px;padding:2px 5px;background:var(--surface);color:var(--txt);cursor:pointer" onchange="_affinityFilter()">
+              <span id="affinity-period" style="font-size:9px;background:var(--brand-lt);color:var(--brand);padding:2px 6px;border-radius:4px;font-weight:600;white-space:nowrap"></span>
+            </div>
+          </div>
+          <div style="font-size:10.5px;color:var(--txt3);margin-top:4px;margin-bottom:8px">Klik program untuk lihat siapa saja member-nya</div>
+          <div id="affinity-ranking"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-hd-lbl">Multi-Program Members</span>
+          </div>
+          <div style="font-size:10.5px;color:var(--txt3);margin-top:4px;margin-bottom:8px">Member yang aktif di 2+ program — target upsell & retensi tertinggi</div>
+          <div id="affinity-multi"><span style="font-size:11px;color:var(--txt3)">Memuat...</span></div>
+        </div>
+      </div>
+
+      <!-- PT Input/Edit Modal -->
       <div id="pt-modal-overlay" onclick="closePTModal()"
         style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto">
         <div id="pt-modal" onclick="event.stopPropagation()"
@@ -5074,6 +5074,21 @@ function _ptRp(n) {
   return 'Rp ' + Number(n).toLocaleString('id-ID');
 }
 
+/** Tombol aksi Edit & Delete per baris */
+function _ptActions(sheetRow, type, rowData) {
+  const d = encodeURIComponent(JSON.stringify(rowData));
+  return `<span style="display:flex;gap:4px;justify-content:flex-end">
+    <button onclick="openPTEdit('${type}',${sheetRow},decodeURIComponent('${d}'))"
+      style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--brand);cursor:pointer">
+      Edit
+    </button>
+    <button onclick="confirmPTDelete(${sheetRow},'${type}')"
+      style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid #fecaca;background:#fff5f5;color:#dc2626;cursor:pointer">
+      Hapus
+    </button>
+  </span>`;
+}
+
 /** Render tabel BELI/PAKAI untuk COURT PASS & COMEBACK */
 function _renderBeliPakaiTable(rows, tabKey) {
   const isCB = tabKey === 'COMEBACK';
@@ -5092,10 +5107,12 @@ function _renderBeliPakaiTable(rows, tabKey) {
       <th>Jam</th>
       <th>Jam Pakai</th>
       <th>Catatan</th>
+      <th></th>
     </tr></thead><tbody>`;
 
   rows.forEach(beli => {
     const pakai = beli.pakai_rows || [];
+    const beliData = JSON.stringify(beli);
     html += `<tr class="pt-row-beli">
       <td>${beli.nama}</td>
       <td>${beli.tgl_beli}</td>
@@ -5107,6 +5124,7 @@ function _renderBeliPakaiTable(rows, tabKey) {
       <td>${_ptBadge(beli.status)}</td>
       <td colspan="4" style="color:var(--txt3);font-size:10.5px">${pakai.length} sesi pakai</td>
       <td style="font-size:10.5px;color:var(--txt3)">${beli.catatan||''}</td>
+      <td style="white-space:nowrap">${_ptActions(beli.sheet_row,'BELI',beli)}</td>
     </tr>`;
     pakai.forEach(p => {
       html += `<tr class="pt-row-pakai">
@@ -5123,6 +5141,7 @@ function _renderBeliPakaiTable(rows, tabKey) {
         <td>${p.jam_mulai}–${p.jam_selesai}</td>
         <td style="text-align:center">${p.jam_pakai}H</td>
         <td style="font-size:10.5px;color:var(--txt3)">${p.catatan||''}</td>
+        <td style="white-space:nowrap">${_ptActions(p.sheet_row,'PAKAI',{...p,nama:beli.nama})}</td>
       </tr>`;
     });
   });
@@ -5144,6 +5163,7 @@ function _renderTrialTable(rows) {
       <th>Jam</th>
       <th>Status</th>
       <th>Catatan</th>
+      <th></th>
     </tr></thead><tbody>`;
   rows.forEach(r => {
     html += `<tr>
@@ -5156,6 +5176,7 @@ function _renderTrialTable(rows) {
       <td>${r.jam_mulai}–${r.jam_selesai}</td>
       <td>${_ptBadge(r.status)}</td>
       <td style="font-size:10.5px;color:var(--txt3)">${r.catatan||''}</td>
+      <td style="white-space:nowrap">${_ptActions(r.sheet_row,'BELI',r)}</td>
     </tr>`;
   });
   html += '</tbody></table>';
@@ -5173,6 +5194,7 @@ function _renderUpgradeTable(rows) {
       <th>Harga</th>
       <th>Status</th>
       <th>Catatan</th>
+      <th></th>
     </tr></thead><tbody>`;
   rows.forEach(r => {
     html += `<tr>
@@ -5183,6 +5205,7 @@ function _renderUpgradeTable(rows) {
       <td>${_ptRp(r.harga)}</td>
       <td>${_ptBadge(r.status)}</td>
       <td style="font-size:10.5px;color:var(--txt3)">${r.catatan||''}</td>
+      <td style="white-space:nowrap">${_ptActions(r.sheet_row,'BELI',r)}</td>
     </tr>`;
   });
   html += '</tbody></table>';
@@ -5447,6 +5470,219 @@ function _ptErr(msg, btn) {
   const errEl = document.getElementById('pt-form-err');
   if (errEl) { errEl.textContent = msg; errEl.style.display = ''; }
   if (btn) { btn.textContent = 'Simpan ke Sheet'; btn.disabled = false; }
+}
+
+/** State untuk edit mode */
+let _ptEditMode = false;
+let _ptEditSheetRow = null;
+
+/** Buka modal edit dengan form pre-filled */
+function openPTEdit(type, sheetRow, dataJson) {
+  _ptEditMode = true;
+  _ptEditSheetRow = sheetRow;
+  _ptFormType = type;
+
+  let data;
+  try { data = typeof dataJson === 'string' ? JSON.parse(dataJson) : dataJson; }
+  catch(e) { data = {}; }
+
+  const overlay = document.getElementById('pt-modal-overlay');
+  const title   = document.getElementById('pt-modal-title');
+  const body    = document.getElementById('pt-modal-body');
+  const submitBtn = document.getElementById('pt-submit-btn');
+  const errEl   = document.getElementById('pt-form-err');
+  if (!overlay) return;
+
+  const tabLabel = {'COURT_PASS':'Court Pass','COMEBACK':'Comeback','TRIAL_STUDENT':'Trial Student','UPGRADE_MEMBERSHIP':'Upgrade Membership'}[_ptTab] || _ptTab;
+  title.textContent = `Edit ${type} — ${tabLabel}`;
+  if (errEl) errEl.style.display = 'none';
+  if (submitBtn) submitBtn.textContent = 'Update ke Sheet';
+
+  body.innerHTML = _buildPTForm(type, _ptTab);
+  overlay.style.display = 'flex';
+
+  // Pre-fill form setelah render
+  requestAnimationFrame(() => _ptPrefill(data, type));
+}
+
+/** Pre-fill form fields dari data yang ada */
+function _ptPrefill(data, type) {
+  function s(id, val) {
+    const el = document.getElementById(id);
+    if (el && val !== undefined && val !== null) el.value = val;
+  }
+  if (_ptTab === 'COURT_PASS') {
+    if (type === 'BELI') {
+      s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
+      s('ptf-paket', data.paket); s('ptf-harga', data.harga);
+      s('ptf-kuota', data.kuota); s('ptf-catatan', data.catatan);
+    } else {
+      s('ptf-nama', data.nama); s('ptf-tgl_pakai', data.tgl_pakai);
+      s('ptf-jumlah_court', data.jumlah_court); s('ptf-jam_mulai', data.jam_mulai);
+      s('ptf-jam_selesai', data.jam_selesai); s('ptf-catatan', data.catatan);
+    }
+  } else if (_ptTab === 'COMEBACK') {
+    if (type === 'BELI') {
+      s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
+      s('ptf-bulan', data.bulan); s('ptf-harga', data.harga);
+      s('ptf-kuota', data.kuota); s('ptf-catatan', data.catatan);
+    } else {
+      s('ptf-nama', data.nama); s('ptf-tgl_pakai', data.tgl_pakai);
+      s('ptf-jumlah_court', data.jumlah_court); s('ptf-jam_mulai', data.jam_mulai);
+      s('ptf-jam_selesai', data.jam_selesai); s('ptf-catatan', data.catatan);
+    }
+  } else if (_ptTab === 'TRIAL_STUDENT') {
+    s('ptf-nama', data.nama); s('ptf-tgl_beli', data.tgl_beli);
+    s('ptf-tgl_pakai', data.tgl_pakai); s('ptf-paket', data.paket);
+    s('ptf-harga', data.harga); s('ptf-court', data.court);
+    s('ptf-jam_mulai', data.jam_mulai); s('ptf-jam_selesai', data.jam_selesai);
+    s('ptf-status', data.status); s('ptf-catatan', data.catatan);
+  } else if (_ptTab === 'UPGRADE_MEMBERSHIP') {
+    s('ptf-nama', data.nama); s('ptf-tgl_upgrade', data.tgl_upgrade);
+    s('ptf-dari', data.dari); s('ptf-ke', data.ke);
+    s('ptf-harga', data.harga); s('ptf-status', data.status);
+    s('ptf-catatan', data.catatan);
+  }
+}
+
+/** Reset edit mode saat modal ditutup */
+const _origClosePTModal = typeof closePTModal === 'function' ? closePTModal : null;
+function closePTModal() {
+  const overlay = document.getElementById('pt-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+  _ptEditMode = false;
+  _ptEditSheetRow = null;
+  const submitBtn = document.getElementById('pt-submit-btn');
+  if (submitBtn) submitBtn.textContent = 'Simpan ke Sheet';
+}
+
+/** Konfirmasi dan hapus baris */
+async function confirmPTDelete(sheetRow, type) {
+  if (!confirm(`Hapus baris ini dari sheet? Tindakan ini tidak bisa dibatalkan.`)) return;
+
+  try {
+    const resp = await fetch('/api/programs-tracker', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tab: _ptTab, sheet_row: sheetRow }),
+    });
+    const result = await resp.json();
+    if (result.status !== 'ok') throw new Error(result.error || 'Gagal menghapus');
+    _ptData = {};
+    loadProgramsTracker(true);
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+/** Override submitPTForm untuk handle edit mode */
+const _origSubmitPTForm = submitPTForm;
+async function submitPTForm() {
+  if (!_ptEditMode) {
+    // Mode tambah baru — jalankan logika original
+    await _submitPTFormNew();
+    return;
+  }
+  // Mode edit — PUT request
+  const errEl  = document.getElementById('pt-form-err');
+  const btn    = document.getElementById('pt-submit-btn');
+  if (errEl) errEl.style.display = 'none';
+  if (btn) { btn.textContent = 'Menyimpan...'; btn.disabled = true; }
+
+  function g(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+  let formData = {};
+  const tab  = _ptTab;
+  const type = _ptFormType;
+
+  if (tab === 'COURT_PASS') {
+    formData = type === 'BELI'
+      ? { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), paket: g('ptf-paket'), harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') }
+      : { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+  } else if (tab === 'COMEBACK') {
+    formData = type === 'BELI'
+      ? { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), bulan: g('ptf-bulan'), harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') }
+      : { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+  } else if (tab === 'TRIAL_STUDENT') {
+    formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), tgl_pakai: g('ptf-tgl_pakai'), paket: g('ptf-paket'), harga: g('ptf-harga'), court: g('ptf-court'), jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), status: g('ptf-status'), catatan: g('ptf-catatan') };
+  } else if (tab === 'UPGRADE_MEMBERSHIP') {
+    formData = { nama: g('ptf-nama'), tgl_upgrade: g('ptf-tgl_upgrade'), dari: g('ptf-dari'), ke: g('ptf-ke'), harga: g('ptf-harga'), status: g('ptf-status'), catatan: g('ptf-catatan') };
+  }
+
+  try {
+    const resp = await fetch('/api/programs-tracker', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tab, type, sheet_row: _ptEditSheetRow, data: formData }),
+    });
+    const result = await resp.json();
+    if (result.status !== 'ok') throw new Error(result.error || 'Gagal update');
+    closePTModal();
+    _ptData = {};
+    loadProgramsTracker(true);
+  } catch(e) {
+    _ptErr('Error: ' + e.message, btn);
+  }
+}
+
+/** Rename original submit ke _submitPTFormNew (akan dipanggil dari override di atas) */
+async function _submitPTFormNew() {
+  const errEl  = document.getElementById('pt-form-err');
+  const btn    = document.getElementById('pt-submit-btn');
+  if (errEl) errEl.style.display = 'none';
+  if (btn) { btn.textContent = 'Menyimpan...'; btn.disabled = true; }
+
+  function g(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+  let formData = {};
+  const tab  = _ptTab;
+  const type = _ptFormType;
+
+  if (tab === 'COURT_PASS') {
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), paket: g('ptf-paket'),
+                   harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') };
+      if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'),
+                   jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
+    }
+  } else if (tab === 'COMEBACK') {
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), bulan: g('ptf-bulan'),
+                   harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') };
+      if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'),
+                   jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
+    }
+  } else if (tab === 'TRIAL_STUDENT') {
+    formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), tgl_pakai: g('ptf-tgl_pakai'),
+                 paket: g('ptf-paket'), harga: g('ptf-harga'), court: g('ptf-court'),
+                 jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'),
+                 status: g('ptf-status'), catatan: g('ptf-catatan') };
+    if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+  } else if (tab === 'UPGRADE_MEMBERSHIP') {
+    formData = { nama: g('ptf-nama'), tgl_upgrade: g('ptf-tgl_upgrade'), dari: g('ptf-dari'),
+                 ke: g('ptf-ke'), harga: g('ptf-harga'), status: g('ptf-status'), catatan: g('ptf-catatan') };
+    if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+  }
+
+  try {
+    const resp = await fetch('/api/programs-tracker', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tab, type, data: formData }),
+    });
+    const result = await resp.json();
+    if (result.status !== 'ok') throw new Error(result.error || 'Gagal menyimpan');
+    closePTModal();
+    _ptData = {};
+    loadProgramsTracker(true);
+  } catch(e) {
+    _ptErr('Error: ' + e.message, btn);
+  }
 }
 
 // ── AI COPILOT (stub — halaman dihapus, fungsi dipertahankan untuk compat) ──
