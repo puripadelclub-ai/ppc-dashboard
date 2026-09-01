@@ -5101,6 +5101,13 @@ function togglePTGroup(groupId) {
 /** Render tabel BELI/PAKAI untuk COURT PASS & COMEBACK */
 function _renderBeliPakaiTable(rows, tabKey) {
   const isCB = tabKey === 'COMEBACK';
+  // Sort newest TGL_BELI first
+  const sorted = [...rows].sort((a, b) => {
+    const da = (a.tgl_beli||'').split('/').reverse().join('');
+    const db = (b.tgl_beli||'').split('/').reverse().join('');
+    return db.localeCompare(da);
+  });
+  rows = sorted;
   let html = `<table class="pt-tbl">
     <thead><tr>
       <th>Nama</th>
@@ -5166,6 +5173,7 @@ function _renderBeliPakaiTable(rows, tabKey) {
 
 /** Render tabel TRIAL STUDENT */
 function _renderTrialTable(rows) {
+  rows = [...rows].sort((a,b)=>((b.tgl_beli||'').split('/').reverse().join('')).localeCompare((a.tgl_beli||'').split('/').reverse().join('')));
   let html = `<table class="pt-tbl">
     <thead><tr>
       <th>Nama</th>
@@ -5199,6 +5207,7 @@ function _renderTrialTable(rows) {
 
 /** Render tabel UPGRADE MEMBERSHIP */
 function _renderUpgradeTable(rows) {
+  rows = [...rows].sort((a,b)=>((b.tgl_upgrade||'').split('/').reverse().join('')).localeCompare((a.tgl_upgrade||'').split('/').reverse().join('')));
   let html = `<table class="pt-tbl">
     <thead><tr>
       <th>Nama</th>
