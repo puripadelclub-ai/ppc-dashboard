@@ -555,6 +555,41 @@ body{
   transition:opacity .1s;
 }
 .hm-cell:hover{opacity:.8}
+
+/* ── Programs Tracker tabs ─────────────────────────── */
+.pt-tab-btn{
+  font-size:11px;font-weight:600;padding:5px 11px;border-radius:6px;
+  border:1px solid var(--border);background:var(--surface);color:var(--txt3);
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.pt-tab-btn.active,.pt-tab-btn:hover{
+  background:var(--brand-lt);color:var(--brand);border-color:var(--brand);
+}
+/* Programs Tracker table */
+.pt-tbl{width:100%;border-collapse:collapse;font-size:11.5px}
+.pt-tbl th{
+  background:var(--surface2,#f8f9fa);color:var(--txt3);font-weight:600;
+  padding:8px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border);
+  position:sticky;top:0;
+}
+.pt-tbl td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.pt-row-beli td{font-weight:600;background:var(--surface)}
+.pt-row-pakai td{color:var(--txt2,#555);padding-left:20px}
+.pt-badge{display:inline-block;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:.3px}
+.pt-badge.aktif  {background:#dcfce7;color:#166534}
+.pt-badge.habis  {background:#fee2e2;color:#991b1b}
+.pt-badge.hangus {background:#ede9fe;color:#5b21b6}
+.pt-badge.expire {background:#fff7ed;color:#c2410c}
+
+/* Input modal form */
+.pt-form-row{margin-bottom:11px}
+.pt-form-row label{display:block;font-size:11px;color:var(--txt3);font-weight:600;margin-bottom:4px}
+.pt-form-row input,.pt-form-row select,.pt-form-row textarea{
+  width:100%;box-sizing:border-box;padding:7px 9px;font-size:12px;
+  border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--txt);
+}
+.pt-form-row textarea{resize:vertical;min-height:56px}
+.pt-form-2col{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -1173,6 +1208,65 @@ body{
       </div>
 
       <!-- Revenue sections moved to Revenue page -->
+
+      <!-- ── Programs Tracker (admin input) ───────────────────────────────── -->
+      <div id="prog-tracker-wrap" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div class="section-eyebrow" style="margin-bottom:0">Programs Tracker</div>
+          <div style="display:flex;gap:6px">
+            <button id="pt-btn-beli" onclick="openPTForm('BELI')"
+              style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;border:none;background:var(--brand);color:#fff;cursor:pointer">
+              + Tambah BELI
+            </button>
+            <button id="pt-btn-pakai" onclick="openPTForm('PAKAI')"
+              style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--txt);cursor:pointer">
+              + Tambah PAKAI
+            </button>
+            <button onclick="loadProgramsTracker(true)"
+              style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--txt3);cursor:pointer"
+              title="Muat ulang dari Sheet">↻</button>
+          </div>
+        </div>
+
+        <!-- Tab selector -->
+        <div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap">
+          <button class="pt-tab-btn active" data-ptab="COURT_PASS" onclick="switchPTTab('COURT_PASS',this)">Court Pass</button>
+          <button class="pt-tab-btn" data-ptab="COMEBACK" onclick="switchPTTab('COMEBACK',this)">Comeback</button>
+          <button class="pt-tab-btn" data-ptab="TRIAL_STUDENT" onclick="switchPTTab('TRIAL_STUDENT',this)">Trial Student</button>
+          <button class="pt-tab-btn" data-ptab="UPGRADE_MEMBERSHIP" onclick="switchPTTab('UPGRADE_MEMBERSHIP',this)">Upgrade Membership</button>
+        </div>
+
+        <!-- Table card -->
+        <div class="card" style="padding:0;overflow:hidden">
+          <div id="pt-loading" style="padding:20px;font-size:11px;color:var(--txt3)">Memuat data...</div>
+          <div id="pt-table" style="overflow-x:auto;display:none"></div>
+          <div id="pt-empty" style="padding:20px;font-size:11px;color:var(--txt3);display:none">Belum ada data untuk tab ini.</div>
+        </div>
+      </div>
+
+      <!-- PT Input Modal -->
+      <div id="pt-modal-overlay" onclick="closePTModal()"
+        style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto">
+        <div id="pt-modal" onclick="event.stopPropagation()"
+          style="background:var(--surface);border-radius:12px;padding:20px;max-width:440px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <h3 id="pt-modal-title" style="font-size:14px;font-weight:700;margin:0;color:var(--txt)"></h3>
+            <button onclick="closePTModal()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--txt3)">✕</button>
+          </div>
+          <div id="pt-modal-body"></div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button onclick="closePTModal()"
+              style="flex:1;padding:9px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--txt);font-size:12px;cursor:pointer">
+              Batal
+            </button>
+            <button id="pt-submit-btn" onclick="submitPTForm()"
+              style="flex:2;padding:9px;border-radius:7px;border:none;background:var(--brand);color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+              Simpan ke Sheet
+            </button>
+          </div>
+          <div id="pt-form-err" style="font-size:11px;color:#ef4444;margin-top:8px;display:none"></div>
+        </div>
+      </div>
     </div>
 
 
@@ -3617,10 +3711,12 @@ function openMember360(name) {
             // Parse session_dates from programs table (JSON string from parser)
             let usedDates = [];
             try { usedDates = p.session_dates ? JSON.parse(p.session_dates) : []; } catch(_){}
+            const isObj = usedDates.length > 0 && typeof usedDates[0] === 'object';
             // Fallback: if coaching, also look in coaching_sessions
             const isCoach = /coaching|bundling/i.test(p.package_type||'');
             const coachRows = isCoach ? (sessions||[]).filter(s=>s.session_date) : [];
             const hasHistory = usedDates.length > 0 || coachRows.length > 0;
+            const LIMIT = 50;
             return `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;margin-bottom:6px">
               <div style="display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:11.5px;font-weight:600;color:var(--txt)">${pkgLabel(p.package_type)}</span>
@@ -3631,21 +3727,32 @@ function openMember360(name) {
                 <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
                   <div style="height:100%;background:${col};width:${Math.min(100,100-(pct||0))}%;border-radius:2px"></div>
                 </div>
-                <div style="font-size:10px;color:var(--txt3);margin-top:3px">Sisa ${p.sessions_remaining||0} / ${p.sessions_total} sesi</div>
+                <div style="font-size:10px;color:var(--txt3);margin-top:3px">Sisa ${p.sessions_remaining||0} / ${p.sessions_total} jam</div>
               </div>`:''}
               ${hasHistory?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
-                <div style="font-size:9.5px;font-weight:600;color:var(--txt3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Riwayat Pemakaian</div>
-                ${usedDates.slice(0,10).map((d,i)=>`
-                  <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--txt2);padding:3px 0;border-bottom:1px solid var(--border)">
-                    <span style="font-size:9px;color:var(--txt3);width:14px;flex-shrink:0">${i+1}</span>
-                    <span>${d}</span>
-                  </div>`).join('')}
-                ${coachRows.slice(0,10).map((s,i)=>`
-                  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--txt2);padding:3px 0;border-bottom:1px solid var(--border)">
+                <div style="font-size:9.5px;font-weight:600;color:var(--txt3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Riwayat Pemakaian</div>
+                ${usedDates.length>0?`<table style="width:100%;border-collapse:collapse">
+                  <thead><tr>
+                    <th style="font-size:9px;font-weight:600;color:var(--txt3);text-align:left;padding:0 0 4px;text-transform:uppercase;letter-spacing:.3px">Digunakan</th>
+                    <th style="font-size:9px;font-weight:600;color:var(--txt3);text-align:right;padding:0 0 4px;text-transform:uppercase;letter-spacing:.3px;width:32px">Sisa</th>
+                  </tr></thead>
+                  <tbody>
+                  ${usedDates.slice(0,LIMIT).map(d=>{
+                    const desc = isObj ? (d.desc||'') : d;
+                    const sisa = isObj && d.sisa!=null ? d.sisa : '';
+                    return `<tr style="border-top:1px solid var(--border)">
+                      <td style="font-size:10px;color:var(--txt2);padding:3px 4px 3px 0;line-height:1.3">${desc}</td>
+                      <td style="font-size:10px;font-weight:600;color:var(--txt3);text-align:right;padding:3px 0;white-space:nowrap">${sisa}</td>
+                    </tr>`;
+                  }).join('')}
+                  </tbody>
+                </table>
+                ${usedDates.length>LIMIT?`<div style="font-size:9.5px;color:var(--txt3);margin-top:4px">+${usedDates.length-LIMIT} sesi lainnya</div>`:''}`:''}
+                ${coachRows.slice(0,LIMIT).map(s=>`
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--txt2);padding:3px 0;border-top:1px solid var(--border)">
                     <span>${s.session_date||''}${s.start_time?' '+s.start_time.slice(0,5):''}${s.end_time?'–'+s.end_time.slice(0,5):''}</span>
                     <span style="color:var(--txt3)">${s.coach_name||''}</span>
                   </div>`).join('')}
-                ${(usedDates.length+coachRows.length)>10?`<div style="font-size:9.5px;color:var(--txt3);margin-top:3px">+${(usedDates.length+coachRows.length)-10} sesi lainnya</div>`:''}
               </div>`:''}
             </div>`;
           }).join('')}
@@ -4868,10 +4975,478 @@ function _affinityFilter() {
 function renderPrograms() {
   // Programs page rendering is fully handled by _renderAllProgramSections()
   // Product data (ESB) sections removed — no longer shown on this page
+  // Programs Tracker section ditampilkan kalau user sudah login
+  _showPTIfLoggedIn();
 }
 
 function filterProdCat(cat) {
   _activeProdCat = cat;
+}
+
+// ── PROGRAMS TRACKER ──────────────────────────────────────────────────────────
+
+let _ptData = {};           // raw data dari API per tab
+let _ptTab  = 'COURT_PASS'; // tab aktif
+let _ptFormType = 'BELI';   // form yang sedang dibuka
+
+/** Tampilkan section Programs Tracker hanya kalau user sudah login */
+function _showPTIfLoggedIn() {
+  const wrap = document.getElementById('prog-tracker-wrap');
+  if (!wrap) return;
+  // Cek apakah ada session Supabase (sudah login)
+  _SB.auth.getSession().then(({ data }) => {
+    if (data?.session) {
+      wrap.style.display = '';
+      if (!Object.keys(_ptData).length) loadProgramsTracker();
+    }
+  });
+}
+
+/** Muat data dari /api/programs-tracker */
+async function loadProgramsTracker(force = false) {
+  const loadEl  = document.getElementById('pt-loading');
+  const tableEl = document.getElementById('pt-table');
+  const emptyEl = document.getElementById('pt-empty');
+  if (!loadEl) return;
+  loadEl.style.display = '';
+  if (tableEl) tableEl.style.display = 'none';
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/programs-tracker');
+    const json = await resp.json();
+    if (json.status !== 'ok') throw new Error(json.error || 'Unknown error');
+    _ptData = json.data || {};
+    _renderPTTab(_ptTab);
+  } catch(e) {
+    if (loadEl) loadEl.textContent = 'Gagal memuat: ' + e.message;
+  }
+}
+
+/** Ganti tab aktif */
+function switchPTTab(tabKey, btn) {
+  _ptTab = tabKey;
+  document.querySelectorAll('.pt-tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  _renderPTTab(tabKey);
+}
+
+/** Render tabel berdasarkan tab aktif */
+function _renderPTTab(tabKey) {
+  const loadEl  = document.getElementById('pt-loading');
+  const tableEl = document.getElementById('pt-table');
+  const emptyEl = document.getElementById('pt-empty');
+  if (!loadEl || !tableEl || !emptyEl) return;
+  loadEl.style.display = 'none';
+
+  const data = _ptData[tabKey] || [];
+  if (!data.length) {
+    emptyEl.style.display = '';
+    tableEl.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  tableEl.style.display = '';
+
+  if (tabKey === 'COURT_PASS' || tabKey === 'COMEBACK') {
+    tableEl.innerHTML = _renderBeliPakaiTable(data, tabKey);
+  } else if (tabKey === 'TRIAL_STUDENT') {
+    tableEl.innerHTML = _renderTrialTable(data);
+  } else if (tabKey === 'UPGRADE_MEMBERSHIP') {
+    tableEl.innerHTML = _renderUpgradeTable(data);
+  }
+}
+
+/** Status → badge HTML */
+function _ptBadge(status) {
+  const s = (status || '').toUpperCase();
+  const cls = s === 'AKTIF' ? 'aktif'
+            : s === 'HABIS' ? 'habis'
+            : s === 'HANGUS' ? 'hangus'
+            : s.includes('EXPIRE') ? 'expire'
+            : 'aktif';
+  return `<span class="pt-badge ${cls}">${status}</span>`;
+}
+
+/** Format angka ke Rupiah singkat */
+function _ptRp(n) {
+  if (!n) return '-';
+  return 'Rp ' + Number(n).toLocaleString('id-ID');
+}
+
+/** Render tabel BELI/PAKAI untuk COURT PASS & COMEBACK */
+function _renderBeliPakaiTable(rows, tabKey) {
+  const isCB = tabKey === 'COMEBACK';
+  let html = `<table class="pt-tbl">
+    <thead><tr>
+      <th>Nama</th>
+      <th>Tgl Beli</th>
+      ${isCB ? '<th>Bulan</th>' : ''}
+      <th>Paket</th>
+      <th>Kuota</th>
+      <th>Sisa</th>
+      <th>Expire</th>
+      <th>Status</th>
+      <th>Tgl Pakai</th>
+      <th>Court</th>
+      <th>Jam</th>
+      <th>Jam Pakai</th>
+      <th>Catatan</th>
+    </tr></thead><tbody>`;
+
+  rows.forEach(beli => {
+    const pakai = beli.pakai_rows || [];
+    html += `<tr class="pt-row-beli">
+      <td>${beli.nama}</td>
+      <td>${beli.tgl_beli}</td>
+      ${isCB ? `<td>${beli.bulan||''}</td>` : ''}
+      <td>${beli.paket}</td>
+      <td style="text-align:center">${beli.kuota}H</td>
+      <td style="text-align:center;font-weight:700">${beli.sisa_total ?? ''}H</td>
+      <td>${beli.tgl_expire}</td>
+      <td>${_ptBadge(beli.status)}</td>
+      <td colspan="4" style="color:var(--txt3);font-size:10.5px">${pakai.length} sesi pakai</td>
+      <td style="font-size:10.5px;color:var(--txt3)">${beli.catatan||''}</td>
+    </tr>`;
+    pakai.forEach(p => {
+      html += `<tr class="pt-row-pakai">
+        <td></td>
+        <td></td>
+        ${isCB ? '<td></td>' : ''}
+        <td></td>
+        <td></td>
+        <td style="text-align:center;color:var(--txt3)">${p.sisa}H</td>
+        <td></td>
+        <td></td>
+        <td>${p.tgl_pakai}</td>
+        <td style="text-align:center">${p.jumlah_court}C</td>
+        <td>${p.jam_mulai}–${p.jam_selesai}</td>
+        <td style="text-align:center">${p.jam_pakai}H</td>
+        <td style="font-size:10.5px;color:var(--txt3)">${p.catatan||''}</td>
+      </tr>`;
+    });
+  });
+
+  html += '</tbody></table>';
+  return html;
+}
+
+/** Render tabel TRIAL STUDENT */
+function _renderTrialTable(rows) {
+  let html = `<table class="pt-tbl">
+    <thead><tr>
+      <th>Nama</th>
+      <th>Tgl Beli</th>
+      <th>Paket</th>
+      <th>Harga</th>
+      <th>Tgl Pakai</th>
+      <th>Court</th>
+      <th>Jam</th>
+      <th>Status</th>
+      <th>Catatan</th>
+    </tr></thead><tbody>`;
+  rows.forEach(r => {
+    html += `<tr>
+      <td>${r.nama}</td>
+      <td>${r.tgl_beli}</td>
+      <td>${r.paket}</td>
+      <td>${_ptRp(r.harga)}</td>
+      <td>${r.tgl_pakai}</td>
+      <td style="text-align:center">${r.court}</td>
+      <td>${r.jam_mulai}–${r.jam_selesai}</td>
+      <td>${_ptBadge(r.status)}</td>
+      <td style="font-size:10.5px;color:var(--txt3)">${r.catatan||''}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+/** Render tabel UPGRADE MEMBERSHIP */
+function _renderUpgradeTable(rows) {
+  let html = `<table class="pt-tbl">
+    <thead><tr>
+      <th>Nama</th>
+      <th>Tgl Upgrade</th>
+      <th>Dari</th>
+      <th>Ke</th>
+      <th>Harga</th>
+      <th>Status</th>
+      <th>Catatan</th>
+    </tr></thead><tbody>`;
+  rows.forEach(r => {
+    html += `<tr>
+      <td>${r.nama}</td>
+      <td>${r.tgl_upgrade}</td>
+      <td>${r.dari}</td>
+      <td>${r.ke}</td>
+      <td>${_ptRp(r.harga)}</td>
+      <td>${_ptBadge(r.status)}</td>
+      <td style="font-size:10.5px;color:var(--txt3)">${r.catatan||''}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+/** Buka modal form BELI atau PAKAI */
+function openPTForm(type) {
+  _ptFormType = type;
+  const overlay = document.getElementById('pt-modal-overlay');
+  const title   = document.getElementById('pt-modal-title');
+  const body    = document.getElementById('pt-modal-body');
+  const errEl   = document.getElementById('pt-form-err');
+  if (!overlay) return;
+
+  const tabLabel = {'COURT_PASS':'Court Pass','COMEBACK':'Comeback','TRIAL_STUDENT':'Trial Student','UPGRADE_MEMBERSHIP':'Upgrade Membership'}[_ptTab] || _ptTab;
+  title.textContent = type === 'BELI'
+    ? `Tambah BELI — ${tabLabel}`
+    : `Tambah PAKAI — ${tabLabel}`;
+  if (errEl) errEl.style.display = 'none';
+
+  body.innerHTML = _buildPTForm(type, _ptTab);
+  overlay.style.display = 'flex';
+}
+
+function closePTModal() {
+  const overlay = document.getElementById('pt-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+/** Build form HTML sesuai tab + type */
+function _buildPTForm(type, tab) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Daftar nama dari data yang sudah ada (untuk dropdown PAKAI)
+  const existingNames = [...new Set((_ptData[tab] || []).map(r => r.nama || r.Nama || '').filter(Boolean))];
+  const nameOptions = existingNames.map(n => `<option value="${n}">${n}</option>`).join('');
+
+  if (tab === 'COURT_PASS') {
+    if (type === 'BELI') {
+      return `
+        <div class="pt-form-row"><label>Nama Member</label>
+          <input id="ptf-nama" type="text" placeholder="HERYATI" style="text-transform:uppercase"></div>
+        <div class="pt-form-row"><label>Tanggal Beli</label>
+          <input id="ptf-tgl_beli" type="date" value="${today}"></div>
+        <div class="pt-form-row"><label>Paket</label>
+          <select id="ptf-paket" onchange="_ptAutoFill()">
+            <option>20H Off-Peak Pass</option>
+            <option>50H Weekend Pass</option>
+            <option>8H Evening Pass</option>
+            <option>8H Off-PH Pass</option>
+            <option>8H Off-Peak Pass</option>
+          </select></div>
+        <div class="pt-form-2col">
+          <div class="pt-form-row"><label>Harga (Rp)</label>
+            <input id="ptf-harga" type="number" value="184500"></div>
+          <div class="pt-form-row"><label>Kuota (Jam)</label>
+            <input id="ptf-kuota" type="number" value="20"></div>
+        </div>
+        <div class="pt-form-row"><label>Catatan</label>
+          <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+    } else {
+      return `
+        <div class="pt-form-row"><label>Nama Member</label>
+          <select id="ptf-nama">${nameOptions}</select></div>
+        <div class="pt-form-row"><label>Tanggal Pakai</label>
+          <input id="ptf-tgl_pakai" type="date" value="${today}"></div>
+        <div class="pt-form-row"><label>Jumlah Court</label>
+          <input id="ptf-jumlah_court" type="number" min="1" max="4" value="1"></div>
+        <div class="pt-form-2col">
+          <div class="pt-form-row"><label>Jam Mulai</label>
+            <input id="ptf-jam_mulai" type="time" value="07:00"></div>
+          <div class="pt-form-row"><label>Jam Selesai</label>
+            <input id="ptf-jam_selesai" type="time" value="09:00"></div>
+        </div>
+        <div class="pt-form-row"><label>Catatan</label>
+          <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+    }
+  }
+
+  if (tab === 'COMEBACK') {
+    const bulanOpts = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
+      .map(b => `<option${b === new Date().toLocaleString('id-ID',{month:'long'}) ? ' selected' : ''}>${b}</option>`).join('');
+    if (type === 'BELI') {
+      return `
+        <div class="pt-form-row"><label>Nama Member</label>
+          <input id="ptf-nama" type="text" placeholder="TERESA" style="text-transform:uppercase"></div>
+        <div class="pt-form-row"><label>Tanggal Beli</label>
+          <input id="ptf-tgl_beli" type="date" value="${today}"></div>
+        <div class="pt-form-row"><label>Bulan Program</label>
+          <select id="ptf-bulan">${bulanOpts}</select></div>
+        <div class="pt-form-2col">
+          <div class="pt-form-row"><label>Harga (Rp)</label>
+            <input id="ptf-harga" type="number" value="607500"></div>
+          <div class="pt-form-row"><label>Kuota (Jam)</label>
+            <input id="ptf-kuota" type="number" value="4" readonly></div>
+        </div>
+        <div class="pt-form-row"><label>Catatan</label>
+          <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+    } else {
+      return `
+        <div class="pt-form-row"><label>Nama Member</label>
+          <select id="ptf-nama">${nameOptions}</select></div>
+        <div class="pt-form-row"><label>Tanggal Pakai</label>
+          <input id="ptf-tgl_pakai" type="date" value="${today}"></div>
+        <div class="pt-form-row"><label>Jumlah Court</label>
+          <input id="ptf-jumlah_court" type="number" min="1" max="4" value="1"></div>
+        <div class="pt-form-2col">
+          <div class="pt-form-row"><label>Jam Mulai</label>
+            <input id="ptf-jam_mulai" type="time" value="07:00"></div>
+          <div class="pt-form-row"><label>Jam Selesai</label>
+            <input id="ptf-jam_selesai" type="time" value="08:00"></div>
+        </div>
+        <div class="pt-form-row"><label>Catatan</label>
+          <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+    }
+  }
+
+  if (tab === 'TRIAL_STUDENT') {
+    return `
+      <div class="pt-form-row"><label>Nama Student</label>
+        <input id="ptf-nama" type="text" placeholder="CLEO ADRINA S" style="text-transform:uppercase"></div>
+      <div class="pt-form-2col">
+        <div class="pt-form-row"><label>Tanggal Beli</label>
+          <input id="ptf-tgl_beli" type="date" value="${today}"></div>
+        <div class="pt-form-row"><label>Tanggal Pakai</label>
+          <input id="ptf-tgl_pakai" type="date" value="${today}"></div>
+      </div>
+      <div class="pt-form-row"><label>Paket</label>
+        <input id="ptf-paket" type="text" value="Trial Student 1 Jam"></div>
+      <div class="pt-form-2col">
+        <div class="pt-form-row"><label>Harga (Rp)</label>
+          <input id="ptf-harga" type="number" value="150000"></div>
+        <div class="pt-form-row"><label>Jumlah Court</label>
+          <input id="ptf-court" type="number" min="1" max="4" value="1"></div>
+      </div>
+      <div class="pt-form-2col">
+        <div class="pt-form-row"><label>Jam Mulai</label>
+          <input id="ptf-jam_mulai" type="time" value="16:00"></div>
+        <div class="pt-form-row"><label>Jam Selesai</label>
+          <input id="ptf-jam_selesai" type="time" value="17:00"></div>
+      </div>
+      <div class="pt-form-row"><label>Status</label>
+        <select id="ptf-status">
+          <option>TERJADWAL</option>
+          <option>SUDAH DILAKUKAN</option>
+        </select></div>
+      <div class="pt-form-row"><label>Catatan</label>
+        <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+  }
+
+  if (tab === 'UPGRADE_MEMBERSHIP') {
+    return `
+      <div class="pt-form-row"><label>Nama Member</label>
+        <input id="ptf-nama" type="text" placeholder="BUDI SANTOSO" style="text-transform:uppercase"></div>
+      <div class="pt-form-row"><label>Tanggal Upgrade</label>
+        <input id="ptf-tgl_upgrade" type="date" value="${today}"></div>
+      <div class="pt-form-2col">
+        <div class="pt-form-row"><label>Dari Membership</label>
+          <input id="ptf-dari" type="text" placeholder="Silver"></div>
+        <div class="pt-form-row"><label>Ke Membership</label>
+          <input id="ptf-ke" type="text" placeholder="Gold"></div>
+      </div>
+      <div class="pt-form-row"><label>Harga Upgrade (Rp)</label>
+        <input id="ptf-harga" type="number" value="0"></div>
+      <div class="pt-form-row"><label>Status</label>
+        <select id="ptf-status">
+          <option>SELESAI</option>
+          <option>PROSES</option>
+        </select></div>
+      <div class="pt-form-row"><label>Catatan</label>
+        <textarea id="ptf-catatan" placeholder="Opsional"></textarea></div>`;
+  }
+
+  return '<p style="color:var(--txt3)">Tab tidak dikenali.</p>';
+}
+
+/** Auto-fill harga & kuota berdasarkan paket COURT PASS */
+function _ptAutoFill() {
+  const paket = document.getElementById('ptf-paket')?.value || '';
+  const defaults = {
+    '20H Off-Peak Pass': {harga: 184500, kuota: 20},
+    '50H Weekend Pass':  {harga: 175500, kuota: 50},
+    '8H Evening Pass':   {harga: 243000, kuota: 8},
+    '8H Off-PH Pass':    {harga: 193500, kuota: 8},
+    '8H Off-Peak Pass':  {harga: 193500, kuota: 8},
+  };
+  const d = defaults[paket];
+  if (d) {
+    const h = document.getElementById('ptf-harga');
+    const k = document.getElementById('ptf-kuota');
+    if (h) h.value = d.harga;
+    if (k) k.value = d.kuota;
+  }
+}
+
+/** Collect form values dan POST ke API */
+async function submitPTForm() {
+  const errEl  = document.getElementById('pt-form-err');
+  const btn    = document.getElementById('pt-submit-btn');
+  if (errEl) errEl.style.display = 'none';
+  if (btn) { btn.textContent = 'Menyimpan...'; btn.disabled = true; }
+
+  function g(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+  let formData = {};
+  const tab  = _ptTab;
+  const type = _ptFormType;
+
+  // Collect per tab/type
+  if (tab === 'COURT_PASS') {
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), paket: g('ptf-paket'),
+                   harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') };
+      if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'),
+                   jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
+    }
+  } else if (tab === 'COMEBACK') {
+    if (type === 'BELI') {
+      formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), bulan: g('ptf-bulan'),
+                   harga: g('ptf-harga'), kuota: g('ptf-kuota'), catatan: g('ptf-catatan') };
+      if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+    } else {
+      formData = { nama: g('ptf-nama'), tgl_pakai: g('ptf-tgl_pakai'), jumlah_court: g('ptf-jumlah_court'),
+                   jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'), catatan: g('ptf-catatan') };
+      if (!formData.tgl_pakai) return _ptErr('Tanggal pakai wajib diisi', btn);
+    }
+  } else if (tab === 'TRIAL_STUDENT') {
+    formData = { nama: g('ptf-nama'), tgl_beli: g('ptf-tgl_beli'), tgl_pakai: g('ptf-tgl_pakai'),
+                 paket: g('ptf-paket'), harga: g('ptf-harga'), court: g('ptf-court'),
+                 jam_mulai: g('ptf-jam_mulai'), jam_selesai: g('ptf-jam_selesai'),
+                 status: g('ptf-status'), catatan: g('ptf-catatan') };
+    if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+  } else if (tab === 'UPGRADE_MEMBERSHIP') {
+    formData = { nama: g('ptf-nama'), tgl_upgrade: g('ptf-tgl_upgrade'), dari: g('ptf-dari'),
+                 ke: g('ptf-ke'), harga: g('ptf-harga'), status: g('ptf-status'), catatan: g('ptf-catatan') };
+    if (!formData.nama) return _ptErr('Nama wajib diisi', btn);
+  }
+
+  try {
+    const resp = await fetch('/api/programs-tracker', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tab, type, data: formData }),
+    });
+    const result = await resp.json();
+    if (result.status !== 'ok') throw new Error(result.error || 'Gagal menyimpan');
+
+    closePTModal();
+    // Reload data dari sheet
+    _ptData = {};
+    loadProgramsTracker(true);
+  } catch(e) {
+    _ptErr('Error: ' + e.message, btn);
+  }
+}
+
+function _ptErr(msg, btn) {
+  const errEl = document.getElementById('pt-form-err');
+  if (errEl) { errEl.textContent = msg; errEl.style.display = ''; }
+  if (btn) { btn.textContent = 'Simpan ke Sheet'; btn.disabled = false; }
 }
 
 // ── AI COPILOT (stub — halaman dihapus, fungsi dipertahankan untuk compat) ──

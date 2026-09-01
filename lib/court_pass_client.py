@@ -113,14 +113,40 @@ def _finalize(cur: dict) -> dict:
 
 # ── Core parser ───────────────────────────────────────────────────────────────
 
+def _is_usage_entry(s: str) -> bool:
+    """Check if string looks like a court usage entry (XC XH pattern or time HH:MM/HH.MM)."""
+    return bool(
+        re.search(r'\d+\s*[Cc]\s*\d*\s*[Hh]', s) or   # e.g. 2C2H, 1C1H
+        re.search(r'\d{1,2}[.:]\d{2}', s)               # e.g. 16.00, 07:00
+    )
+
+def _extract_sisa(s: str):
+    """Extract remaining count from c4: numeric string, 'Sisa Xjam', 'HABIS'→0, else None."""
+    if not s:
+        return None
+    si = _safe_int(s)
+    if si is not None:
+        return si
+    su = s.upper()
+    if 'HABIS' in su:
+        return 0
+    m = re.search(r'(\d+)', s)
+    return int(m.group(1)) if m else None
+
+
 def _process_side(all_values: list, col_start: int) -> list[dict]:
     """
     Parse one column range (left=0 or right=5) of the sheet.
     Returns list of court pass purchase dicts.
+
+    Handles merged-cell member names: when col B is merged (gspread returns name only
+    in the first row), subsequent purchase rows have c1="" — we detect them by c0=date
+    AND c2=package name, then carry the last known member name forward.
     """
     records = []
     cur = None
     next_is_expiry = False
+    last_name = ''  # carry forward for merged-cell rows
 
     for raw_row in all_values:
         # Pad row so we can always index safely
@@ -139,9 +165,6 @@ def _process_side(all_values: list, col_start: int) -> list[dict]:
         # "VALID" marker → next row's c0 is expiry date
         if c0.upper() == 'VALID':
             next_is_expiry = True
-            if cur:
-                # Don't finalize yet — waiting for expiry date
-                pass
             continue
 
         # Expiry date row (row immediately after VALID)
@@ -155,70 +178,84 @@ def _process_side(all_values: list, col_start: int) -> list[dict]:
                 cur = None
             continue
 
-        # New purchase: c0 has a date AND c1 has a name
-        if _is_date(c0) and c1 and c1.upper() not in ('VALID',):
-            # Save previous if it wasn't saved via VALID path
+        # Track member name whenever c1 has a non-date, non-header value
+        if c1 and c1.upper() not in ('VALID', 'NAMA') and not _is_date(c1):
+            last_name = c1.upper().strip()
+
+        # New purchase detection:
+        #   Case A: c0=date, c1=member name (standard)
+        #   Case B: c0=date, c1="" (merged cell), c2=package name (non-numeric)
+        #   → carry member name from last_name
+        is_pkg_name = bool(c2) and not re.match(r'^[\d,]+$', c2.replace(',', ''))
+        is_new_purchase = (
+            _is_date(c0) and c1.upper() not in ('VALID',) and
+            (c1 or is_pkg_name)
+        )
+
+        if is_new_purchase:
             if cur:
                 records.append(_finalize(cur))
 
-            # Price sometimes appears in c2 (e.g. "175500") instead of package name
+            member_name = last_name if last_name else 'UNKNOWN'
+
+            # Price sometimes appears in c2 instead of package name
             price = None
             pkg_raw = c2
             if re.match(r'^[\d,]+$', c2.replace(',', '')):
                 price = _safe_int(c2)
-                pkg_raw = ''  # price only, package name must come from next row
+                pkg_raw = ''
 
+            sisa_init = _extract_sisa(c4)
             cur = {
-                'purchase_date': _parse_date(c0),
-                'member_name': c1.upper().strip(),
-                'package_raw': pkg_raw,
-                'package_type': _normalise_pkg(pkg_raw) if pkg_raw else None,
-                'price': price,
-                'hours_total': _extract_hours(pkg_raw) if pkg_raw else None,
-                'hours_remaining': _safe_int(c4),
-                'status': 'active',
-                'expiry_date': None,
+                'purchase_date':   _parse_date(c0),
+                'member_name':     member_name,
+                'package_raw':     pkg_raw,
+                'package_type':    _normalise_pkg(pkg_raw) if pkg_raw else None,
+                'price':           price,
+                'hours_total':     _extract_hours(pkg_raw) if pkg_raw else None,
+                'hours_remaining': sisa_init,
+                'status':          'active',
+                'expiry_date':     None,
             }
-            # c4 == 0 means fully used
-            if _safe_int(c4) == 0:
+            if sisa_init == 0:
                 cur['status'] = 'habis'
+            # First usage on same row as purchase
+            if c3 and _is_usage_entry(c3):
+                cur.setdefault('session_dates', []).append({'desc': c3, 'sisa': sisa_init})
             continue
 
         # Continuation row for the current purchase
         if cur:
-            # Capture usage date: c0 has a date, c1 is empty → session usage row
-            if _is_date(c0) and not c1:
-                usage_date = _parse_date(c0)
-                # c2 may contain time slot (e.g. "10:00-12:00") or court info
-                time_info = c2.strip() if c2 and not re.match(r'^[\d,]+$', c2.replace(',', '')) else ''
-                entry = usage_date + (f" {time_info}" if time_info else '')
-                cur.setdefault('session_dates', []).append(entry)
+            # Capture usage from c3 (DIGUNAKAN column); filter out label rows
+            if c3 and _is_usage_entry(c3):
+                cur.setdefault('session_dates', []).append({'desc': c3, 'sisa': _extract_sisa(c4)})
 
-            # Package name may appear in c2 of a continuation row (after price row)
+            # Package name in c2 of a continuation row (after price-only row)
             if c2 and not cur.get('package_raw') and not re.match(r'^[\d,]+$', c2.replace(',', '')) and not _is_date(c0):
                 cur['package_raw'] = c2
                 cur['package_type'] = _normalise_pkg(c2)
                 cur['hours_total'] = _extract_hours(c2)
 
-            # Price appears in c2 (numeric)
+            # Price in c2 (numeric)
             if c2 and re.match(r'^[\d,]+$', c2.replace(',', '')) and not cur.get('price'):
                 cur['price'] = _safe_int(c2)
 
-            # Status flags
+            # Status flags from c2 / c4
             c2_up = c2.upper()
-            if 'HANGUS' in c2_up:
+            c4_up = c4.upper()
+            if 'HANGUS' in c2_up or 'HANGUS' in c4_up:
                 cur['status'] = 'hangus'
-            elif 'HABIS' in c2_up or 'HABIS' in c4.upper():
+            elif 'HABIS' in c2_up or 'HABIS' in c4_up:
                 cur['status'] = 'habis'
 
-            # Update remaining hours from c4 (last numeric count wins)
-            cnt = _safe_int(c4)
+            # Update remaining from c4
+            cnt = _extract_sisa(c4)
             if cnt is not None:
                 cur['hours_remaining'] = cnt
                 if cnt == 0:
                     cur['status'] = 'habis'
 
-    # Flush last record (no VALID row encountered at end of data)
+    # Flush last record
     if cur:
         records.append(_finalize(cur))
 

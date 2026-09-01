@@ -85,6 +85,26 @@ def _safe_int(s: str) -> int | None:
     except Exception:
         return None
 
+def _extract_sisa(s: str):
+    """Extract remaining count: numeric, 'Sisa Xjam'→X, 'HABIS'→0, else None."""
+    if not s:
+        return None
+    si = _safe_int(s)
+    if si is not None:
+        return si
+    su = s.upper()
+    if 'HABIS' in su:
+        return 0
+    m = re.search(r'(\d+)', s)
+    return int(m.group(1)) if m else None
+
+def _is_usage_entry(s: str) -> bool:
+    """Check if string looks like a court usage entry (XC XH or time HH:MM/HH.MM)."""
+    return bool(
+        re.search(r'\d+\s*[Cc]\s*\d*\s*[Hh]', s) or
+        re.search(r'\d{1,2}[.:]\d{2}', s)
+    )
+
 def _is_date(s: str) -> bool:
     return _parse_date(s) is not None
 
@@ -220,6 +240,7 @@ def _parse_generic_tab(all_values: list, package_type_hint: str = None) -> list[
         c0 = str(row[0]).strip()
         c1 = str(row[1]).strip()
         c2 = str(row[2]).strip()
+        c3 = str(row[3]).strip() if len(row) > 3 else ''
         c4 = str(row[4]).strip() if len(row) > 4 else ''
 
         if not c0 and not c1:
@@ -259,15 +280,15 @@ def _parse_generic_tab(all_values: list, package_type_hint: str = None) -> list[
                 'status':             status,
                 'expiry_date':        None,
             }
+            # First usage row is on the same row as purchase (c3 = DIGUNAKAN)
+            if c3 and _is_usage_entry(c3):
+                cur.setdefault('session_dates', []).append({'desc': c3, 'sisa': _extract_sisa(c4)})
             continue
 
         if cur:
-            # Capture usage date: c0 has a date, c1 is empty → session usage row
-            if _is_date(c0) and not c1:
-                usage_date = _parse_date(c0)
-                time_info = c2.strip() if c2 and not re.match(r'^[\d,]+$', c2.replace(',', '')) else ''
-                entry = usage_date + (f" {time_info}" if time_info else '')
-                cur.setdefault('session_dates', []).append(entry)
+            # Capture usage from c3 (DIGUNAKAN column); filter out label rows
+            if c3 and _is_usage_entry(c3):
+                cur.setdefault('session_dates', []).append({'desc': c3, 'sisa': _extract_sisa(c4)})
 
             c2_up = c2.upper()
             c4_up = c4.upper()

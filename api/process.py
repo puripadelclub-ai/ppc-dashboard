@@ -1949,6 +1949,103 @@ def run_pipeline():
     return log
 
 
+# ── PROGRAMS TRACKER (Google Sheet ↔ Dashboard) ─────────────────────────────
+
+@app.route("/api/programs-tracker", methods=["GET"])
+def get_programs_tracker():
+    """
+    Baca semua tab dari PPC Programs Tracker sheet dan return JSON terstruktur.
+    Query param: ?tab=COURT_PASS|COMEBACK|TRIAL_STUDENT|UPGRADE_MEMBERSHIP (opsional)
+    Kalau tidak ada param → return semua tab.
+    """
+    try:
+        from programs_tracker_client import get_all_tracker_data, parse_court_pass, parse_comeback, parse_trial_student, parse_upgrade_membership
+
+        tab = request.args.get("tab", "").upper()
+        if tab == "COURT_PASS":
+            data = {"COURT_PASS": parse_court_pass()}
+        elif tab == "COMEBACK":
+            data = {"COMEBACK": parse_comeback()}
+        elif tab == "TRIAL_STUDENT":
+            data = {"TRIAL_STUDENT": parse_trial_student()}
+        elif tab == "UPGRADE_MEMBERSHIP":
+            data = {"UPGRADE_MEMBERSHIP": parse_upgrade_membership()}
+        else:
+            data = get_all_tracker_data()
+
+        return jsonify({"status": "ok", "data": data})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return jsonify({"status": "error", "error": str(e), "traceback": tb}), 500
+
+
+@app.route("/api/programs-tracker", methods=["POST"])
+def post_programs_tracker():
+    """
+    Tambah baris BELI atau PAKAI ke PPC Programs Tracker sheet.
+
+    Body JSON:
+    {
+      "tab": "COURT_PASS" | "COMEBACK" | "TRIAL_STUDENT" | "UPGRADE_MEMBERSHIP",
+      "type": "BELI" | "PAKAI",
+      "data": { ... field sesuai tab }
+    }
+    """
+    try:
+        from programs_tracker_client import (
+            build_court_pass_beli_row, build_court_pass_pakai_row,
+            build_comeback_beli_row, build_comeback_pakai_row,
+            build_trial_student_row, build_upgrade_membership_row,
+            append_beli, append_pakai,
+        )
+
+        body = request.get_json(force=True)
+        if not body:
+            return jsonify({"status": "error", "error": "Body kosong"}), 400
+
+        tab = str(body.get("tab", "")).upper()
+        typ = str(body.get("type", "BELI")).upper()
+        data = body.get("data", {})
+
+        if tab not in ("COURT_PASS", "COMEBACK", "TRIAL_STUDENT", "UPGRADE_MEMBERSHIP"):
+            return jsonify({"status": "error", "error": f"Tab tidak valid: {tab}"}), 400
+
+        # Build row array
+        if tab == "COURT_PASS":
+            if typ == "BELI":
+                row = build_court_pass_beli_row(data)
+                result = append_beli("COURT_PASS", row)
+            elif typ == "PAKAI":
+                row = build_court_pass_pakai_row(data)
+                result = append_pakai("COURT_PASS", data.get("nama", ""), row)
+            else:
+                return jsonify({"status": "error", "error": f"Type tidak valid: {typ}"}), 400
+
+        elif tab == "COMEBACK":
+            if typ == "BELI":
+                row = build_comeback_beli_row(data)
+                result = append_beli("COMEBACK", row)
+            elif typ == "PAKAI":
+                row = build_comeback_pakai_row(data)
+                result = append_pakai("COMEBACK", data.get("nama", ""), row)
+            else:
+                return jsonify({"status": "error", "error": f"Type tidak valid: {typ}"}), 400
+
+        elif tab == "TRIAL_STUDENT":
+            row = build_trial_student_row(data)
+            result = append_beli("TRIAL_STUDENT", row)
+
+        elif tab == "UPGRADE_MEMBERSHIP":
+            row = build_upgrade_membership_row(data)
+            result = append_beli("UPGRADE_MEMBERSHIP", row)
+
+        return jsonify({"status": "ok", "result": result, "row": row})
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        return jsonify({"status": "error", "error": str(e), "traceback": tb}), 500
+
+
 # ── LOCAL DEV ENTRY POINT ──────────────────────
 if __name__ == "__main__":
     print("Running pipeline locally...")
