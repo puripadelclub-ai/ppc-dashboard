@@ -5013,7 +5013,8 @@ async function loadProgramsTracker(force = false) {
   if (emptyEl) emptyEl.style.display = 'none';
 
   try {
-    const resp = await fetch('/api/programs-tracker');
+    const url = force ? `/api/programs-tracker?t=${Date.now()}` : '/api/programs-tracker';
+    const resp = await fetch(url);
     const json = await resp.json();
     if (json.status !== 'ok') throw new Error(json.error || 'Unknown error');
     _ptData = json.data || {};
