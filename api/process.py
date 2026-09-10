@@ -10,7 +10,7 @@ Routes:
 import sys
 import os
 import traceback
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 
 # Tambah lib ke path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
@@ -51,6 +51,59 @@ from collections import Counter
 from datetime import datetime
 
 app = Flask(__name__)
+
+# ── Auth guard config ────────────────────────────────────────────────────
+# Route cron: hanya boleh dipanggil dengan Bearer CRON_SECRET (bukan JWT user).
+CRON_PATHS = {
+    "/api/process", "/api/sync-members", "/api/sync-programs",
+    "/api/fetch-ads", "/api/fetch-competitors",
+}
+# Route publik: tanpa auth sama sekali.
+PUBLIC_PATHS = {"/dashboard", "/api/health"}
+
+
+def _verify_supabase_user():
+    """Verifikasi Bearer token dari header Authorization ke Supabase Auth.
+    Return dict user (termasuk app_metadata) kalau valid, None kalau tidak."""
+    import requests as _req_auth
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header[7:]
+    sb_url = os.environ.get("SUPABASE_URL", "")
+    sb_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    if not sb_url or not sb_key:
+        return None
+    try:
+        resp = _req_auth.get(
+            f"{sb_url}/auth/v1/user",
+            headers={"Authorization": f"Bearer {token}", "apikey": sb_key},
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+
+@app.before_request
+def _require_auth():
+    path = request.path
+    if path in PUBLIC_PATHS:
+        return None
+    if path in CRON_PATHS:
+        cron_secret = os.environ.get("CRON_SECRET", "")
+        auth_header = request.headers.get("Authorization", "")
+        if cron_secret and auth_header == f"Bearer {cron_secret}":
+            return None
+        return jsonify({"error": "unauthorized"}), 401
+    user = _verify_supabase_user()
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+    g.current_user = user
+    g.current_role = (user.get("app_metadata") or {}).get("role", "")
+    return None
 
 
 @app.route("/api/process", methods=["GET", "POST"])
@@ -406,6 +459,7 @@ def fetch_competitors():
             return jsonify({"status": "warning", "message": "No competitor data returned", "rows": 0})
 
         dates_fetched = sorted(df_new["date"].unique())
+        actual_date = date_str or dates_fetched[0]
         log.append(f"  → {len(df_new)} rows scraped for dates: {', '.join(dates_fetched)}")
 
         # Accumulate with existing history in Sheets
