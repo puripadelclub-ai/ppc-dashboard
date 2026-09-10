@@ -1762,7 +1762,7 @@ async function fetchSyncHealth() {
   const ov = document.getElementById('health-overall');
   if (!el) return;
   try {
-    const res  = await fetch('/api/sync-health');
+    const res  = await apiFetch('/api/sync-health');
     const data = await res.json();
     const srcs = data.sources || {};
     const cMap = {green:'var(--green)',amber:'var(--amber)',red:'var(--red)',gray:'var(--txt3)'};
@@ -1802,7 +1802,7 @@ function setDateFilter(period) {
 
 async function fetchSupabaseKPIs(period) {
   try {
-    const res = await fetch(`/api/supabase-data?period=${period}`);
+    const res = await apiFetch(`/api/supabase-data?period=${period}`);
     if (!res.ok) return;
     SB = await res.json();
     renderKPIProgress();
@@ -2052,7 +2052,7 @@ async function reloadData() {
   document.getElementById('loading').style.display='flex';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   try {
-    const res = await fetch('/api/dashboard-data');
+    const res = await apiFetch('/api/dashboard-data');
     D = await res.json();
     document.getElementById('loading').style.display='none';
     document.getElementById('page-'+currentPage).classList.add('active');
@@ -2402,7 +2402,7 @@ async function refreshHeatmap() {
   if (!fromEl || !toEl || !fromEl.value || !toEl.value) return;
   if (el) el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Memuat heatmap...</span>';
   try {
-    const res  = await fetch(`/api/heatmap?from=${fromEl.value}&to=${toEl.value}`);
+    const res  = await apiFetch(`/api/heatmap?from=${fromEl.value}&to=${toEl.value}`);
     const data = await res.json();
     const meta = document.getElementById('hm-meta');
     if (meta && data.n_days) meta.textContent = `· ${data.n_days} hari · per jam × hari · ${data.n_rows||0} booking`;
@@ -5014,7 +5014,7 @@ async function loadProgramsTracker(force = false) {
 
   try {
     const url = force ? `/api/programs-tracker?t=${Date.now()}` : '/api/programs-tracker';
-    const resp = await fetch(url);
+    const resp = await apiFetch(url);
     const json = await resp.json();
     if (json.status !== 'ok') throw new Error(json.error || 'Unknown error');
     _ptData = json.data || {};
@@ -5544,7 +5544,7 @@ async function submitPTForm() {
   }
 
   try {
-    const resp = await fetch('/api/programs-tracker', {
+    const resp = await apiFetch('/api/programs-tracker', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tab, type, data: formData }),
@@ -5676,7 +5676,7 @@ async function confirmPTDelete(sheetRow, type) {
   if (!confirm(`Hapus baris ini dari sheet? Tindakan ini tidak bisa dibatalkan.`)) return;
 
   try {
-    const resp = await fetch('/api/programs-tracker', {
+    const resp = await apiFetch('/api/programs-tracker', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tab: _ptTab, sheet_row: sheetRow }),
@@ -5739,7 +5739,7 @@ async function submitPTForm() {
   }
 
   try {
-    const resp = await fetch('/api/programs-tracker', {
+    const resp = await apiFetch('/api/programs-tracker', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tab, type, sheet_row: _ptEditSheetRow, data: formData }),
@@ -5811,7 +5811,7 @@ async function _submitPTFormNew() {
   }
 
   try {
-    const resp = await fetch('/api/programs-tracker', {
+    const resp = await apiFetch('/api/programs-tracker', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tab, type, data: formData }),
@@ -5867,6 +5867,16 @@ const _SB = supabase.createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkdGNyZ2JybmlieWFzampuY2t3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NDE5NzIsImV4cCI6MjEwMzExNzk3Mn0.C-gOC19dV1xCjHp4bPUQSb3BGuPPEPYIGFlUPR1Lzno'
 );
 
+// Wrapper fetch: sisipkan Supabase access token supaya lolos auth guard backend.
+async function apiFetch(url, options = {}) {
+  const { data: { session } } = await _SB.auth.getSession();
+  const headers = {
+    ...(options.headers || {}),
+    ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+  };
+  return fetch(url, { ...options, headers });
+}
+
 const ROLE_PAGES = {
   owner:      ['home','operations','revenue','programs','marketing','members','intelligence'],
   superadmin: ['operations','programs','members','intelligence'],
@@ -5918,7 +5928,7 @@ async function doLogin() {
     return;
   }
 
-  const role = data.user?.user_metadata?.role || 'admin';
+  const role = data.user?.app_metadata?.role || 'admin';
   applyRole(role, data.user?.email);
   document.getElementById('login-overlay').style.display = 'none';
   const landingPage = ROLE_PAGES[role]?.[0] || 'operations';
@@ -5934,7 +5944,7 @@ async function doLogout() {
 async function checkAuth() {
   const { data: { session } } = await _SB.auth.getSession();
   if (session) {
-    const role = session.user?.user_metadata?.role || 'admin';
+    const role = session.user?.app_metadata?.role || 'admin';
     applyRole(role, session.user?.email);
     document.getElementById('login-overlay').style.display = 'none';
     const landingPage = ROLE_PAGES[role]?.[0] || 'operations';
