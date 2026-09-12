@@ -209,7 +209,9 @@ def debug_coaching():
             "https://www.googleapis.com/auth/spreadsheets",
         ])
         gc = _gs.authorize(creds)
-        SHEET_ID = _os.environ.get("COACHING_SHEET_ID", "1dtmKhpbAeVu-YX9Lx1ayU4OPmdyYcRMg4IZGPBgd0iA")
+        SHEET_ID = _os.environ.get("COACHING_SHEET_ID")
+        if not SHEET_ID:
+            raise RuntimeError("COACHING_SHEET_ID env var belum diset")
         sh = gc.open_by_key(SHEET_ID)
         worksheets = sh.worksheets()
 
@@ -272,7 +274,9 @@ def sync_members():
     try:
         from supabase_client import upsert_members, log_start as _ls, log_complete as _lc
 
-        SHEET_ID = "1MAlR1WG7184GTCBmCTPUcX4OZKd09H1gx_0aSTKjt4k"
+        SHEET_ID = os.environ.get("MEMBERSHIP_SHEET_ID")
+        if not SHEET_ID:
+            raise RuntimeError("MEMBERSHIP_SHEET_ID env var belum diset")
         csv_url  = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
         resp = _req.get(csv_url, timeout=30)
         resp.raise_for_status()
@@ -1783,7 +1787,9 @@ def run_pipeline():
             upsert_members, log_start as _ls_m, log_complete as _lc_m,
         )
 
-        SHEET_ID_MEM = "1MAlR1WG7184GTCBmCTPUcX4OZKd09H1gx_0aSTKjt4k"
+        SHEET_ID_MEM = os.environ.get("MEMBERSHIP_SHEET_ID")
+        if not SHEET_ID_MEM:
+            raise RuntimeError("MEMBERSHIP_SHEET_ID env var belum diset")
         csv_url = (
             f"https://docs.google.com/spreadsheets/d/{SHEET_ID_MEM}"
             f"/export?format=csv&gid=0"
