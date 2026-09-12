@@ -3377,8 +3377,6 @@ function renderMembers() {
   document.getElementById('mem-kpi-row').innerHTML = `
     <div class="kpi"><div class="kpi-lbl">Total Member${ii('total-member')}</div><div class="kpi-val" id="mem-total-kpi">${fN(si(s.total_members)||0)}</div><div class="kpi-d">${fN(si(s.matched))} matched POS</div></div>
     <div class="kpi"><div class="kpi-lbl">Avg CLV 6 Bulan${ii('avg-clv')}</div><div class="kpi-val">${fIDR(si(s.avg_clv_moderate||0))}</div><div class="kpi-d">Moderate estimate</div></div>
-    <div class="kpi"><div class="kpi-lbl">Ball Machine User${ii('ball-machine-user')}</div><div class="kpi-val">${fN(bmUsers)}</div><div class="kpi-d">≥1 sesi (30 hari)</div></div>
-    <div class="kpi"><div class="kpi-lbl">Coaching User${ii('coaching-user')}</div><div class="kpi-val">${fN(coachUsers)}</div><div class="kpi-d">≥1 sesi (30 hari)</div></div>
   `;
 
   // ── Segment summary cards (replace doughnut) ─────
