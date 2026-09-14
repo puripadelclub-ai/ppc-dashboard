@@ -2261,11 +2261,23 @@ def post_learnings_tracker():
             "next_plan":   str(body.get("next_plan","")).strip(),
             "status":      str(body.get("status","none")).lower(),
         }
-        from lib.supabase_client import upsert as _sb_upsert
-        res = _sb_upsert("tracker_entries", [row], on_conflict="category,week_start")
-        if res.get("error"):
-            return jsonify({"status":"error","error":res["error"]}), 500
-        return jsonify({"status":"ok","inserted":res["inserted"]})
+        import requests as _rq
+        sb_url = os.environ.get("SUPABASE_URL","")
+        sb_key = os.environ.get("SUPABASE_SERVICE_KEY","")
+        resp = _rq.post(
+            f"{sb_url}/rest/v1/tracker_entries",
+            headers={
+                "apikey": sb_key,
+                "Authorization": f"Bearer {sb_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation",
+            },
+            json=row,
+            timeout=10,
+        )
+        if resp.status_code not in (200, 201):
+            return jsonify({"status":"error","error":f"HTTP {resp.status_code}: {resp.text[:300]}"}), 500
+        return jsonify({"status":"ok","inserted":1})
     except Exception as e:
         return jsonify({"status":"error","error":str(e)}), 500
 
