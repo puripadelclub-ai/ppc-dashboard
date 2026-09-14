@@ -153,7 +153,7 @@ def sync_programs_coaching():
                 if res.get("error"):
                     log.append(f"  ⚠️ Programs batch error: {res['error']}")
                     break
-            log_complete(log_id_cp, "success", {"upserted": cp_total})
+            log_complete(log_id_cp, "success", {"rows_inserted": cp_total})
             log.append(f"  → {cp_total} upserted ({len(cp_rows)} parsed)")
         except Exception as e_cp:
             try: log_complete(log_id_cp, "failed", error=str(e_cp))
@@ -172,7 +172,7 @@ def sync_programs_coaching():
                 if res.get("error"):
                     log.append(f"  ⚠️ Coaching batch error: {res['error']}")
                     break
-            log_complete(log_id_cs, "success", {"upserted": cs_total})
+            log_complete(log_id_cs, "success", {"rows_inserted": cs_total})
             log.append(f"  → {cs_total} upserted ({len(cs_rows)} parsed)")
         except Exception as e_cs:
             try: log_complete(log_id_cs, "failed", error=str(e_cs))
@@ -1968,7 +1968,7 @@ def run_pipeline():
                 log.append(f"  ⚠️ Programs batch error: {res_cp['error']}")
                 break
 
-        _lc_cp(log_id_cp, "success", {"upserted": cp_total})
+        _lc_cp(log_id_cp, "success", {"rows_inserted": cp_total})
         log.append(
             f"  → Supabase programs: {cp_total} upserted "
             f"({len(cp_rows)} parsed from sheet)"
@@ -1995,7 +1995,7 @@ def run_pipeline():
                 log.append(f"  ⚠️ Coaching batch error: {res_cs['error']}")
                 break
 
-        _lc_cs(log_id_cs, "success", {"upserted": cs_total})
+        _lc_cs(log_id_cs, "success", {"rows_inserted": cs_total})
         log.append(
             f"  → Supabase coaching_sessions: {cs_total} upserted "
             f"({len(cs_rows)} parsed from sheet)"
