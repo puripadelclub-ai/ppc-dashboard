@@ -2222,9 +2222,86 @@ def delete_programs_tracker():
 
 # ── LEARNINGS TRACKER ─────────────────────────────────────────────────────────
 
-TRACKER_CATEGORIES = ("ads","bundling","loyalty","referral","student","upgrade","racket","jualbeli")
-TRACKER_STATUSES   = ("ok","bad","progress","none")
-EDIT_ROLES         = ("owner","superadmin")
+TRACKER_STATUSES = ("ok","bad","progress","none")
+EDIT_ROLES       = ("owner","superadmin")
+
+
+# ── TRACKER CATEGORIES ────────────────────────────────────────────────────────
+
+@app.route("/api/tracker-categories", methods=["GET"])
+def get_tracker_categories():
+    """Ambil semua kategori aktif, urut sort_order."""
+    from lib.supabase_client import select as _sb_select
+    try:
+        rows = _sb_select("tracker_categories", filters={"is_active": "true"}, limit=200)
+        rows.sort(key=lambda r: r.get("sort_order", 0))
+        return jsonify({"status": "ok", "data": rows})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/tracker-categories", methods=["POST"])
+def post_tracker_category():
+    """Tambah kategori baru. Hanya owner & superadmin."""
+    if g.current_role not in EDIT_ROLES:
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        body  = request.get_json(force=True) or {}
+        label = str(body.get("label", "")).strip()
+        if not label:
+            return jsonify({"status": "error", "error": "label wajib"}), 400
+        # buat slug dari label
+        import re, requests as _rq
+        slug = re.sub(r"[^a-z0-9]+", "", label.lower().replace(" ", ""))
+        sort_order = int(body.get("sort_order", 99))
+        sb_url = os.environ.get("SUPABASE_URL", "")
+        sb_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+        resp = _rq.post(
+            f"{sb_url}/rest/v1/tracker_categories",
+            headers={"apikey": sb_key, "Authorization": f"Bearer {sb_key}",
+                     "Content-Type": "application/json", "Prefer": "return=representation"},
+            json={"id": slug, "label": label, "sort_order": sort_order, "is_active": True},
+            timeout=10,
+        )
+        if resp.status_code not in (200, 201):
+            return jsonify({"status": "error", "error": f"HTTP {resp.status_code}: {resp.text[:200]}"}), 500
+        return jsonify({"status": "ok", "data": resp.json()})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/tracker-categories", methods=["PATCH"])
+def patch_tracker_category():
+    """Update label atau sort_order kategori. Hanya owner & superadmin."""
+    if g.current_role not in EDIT_ROLES:
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        body    = request.get_json(force=True) or {}
+        cat_id  = str(body.get("id", "")).strip()
+        if not cat_id:
+            return jsonify({"status": "error", "error": "id wajib"}), 400
+        patch   = {}
+        if "label"      in body: patch["label"]      = str(body["label"]).strip()
+        if "sort_order" in body: patch["sort_order"] = int(body["sort_order"])
+        if "is_active"  in body: patch["is_active"]  = bool(body["is_active"])
+        if not patch:
+            return jsonify({"status": "error", "error": "Tidak ada field yang diupdate"}), 400
+        import requests as _rq
+        sb_url = os.environ.get("SUPABASE_URL", "")
+        sb_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+        resp = _rq.patch(
+            f"{sb_url}/rest/v1/tracker_categories",
+            headers={"apikey": sb_key, "Authorization": f"Bearer {sb_key}",
+                     "Content-Type": "application/json", "Prefer": "return=representation"},
+            params={"id": f"eq.{cat_id}"},
+            json=patch,
+            timeout=10,
+        )
+        if resp.status_code not in (200, 204):
+            return jsonify({"status": "error", "error": f"HTTP {resp.status_code}: {resp.text[:200]}"}), 500
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route("/api/learnings-tracker", methods=["GET"])
 def get_learnings_tracker():
@@ -2247,8 +2324,8 @@ def post_learnings_tracker():
         body = request.get_json(force=True) or {}
         cat  = str(body.get("category","")).lower()
         ws   = str(body.get("week_start","")).strip()
-        if cat not in TRACKER_CATEGORIES:
-            return jsonify({"status":"error","error":f"category tidak valid: {cat}"}), 400
+        if not cat:
+            return jsonify({"status":"error","error":"category wajib"}), 400
         if not ws:
             return jsonify({"status":"error","error":"week_start wajib"}), 400
 

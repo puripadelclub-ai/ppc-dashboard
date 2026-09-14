@@ -1007,7 +1007,10 @@ body{
           <h2>Tracker</h2>
           <p>Program Learnings — inisiatif, metrik, dan learning mingguan per kategori</p>
         </div>
-        <button id="trk-add-btn" onclick="trkOpenAdd()" style="display:none;background:var(--brand);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer">+ Tambah Minggu</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="trk-manage-cat-btn" onclick="trkOpenManageCats()" style="display:none;background:none;color:var(--txt3);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer">⚙ Kelola Kategori</button>
+          <button id="trk-add-btn" onclick="trkOpenAdd()" style="display:none;background:var(--brand);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer">+ Tambah Periode</button>
+        </div>
       </div>
 
       <!-- Inner tab bar -->
@@ -1027,6 +1030,24 @@ body{
           <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
             <button onclick="trkCloseModal()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;color:var(--txt2)">Batal</button>
             <button id="trk-modal-save" onclick="trkSave()" style="background:var(--brand);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer">Simpan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kelola Kategori modal -->
+      <div id="trk-cat-overlay" onclick="trkCloseManageCats()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;padding:16px">
+        <div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:14px;padding:20px;max-width:460px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.22)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <h3 style="font-size:14px;font-weight:700;margin:0;color:var(--txt)">Kelola Kategori</h3>
+            <button onclick="trkCloseManageCats()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--txt3)">×</button>
+          </div>
+          <div id="trk-cat-list" style="margin-bottom:14px"></div>
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--txt3);margin:0 0 8px">Tambah Kategori Baru</p>
+            <div style="display:flex;gap:8px">
+              <input id="trk-cat-new-label" placeholder="Nama kategori baru" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)">
+              <button onclick="trkAddCat()" style="background:var(--brand);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer">Tambah</button>
+            </div>
           </div>
         </div>
       </div>
@@ -2120,16 +2141,7 @@ function renderPage(page) {
 }
 
 // ── TRACKER ──────────────────────────────────────────────────────────────────
-const TRK_CATS = [
-  {id:'ads',       label:'Ads'},
-  {id:'bundling',  label:'Bundling'},
-  {id:'loyalty',   label:'Loyalty'},
-  {id:'referral',  label:'Referral'},
-  {id:'student',   label:'Student'},
-  {id:'upgrade',   label:'Upgrade Member'},
-  {id:'racket',    label:'Racket Rent'},
-  {id:'jualbeli',  label:'Jual Beli Raket'},
-];
+let TRK_CATS = [];     // loaded dynamically from /api/tracker-categories
 const TRK_STATUS_LABEL = {ok:'Berhasil',bad:'Gagal',progress:'Berjalan',none:'Belum Ada Hasil'};
 const TRK_STATUS_COLOR = {
   ok:      {bg:'#e2f3e8',tx:'#1c7a4b'},
@@ -2137,9 +2149,9 @@ const TRK_STATUS_COLOR = {
   progress:{bg:'#e2ecf7',tx:'#2f5f97'},
   none:    {bg:'#eceef0',tx:'#6b7280'},
 };
-let trkData = [];      // all entries from API
+let trkData      = [];
 let trkActiveCat = 'ringkasan';
-let trkEditEntry = null; // entry being edited
+let trkEditEntry = null;
 
 function trkChip(status,label){
   const c = TRK_STATUS_COLOR[status]||TRK_STATUS_COLOR.none;
@@ -2175,14 +2187,24 @@ function trkToday(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
+function trkCanEdit(){ return (window.currentUserRole||'')==='owner'||(window.currentUserRole||'')==='superadmin'; }
+
 async function loadTracker(){
-  const canEdit = (window.currentUserRole||'') === 'owner' || (window.currentUserRole||'') === 'superadmin';
+  const canEdit = trkCanEdit();
   document.getElementById('trk-add-btn').style.display = canEdit ? '' : 'none';
+  // show/hide "Kelola Kategori" button
+  const kBtn = document.getElementById('trk-manage-cat-btn');
+  if(kBtn) kBtn.style.display = canEdit ? '' : 'none';
   document.getElementById('trk-content').innerHTML = '<span style="font-size:12px;color:var(--txt3)">Memuat...</span>';
   try {
-    const res  = await apiFetch('/api/learnings-tracker');
-    const json = await res.json();
-    trkData = json.data || [];
+    const [catRes, entRes] = await Promise.all([
+      apiFetch('/api/tracker-categories'),
+      apiFetch('/api/learnings-tracker'),
+    ]);
+    const catJson = await catRes.json();
+    const entJson = await entRes.json();
+    TRK_CATS = (catJson.data || []).filter(c=>c.is_active);
+    trkData  = entJson.data || [];
   } catch(e) {
     document.getElementById('trk-content').innerHTML = `<span style="color:var(--red);font-size:12px">Gagal memuat data: ${e.message}</span>`;
     return;
@@ -2473,6 +2495,89 @@ async function trkSave(){
   } finally {
     btn.disabled=false; btn.textContent='Simpan';
   }
+}
+// ── KELOLA KATEGORI ──────────────────────────────────────────────────────────
+function trkOpenManageCats(){
+  trkRenderCatList();
+  document.getElementById('trk-cat-overlay').style.display='flex';
+}
+function trkCloseManageCats(){
+  document.getElementById('trk-cat-overlay').style.display='none';
+}
+
+function trkRenderCatList(){
+  const el = document.getElementById('trk-cat-list');
+  if(!TRK_CATS.length){
+    el.innerHTML='<p style="font-size:12px;color:var(--txt3);text-align:center">Belum ada kategori.</p>';
+    return;
+  }
+  el.innerHTML = TRK_CATS.map((c,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <button onclick="trkMoveCat('${c.id}',-1)" ${i===0?'disabled':''} style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--txt3);padding:0;line-height:1">▲</button>
+        <button onclick="trkMoveCat('${c.id}',1)" ${i===TRK_CATS.length-1?'disabled':''} style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--txt3);padding:0;line-height:1">▼</button>
+      </div>
+      <input id="trk-cat-lbl-${c.id}" value="${c.label}" style="flex:1;border:1px solid var(--border);border-radius:7px;padding:5px 9px;font-size:12.5px;color:var(--txt);background:var(--surface)">
+      <button onclick="trkRenameCat('${c.id}')" style="font-size:11px;color:var(--brand);font-weight:600;background:var(--brand-lt);border:none;border-radius:6px;padding:5px 10px;cursor:pointer">Simpan</button>
+      <button onclick="trkDeleteCat('${c.id}')" style="font-size:11px;color:var(--red,#c0392b);background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer">Hapus</button>
+    </div>`).join('');
+}
+
+async function trkRenameCat(id){
+  const label = document.getElementById('trk-cat-lbl-'+id)?.value?.trim();
+  if(!label) return;
+  const res = await apiFetch('/api/tracker-categories',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,label})});
+  const j   = await res.json();
+  if(j.status!=='ok'){ alert('Gagal: '+(j.error||'error')); return; }
+  const cat = TRK_CATS.find(c=>c.id===id);
+  if(cat) cat.label = label;
+  trkRenderCatList();
+  trkBuildTabs();
+  trkRender(trkActiveCat);
+}
+
+async function trkDeleteCat(id){
+  if(!confirm('Hapus kategori ini? Data entry yang sudah ada tidak terhapus.')) return;
+  const res = await apiFetch('/api/tracker-categories',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,is_active:false})});
+  const j   = await res.json();
+  if(j.status!=='ok'){ alert('Gagal: '+(j.error||'error')); return; }
+  TRK_CATS = TRK_CATS.filter(c=>c.id!==id);
+  if(trkActiveCat===id) trkActiveCat='ringkasan';
+  trkRenderCatList();
+  trkBuildTabs();
+  trkRender(trkActiveCat);
+}
+
+async function trkMoveCat(id, dir){
+  const idx = TRK_CATS.findIndex(c=>c.id===id);
+  if(idx<0) return;
+  const swapIdx = idx+dir;
+  if(swapIdx<0||swapIdx>=TRK_CATS.length) return;
+  // swap in local array
+  [TRK_CATS[idx],TRK_CATS[swapIdx]] = [TRK_CATS[swapIdx],TRK_CATS[idx]];
+  // persist new sort_order for both
+  await Promise.all([
+    apiFetch('/api/tracker-categories',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:TRK_CATS[idx].id,sort_order:idx+1})}),
+    apiFetch('/api/tracker-categories',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:TRK_CATS[swapIdx].id,sort_order:swapIdx+1})}),
+  ]);
+  trkRenderCatList();
+  trkBuildTabs();
+  trkRender(trkActiveCat);
+}
+
+async function trkAddCat(){
+  const label = document.getElementById('trk-cat-new-label')?.value?.trim();
+  if(!label){ alert('Nama kategori wajib diisi'); return; }
+  const sort_order = TRK_CATS.length + 1;
+  const res = await apiFetch('/api/tracker-categories',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,sort_order})});
+  const j   = await res.json();
+  if(j.status!=='ok'){ alert('Gagal: '+(j.error||'error')); return; }
+  const newCat = Array.isArray(j.data) ? j.data[0] : j.data;
+  if(newCat) TRK_CATS.push(newCat);
+  document.getElementById('trk-cat-new-label').value='';
+  trkRenderCatList();
+  trkBuildTabs();
+  trkRender(trkActiveCat);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
