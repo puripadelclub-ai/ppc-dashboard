@@ -652,6 +652,10 @@ body{
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       <span class="nav-label">Intelligence</span>
     </div>
+    <div class="nav-item" data-label="Tracker" data-page="tracker" onclick="nav('tracker')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span class="nav-label">Tracker</span>
+    </div>
     <div class="nav-item" data-label="My Membership" data-page="member-portal" onclick="nav('member-portal')">
       <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
       <span class="nav-label">My Membership</span>
@@ -994,6 +998,40 @@ body{
     </div>
 
     <!-- INTELLIGENCE -->
+    <!-- ══════════════════════════════════════════════════════
+         TRACKER PAGE — Program Learnings Tracker
+         ══════════════════════════════════════════════════════ -->
+    <div class="page" id="page-tracker">
+      <div class="page-hd" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <h2>Tracker</h2>
+          <p>Program Learnings — inisiatif, metrik, dan learning mingguan per kategori</p>
+        </div>
+        <button id="trk-add-btn" onclick="trkOpenAdd()" style="display:none;background:var(--brand);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer">+ Tambah Minggu</button>
+      </div>
+
+      <!-- Inner tab bar -->
+      <div id="trk-tabbar" style="display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--border);margin-bottom:18px;padding-bottom:0"></div>
+
+      <!-- Content area -->
+      <div id="trk-content"><span style="font-size:12px;color:var(--txt3)">Memuat...</span></div>
+
+      <!-- Add / Edit modal -->
+      <div id="trk-overlay" onclick="trkCloseModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9998;align-items:center;justify-content:center;padding:16px">
+        <div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:14px;padding:20px;max-width:520px;width:100%;max-height:82vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.22)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <h3 id="trk-modal-title" style="font-size:14px;font-weight:700;margin:0;color:var(--txt)">Tambah Minggu</h3>
+            <button onclick="trkCloseModal()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--txt3);line-height:1;padding:2px 6px">✕</button>
+          </div>
+          <div id="trk-modal-body"></div>
+          <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+            <button onclick="trkCloseModal()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;color:var(--txt2)">Batal</button>
+            <button id="trk-modal-save" onclick="trkSave()" style="background:var(--brand);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer">Simpan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-member-portal">
       <div class="page-hd">
         <h2>Member Portal</h2>
@@ -2069,8 +2107,8 @@ async function reloadData() {
 }
 
 function renderPage(page) {
-  // Always refresh Supabase-backed sections for Programs (independent of D)
   if (page === 'programs') _renderAllProgramSections();
+  if (page === 'tracker') { loadTracker(); return; }
   if(!D) return;
   const fn = {
     home: renderHome, operations: renderOperations,
@@ -2080,6 +2118,335 @@ function renderPage(page) {
   }[page];
   if(fn) fn();
 }
+
+// ── TRACKER ──────────────────────────────────────────────────────────────────
+const TRK_CATS = [
+  {id:'ads',       label:'Ads'},
+  {id:'bundling',  label:'Bundling'},
+  {id:'loyalty',   label:'Loyalty'},
+  {id:'referral',  label:'Referral'},
+  {id:'student',   label:'Student'},
+  {id:'upgrade',   label:'Upgrade Member'},
+  {id:'racket',    label:'Racket Rent'},
+  {id:'jualbeli',  label:'Jual Beli Raket'},
+];
+const TRK_STATUS_LABEL = {ok:'Berhasil',bad:'Gagal',progress:'Berjalan',none:'Belum Ada Hasil'};
+const TRK_STATUS_COLOR = {
+  ok:      {bg:'#e2f3e8',tx:'#1c7a4b'},
+  bad:     {bg:'#f6e6e3',tx:'#a3372c'},
+  progress:{bg:'#e2ecf7',tx:'#2f5f97'},
+  none:    {bg:'#eceef0',tx:'#6b7280'},
+};
+let trkData = [];      // all entries from API
+let trkActiveCat = 'ringkasan';
+let trkEditEntry = null; // entry being edited
+
+function trkChip(status,label){
+  const c = TRK_STATUS_COLOR[status]||TRK_STATUS_COLOR.none;
+  const l = label||(TRK_STATUS_LABEL[status]||status);
+  return `<span style="font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:${c.bg};color:${c.tx};white-space:nowrap">${l}</span>`;
+}
+
+function trkFmtWeek(ws){
+  if(!ws) return '';
+  const d = new Date(ws+'T00:00:00');
+  const end = new Date(d); end.setDate(end.getDate()+6);
+  const m=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return `${d.getDate()} ${m[d.getMonth()]} – ${end.getDate()} ${m[end.getMonth()]} ${end.getFullYear()}`;
+}
+
+function trkThisMonday(){
+  const d=new Date(); const day=d.getDay(); const diff=d.getDate()-(day===0?6:day-1);
+  const m=new Date(d.setDate(diff));
+  return `${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}-${String(m.getDate()).padStart(2,'0')}`;
+}
+
+async function loadTracker(){
+  const canEdit = (window.currentUserRole||'') === 'owner' || (window.currentUserRole||'') === 'superadmin';
+  document.getElementById('trk-add-btn').style.display = canEdit ? '' : 'none';
+  document.getElementById('trk-content').innerHTML = '<span style="font-size:12px;color:var(--txt3)">Memuat...</span>';
+  try {
+    const res  = await apiFetch('/api/learnings-tracker');
+    const json = await res.json();
+    trkData = json.data || [];
+  } catch(e) {
+    document.getElementById('trk-content').innerHTML = `<span style="color:var(--red);font-size:12px">Gagal memuat data: ${e.message}</span>`;
+    return;
+  }
+  trkBuildTabs();
+  trkRender(trkActiveCat);
+}
+
+function trkBuildTabs(){
+  const bar = document.getElementById('trk-tabbar');
+  const tabs = [{id:'ringkasan',label:'Ringkasan'}, ...TRK_CATS];
+  bar.innerHTML = tabs.map(t=>`
+    <button onclick="trkRender('${t.id}')" id="trk-tab-${t.id}"
+      style="font-size:12.5px;font-weight:600;background:none;border:none;padding:8px 13px;
+             cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;
+             color:var(--txt3);transition:color .15s">
+      ${t.label}
+    </button>`).join('');
+}
+
+function trkSetActiveTab(catId){
+  document.querySelectorAll('[id^="trk-tab-"]').forEach(b=>{
+    b.style.color='var(--txt3)';
+    b.style.borderBottomColor='transparent';
+  });
+  const active = document.getElementById('trk-tab-'+catId);
+  if(active){ active.style.color='var(--brand)'; active.style.borderBottomColor='var(--brand)'; }
+}
+
+function trkRender(catId){
+  trkActiveCat = catId;
+  trkSetActiveTab(catId);
+  const canEdit = (window.currentUserRole||'') === 'owner' || (window.currentUserRole||'') === 'superadmin';
+  const el = document.getElementById('trk-content');
+  if(catId === 'ringkasan') { el.innerHTML = trkRenderRingkasan(canEdit); return; }
+  el.innerHTML = trkRenderDetail(catId, canEdit);
+}
+
+function trkRenderRingkasan(canEdit){
+  const now = trkThisMonday();
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">
+    ${TRK_CATS.map(cat=>{
+      const entries = trkData.filter(e=>e.category===cat.id).sort((a,b)=>b.week_start.localeCompare(a.week_start));
+      const latest  = entries[0];
+      const prev    = entries[1];
+      const c       = TRK_STATUS_COLOR[latest?.status||'none'];
+      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:14px;font-weight:700;color:var(--txt)">${cat.label}</span>
+          ${trkChip(latest?.status||'none')}
+        </div>
+        ${latest ? `
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${prev ? `<div style="background:var(--bg2,#f5f5f5);border-radius:9px;padding:7px 10px">
+              <div style="font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${trkFmtWeek(prev.week_start)}</div>
+              <div style="font-size:12px;color:var(--txt2)">${(prev.initiatives||[]).filter(i=>!i.is_backlog).map(i=>i.name).join(', ')||'—'}</div>
+              ${(prev.initiatives||[]).filter(i=>!i.is_backlog)[0]?.learning?`<div style="font-size:11px;color:var(--txt3);margin-top:2px">${(prev.initiatives||[]).filter(i=>!i.is_backlog)[0].learning}</div>`:''}
+            </div>`:''}
+            <div style="background:var(--bg2,#f5f5f5);border-radius:9px;padding:7px 10px">
+              <div style="font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${trkFmtWeek(latest.week_start)}</div>
+              <div style="font-size:12px;font-weight:600;color:var(--txt)">${(latest.initiatives||[]).filter(i=>!i.is_backlog).map(i=>i.name).join(', ')||'—'}</div>
+              ${(latest.initiatives||[]).filter(i=>!i.is_backlog)[0]?.learning?`<div style="font-size:11px;color:var(--txt2);margin-top:2px">${(latest.initiatives||[]).filter(i=>!i.is_backlog)[0].learning}</div>`:''}
+            </div>
+          </div>
+          ${latest.next_plan?`<div style="background:#e8f0ed;border-radius:9px;padding:7px 10px;font-size:11.5px;color:var(--brand)"><span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.7">Rencana Selanjutnya</span> ${latest.next_plan}</div>`:''}
+          <button onclick="trkRender('${cat.id}')" style="font-size:11px;color:var(--brand);font-weight:600;background:none;border:none;cursor:pointer;text-align:left;padding:0">Lihat detail ${cat.label} →</button>
+        ` : `
+          <div style="font-size:12px;color:var(--txt3);font-style:italic">Belum ada inisiatif yang dicatat.</div>
+          ${canEdit?`<button onclick="trkOpenAdd('${cat.id}')" style="font-size:11px;color:var(--brand);font-weight:600;background:none;border:none;cursor:pointer;text-align:left;padding:0">+ Isi minggu ini</button>`:''}
+        `}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function trkRenderDetail(catId, canEdit){
+  const cat     = TRK_CATS.find(c=>c.id===catId)||{label:catId};
+  const entries = trkData.filter(e=>e.category===catId).sort((a,b)=>b.week_start.localeCompare(a.week_start));
+  const addBtn  = canEdit ? `<button onclick="trkOpenAdd('${catId}')" style="font-size:12px;color:var(--brand);font-weight:600;background:var(--brand-lt);border:none;border-radius:8px;padding:7px 14px;cursor:pointer">+ Tambah Minggu</button>` : '';
+  if(!entries.length){
+    return `<div style="text-align:center;padding:40px 0;color:var(--txt3);font-size:13px">
+      Belum ada log untuk ${cat.label}.
+      ${canEdit?`<br><br>${addBtn}`:''}
+    </div>`;
+  }
+  const cards = entries.map((e,i)=>{
+    const inits = (e.initiatives||[]).filter(x=>!x.is_backlog);
+    const backlog= (e.initiatives||[]).filter(x=>x.is_backlog);
+    const editBtn= canEdit?`<button onclick="trkOpenEdit('${e.id}')" style="font-size:11px;color:var(--txt3);background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer">Edit</button>`:'';
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:14px;position:relative;margin-left:19px;border-left:3px solid ${i===0?'var(--brand)':'var(--border)'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <span style="font-size:12px;font-weight:500;color:var(--txt2)">${trkFmtWeek(e.week_start)}</span>
+        <div style="display:flex;gap:6px;align-items:center">${trkChip(e.status)} ${editBtn}</div>
+      </div>
+      ${inits.length===0?`<div style="font-size:12px;color:var(--txt3);font-style:italic">Belum ada inisiatif dicatat minggu ini.</div>`:
+        inits.map(ini=>`
+          <div style="border-left:3px solid var(--brand);padding-left:12px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+              <span style="font-size:13px;font-weight:600;color:var(--txt)">${ini.name||'—'}</span>
+              ${ini.status?trkChip(ini.status):''}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:12px">
+              <div><span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--txt3);display:block;margin-bottom:3px">Metrik & Nilai</span><div style="font-size:12.5px;color:var(--txt)">${ini.metric||'—'}</div></div>
+              <div><span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--txt3);display:block;margin-bottom:3px">Learnings</span><div style="font-size:12.5px;color:var(--txt)">${ini.learning||'—'}</div></div>
+            </div>
+            ${ini.next?`<div style="margin-top:6px"><span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--txt3);display:block;margin-bottom:2px">Next</span><div style="font-size:12px;color:var(--txt2)">${ini.next}</div></div>`:''}
+          </div>`).join('')}
+      ${e.next_plan?`<div style="background:#e8f0ed;border-radius:9px;padding:7px 10px;margin-top:4px;font-size:11.5px;color:var(--brand)"><span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.7">Rencana Minggu Depan</span> ${e.next_plan}</div>`:''}
+      ${backlog.length?`<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)">
+        <span style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--txt3);display:block;margin-bottom:5px">Backlog Ide</span>
+        <ul style="margin:0;padding-left:16px;font-size:12px;color:var(--txt2)">${backlog.map(b=>`<li>${b.name}</li>`).join('')}</ul>
+      </div>`:''}
+    </div>`;
+  }).join('');
+  return `<div style="margin-left:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;color:var(--txt3)">${entries.length} minggu tercatat &middot; terbaru: ${trkFmtWeek(entries[0]?.week_start)}</div>
+      ${addBtn}
+    </div>
+    ${cards}
+  </div>`;
+}
+
+// ── TRACKER MODAL ────────────────────────────────
+function trkOpenAdd(catId){
+  trkEditEntry = null;
+  const defaultCat = catId || trkActiveCat || 'ads';
+  document.getElementById('trk-modal-title').textContent = 'Tambah Entry Baru';
+  document.getElementById('trk-modal-body').innerHTML = trkFormHtml({
+    category: defaultCat==='ringkasan'?'ads':defaultCat,
+    week_start: trkThisMonday(), status:'none', initiatives:[], next_plan:''
+  });
+  document.getElementById('trk-overlay').style.display='flex';
+}
+
+function trkOpenEdit(entryId){
+  const e = trkData.find(x=>x.id===entryId);
+  if(!e) return;
+  trkEditEntry = e;
+  document.getElementById('trk-modal-title').textContent = `Edit — ${TRK_CATS.find(c=>c.id===e.category)?.label||e.category} (${trkFmtWeek(e.week_start)})`;
+  document.getElementById('trk-modal-body').innerHTML = trkFormHtml(e);
+  document.getElementById('trk-overlay').style.display='flex';
+}
+
+function trkCloseModal(){
+  document.getElementById('trk-overlay').style.display='none';
+  trkEditEntry=null;
+}
+
+function trkFormHtml(e){
+  const inits = (e.initiatives||[]).filter(x=>!x.is_backlog);
+  const backlog=(e.initiatives||[]).filter(x=>x.is_backlog);
+  const sel=(v,opts)=>opts.map(o=>`<option value="${o.id}"${o.id===v?' selected':''}>${o.label}</option>`).join('');
+  const fld=(label,content)=>`<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--txt3);display:block;margin-bottom:4px">${label}</label>${content}</div>`;
+  const inp=(name,val,ph='')=>`<input name="${name}" value="${(val||'').replace(/"/g,'&quot;')}" placeholder="${ph}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)">`;
+  const ta=(name,val,ph='')=>`<textarea name="${name}" placeholder="${ph}" rows="2" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface);resize:vertical">${val||''}</textarea>`;
+  const statusOpts=[{id:'none',label:'Belum Ada Hasil'},{id:'ok',label:'Berhasil'},{id:'bad',label:'Gagal'},{id:'progress',label:'Sedang Berjalan'}];
+  const catOpts=TRK_CATS.map(c=>({id:c.id,label:c.label}));
+  const initBlock = inits.map((ini,i)=>`
+    <div class="trk-ini" data-idx="${i}" style="background:var(--bg2,#f5f5f5);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:var(--txt3)">Inisiatif ${i+1}</span>
+        <button type="button" onclick="this.closest('.trk-ini').remove()" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--txt3)">✕</button>
+      </div>
+      ${fld('Nama Inisiatif',inp(`ini_name_${i}`,ini.name,'contoh: Broadcast WA ke member'))}
+      ${fld('Status',`<select name="ini_status_${i}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)">${sel(ini.status||'progress',statusOpts)}</select>`)}
+      ${fld('Metrik & Nilai',inp(`ini_metric_${i}`,ini.metric,'contoh: Member Growth +10%'))}
+      ${fld('Learnings',ta(`ini_learning_${i}`,ini.learning,'Apa yang dipelajari minggu ini?'))}
+      ${fld('Next',inp(`ini_next_${i}`,ini.next,'Apa langkah selanjutnya?'))}
+    </div>`).join('');
+  const backlogBlock = backlog.map((b,i)=>`
+    <div class="trk-bl" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+      <input name="bl_${i}" value="${(b.name||'').replace(/"/g,'&quot;')}" placeholder="Nama ide backlog" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;color:var(--txt);background:var(--surface)">
+      <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--txt3)">✕</button>
+    </div>`).join('');
+  const editCat = trkEditEntry ? `<div style="font-size:12px;color:var(--txt2);margin-bottom:12px">Kategori: <strong>${TRK_CATS.find(c=>c.id===e.category)?.label||e.category}</strong> &nbsp;|&nbsp; Minggu: <strong>${trkFmtWeek(e.week_start)}</strong></div>` : '';
+  const newFields = trkEditEntry ? '' : `
+    ${fld('Kategori',`<select name="trk_cat" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)">${sel(e.category,catOpts)}</select>`)}
+    ${fld('Tanggal Mulai Minggu (Senin)',inp('trk_week_start',e.week_start))}
+  `;
+  return `<form id="trk-form" onsubmit="return false">
+    ${editCat}${newFields}
+    ${fld('Status Minggu Ini',`<select name="trk_status" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)">${sel(e.status,statusOpts)}</select>`)}
+    <div style="margin-bottom:10px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--txt3);display:block;margin-bottom:6px">Inisiatif Yang Dijalankan</label>
+      <div id="trk-ini-list">${initBlock}</div>
+      <button type="button" onclick="trkAddIni()" style="font-size:11.5px;color:var(--brand);font-weight:600;background:var(--brand-lt);border:none;border-radius:7px;padding:5px 12px;cursor:pointer;margin-top:4px">+ Tambah Inisiatif</button>
+    </div>
+    ${fld('Rencana Minggu Depan',inp('trk_next_plan',e.next_plan,'Apa yang akan dicoba minggu depan?'))}
+    <div style="margin-top:4px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--txt3);display:block;margin-bottom:6px">Backlog Ide (Belum Dijalankan)</label>
+      <div id="trk-bl-list">${backlogBlock}</div>
+      <button type="button" onclick="trkAddBacklog()" style="font-size:11.5px;color:var(--txt3);font-weight:600;background:none;border:1px solid var(--border);border-radius:7px;padding:5px 12px;cursor:pointer;margin-top:4px">+ Tambah Ide Backlog</button>
+    </div>
+  </form>`;
+}
+
+let _trkIniCount=0;
+function trkAddIni(){
+  _trkIniCount++;
+  const i=document.querySelectorAll('.trk-ini').length;
+  const div=document.createElement('div');
+  div.className='trk-ini';
+  div.dataset.idx=i;
+  div.style.cssText='background:var(--bg2,#f5f5f5);border-radius:10px;padding:10px 12px;margin-bottom:8px';
+  div.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:var(--txt3)">Inisiatif ${i+1}</span><button type="button" onclick="this.closest('.trk-ini').remove()" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--txt3)">✕</button></div>
+  <div style="margin-bottom:8px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--txt3);display:block;margin-bottom:3px">Nama Inisiatif</label><input name="ini_name_${i}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)"></div>
+  <div style="margin-bottom:8px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--txt3);display:block;margin-bottom:3px">Status</label><select name="ini_status_${i}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)"><option value="progress">Sedang Berjalan</option><option value="ok">Berhasil</option><option value="bad">Gagal</option><option value="none">Belum Ada Hasil</option></select></div>
+  <div style="margin-bottom:8px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--txt3);display:block;margin-bottom:3px">Metrik & Nilai</label><input name="ini_metric_${i}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)"></div>
+  <div style="margin-bottom:8px"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--txt3);display:block;margin-bottom:3px">Learnings</label><textarea name="ini_learning_${i}" rows="2" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface);resize:vertical"></textarea></div>
+  <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--txt3);display:block;margin-bottom:3px">Next</label><input name="ini_next_${i}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)"></div>`;
+  document.getElementById('trk-ini-list').appendChild(div);
+}
+
+function trkAddBacklog(){
+  const i=document.querySelectorAll('.trk-bl').length;
+  const div=document.createElement('div');
+  div.className='trk-bl';
+  div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  div.innerHTML=`<input name="bl_${i}" placeholder="Nama ide backlog" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;color:var(--txt);background:var(--surface)"><button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--txt3)">✕</button>`;
+  document.getElementById('trk-bl-list').appendChild(div);
+}
+
+function trkCollectForm(){
+  const f = document.getElementById('trk-form');
+  if(!f) return null;
+  const g = n=>{ const el=f.querySelector(`[name="${n}"]`); return el?el.value.trim():''; };
+  const status = g('trk_status')||'none';
+  const next_plan = g('trk_next_plan');
+  const inis=[]; f.querySelectorAll('.trk-ini').forEach((div,i)=>{
+    const name=div.querySelector(`[name^="ini_name_"]`)?.value?.trim()||'';
+    if(!name) return;
+    inis.push({
+      name,
+      status: div.querySelector(`[name^="ini_status_"]`)?.value||'progress',
+      metric: div.querySelector(`[name^="ini_metric_"]`)?.value?.trim()||'',
+      learning: div.querySelector(`[name^="ini_learning_"]`)?.value?.trim()||'',
+      next: div.querySelector(`[name^="ini_next_"]`)?.value?.trim()||'',
+      is_backlog: false,
+    });
+  });
+  f.querySelectorAll('.trk-bl').forEach(div=>{
+    const inp=div.querySelector('input'); const name=inp?.value?.trim()||'';
+    if(name) inis.push({name,is_backlog:true});
+  });
+  return {status, next_plan, initiatives: inis};
+}
+
+async function trkSave(){
+  const btn = document.getElementById('trk-modal-save');
+  btn.disabled=true; btn.textContent='Menyimpan...';
+  try {
+    const collected = trkCollectForm();
+    if(!collected){btn.disabled=false;btn.textContent='Simpan';return;}
+    if(trkEditEntry){
+      const payload = {...collected, id: trkEditEntry.id};
+      const res = await apiFetch('/api/learnings-tracker',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const j = await res.json();
+      if(j.status!=='ok') throw new Error(j.error||'Gagal update');
+    } else {
+      const f=document.getElementById('trk-form');
+      const cat=f.querySelector('[name="trk_cat"]')?.value;
+      const ws=f.querySelector('[name="trk_week_start"]')?.value;
+      if(!cat||!ws){alert('Kategori dan tanggal wajib diisi');btn.disabled=false;btn.textContent='Simpan';return;}
+      const payload={...collected,category:cat,week_start:ws};
+      const res=await apiFetch('/api/learnings-tracker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const j=await res.json();
+      if(j.status!=='ok') throw new Error(j.error||'Gagal simpan');
+    }
+    trkCloseModal();
+    loadTracker();
+  } catch(e){
+    alert('Error: '+e.message);
+  } finally {
+    btn.disabled=false; btn.textContent='Simpan';
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── HOME ──────────────────────────────────────────
 function renderHome() {
@@ -5876,12 +6243,13 @@ async function apiFetch(url, options = {}) {
 }
 
 const ROLE_PAGES = {
-  owner:      ['home','operations','revenue','programs','marketing','members','intelligence'],
-  superadmin: ['operations','programs','members','intelligence'],
+  owner:      ['home','operations','revenue','programs','marketing','members','intelligence','tracker'],
+  superadmin: ['operations','programs','members','intelligence','tracker'],
   admin:      ['operations','programs'],
 };
 
 function applyRole(role, email) {
+  window.currentUserRole = role; // used by tracker & other role-gated UI
   const allowed = ROLE_PAGES[role] || ROLE_PAGES['admin'];
   document.querySelectorAll('.nav-item[data-page]').forEach(el => {
     el.style.display = allowed.includes(el.dataset.page) ? '' : 'none';
