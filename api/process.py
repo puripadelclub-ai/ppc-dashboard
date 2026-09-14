@@ -2253,11 +2253,13 @@ def post_learnings_tracker():
             return jsonify({"status":"error","error":"week_start wajib"}), 400
 
         row = {
-            "category":   cat,
-            "week_start": ws,
+            "category":    cat,
+            "week_start":  ws,
+            "period_end":  body.get("period_end") or None,
+            "is_ongoing":  bool(body.get("is_ongoing", False)),
             "initiatives": body.get("initiatives", []),
-            "next_plan":  str(body.get("next_plan","")).strip(),
-            "status":     str(body.get("status","none")).lower(),
+            "next_plan":   str(body.get("next_plan","")).strip(),
+            "status":      str(body.get("status","none")).lower(),
         }
         from lib.supabase_client import upsert as _sb_upsert
         res = _sb_upsert("tracker_entries", [row], on_conflict="category,week_start")
@@ -2289,7 +2291,7 @@ def patch_learnings_tracker():
             "Prefer": "return=representation",
         }
         patch_body = {}
-        for field in ("initiatives","next_plan","status"):
+        for field in ("initiatives","next_plan","status","period_end","is_ongoing"):
             if field in body:
                 patch_body[field] = body[field]
         if not patch_body:

@@ -2147,18 +2147,32 @@ function trkChip(status,label){
   return `<span style="font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:${c.bg};color:${c.tx};white-space:nowrap">${l}</span>`;
 }
 
-function trkFmtWeek(ws){
-  if(!ws) return '';
-  const d = new Date(ws+'T00:00:00');
-  const end = new Date(d); end.setDate(end.getDate()+6);
+function trkFmtDate(ds){
+  if(!ds) return '';
+  const d = new Date(ds+'T00:00:00');
   const m=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-  return `${d.getDate()} ${m[d.getMonth()]} – ${end.getDate()} ${m[end.getMonth()]} ${end.getFullYear()}`;
+  return `${d.getDate()} ${m[d.getMonth()]} ${d.getFullYear()}`;
 }
+
+function trkFmtPeriod(entry){
+  const start = trkFmtDate(entry.week_start);
+  if(entry.is_ongoing) return `${start} – sekarang`;
+  if(entry.period_end) return `${start} – ${trkFmtDate(entry.period_end)}`;
+  return start;
+}
+
+// alias lama agar kode lain tidak error
+function trkFmtWeek(ws){ return trkFmtDate(ws); }
 
 function trkThisMonday(){
   const d=new Date(); const day=d.getDay(); const diff=d.getDate()-(day===0?6:day-1);
   const m=new Date(d.setDate(diff));
   return `${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}-${String(m.getDate()).padStart(2,'0')}`;
+}
+
+function trkToday(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 async function loadTracker(){
@@ -2223,12 +2237,12 @@ function trkRenderRingkasan(canEdit){
         ${latest ? `
           <div style="display:flex;flex-direction:column;gap:6px">
             ${prev ? `<div style="background:var(--bg2,#f5f5f5);border-radius:9px;padding:7px 10px">
-              <div style="font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${trkFmtWeek(prev.week_start)}</div>
+              <div style="font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${trkFmtPeriod(prev)}</div>
               <div style="font-size:12px;color:var(--txt2)">${(prev.initiatives||[]).filter(i=>!i.is_backlog).map(i=>i.name).join(', ')||'—'}</div>
               ${(prev.initiatives||[]).filter(i=>!i.is_backlog)[0]?.learning?`<div style="font-size:11px;color:var(--txt3);margin-top:2px">${(prev.initiatives||[]).filter(i=>!i.is_backlog)[0].learning}</div>`:''}
             </div>`:''}
             <div style="background:var(--bg2,#f5f5f5);border-radius:9px;padding:7px 10px">
-              <div style="font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${trkFmtWeek(latest.week_start)}</div>
+              <div style="font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${trkFmtPeriod(latest)}</div>
               <div style="font-size:12px;font-weight:600;color:var(--txt)">${(latest.initiatives||[]).filter(i=>!i.is_backlog).map(i=>i.name).join(', ')||'—'}</div>
               ${(latest.initiatives||[]).filter(i=>!i.is_backlog)[0]?.learning?`<div style="font-size:11px;color:var(--txt2);margin-top:2px">${(latest.initiatives||[]).filter(i=>!i.is_backlog)[0].learning}</div>`:''}
             </div>
@@ -2260,7 +2274,7 @@ function trkRenderDetail(catId, canEdit){
     const editBtn= canEdit?`<button onclick="trkOpenEdit('${e.id}')" style="font-size:11px;color:var(--txt3);background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer">Edit</button>`:'';
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:14px;position:relative;margin-left:19px;border-left:3px solid ${i===0?'var(--brand)':'var(--border)'}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <span style="font-size:12px;font-weight:500;color:var(--txt2)">${trkFmtWeek(e.week_start)}</span>
+        <span style="font-size:12px;font-weight:500;color:var(--txt2)">${trkFmtPeriod(e)}</span>
         <div style="display:flex;gap:6px;align-items:center">${trkChip(e.status)} ${editBtn}</div>
       </div>
       ${inits.length===0?`<div style="font-size:12px;color:var(--txt3);font-style:italic">Belum ada inisiatif dicatat minggu ini.</div>`:
@@ -2285,7 +2299,7 @@ function trkRenderDetail(catId, canEdit){
   }).join('');
   return `<div style="margin-left:0">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <div style="font-size:12px;color:var(--txt3)">${entries.length} minggu tercatat &middot; terbaru: ${trkFmtWeek(entries[0]?.week_start)}</div>
+      <div style="font-size:12px;color:var(--txt3)">${entries.length} minggu tercatat &middot; terbaru: ${entries[0]?trkFmtPeriod(entries[0]):''}</div>
       ${addBtn}
     </div>
     ${cards}
@@ -2308,7 +2322,7 @@ function trkOpenEdit(entryId){
   const e = trkData.find(x=>x.id===entryId);
   if(!e) return;
   trkEditEntry = e;
-  document.getElementById('trk-modal-title').textContent = `Edit — ${TRK_CATS.find(c=>c.id===e.category)?.label||e.category} (${trkFmtWeek(e.week_start)})`;
+  document.getElementById('trk-modal-title').textContent = `Edit — ${TRK_CATS.find(c=>c.id===e.category)?.label||e.category} (${trkFmtPeriod(e)})`;
   document.getElementById('trk-modal-body').innerHTML = trkFormHtml(e);
   document.getElementById('trk-overlay').style.display='flex';
 }
@@ -2344,10 +2358,22 @@ function trkFormHtml(e){
       <input name="bl_${i}" value="${(b.name||'').replace(/"/g,'&quot;')}" placeholder="Nama ide backlog" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;color:var(--txt);background:var(--surface)">
       <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--txt3)">✕</button>
     </div>`).join('');
-  const editCat = trkEditEntry ? `<div style="font-size:12px;color:var(--txt2);margin-bottom:12px">Kategori: <strong>${TRK_CATS.find(c=>c.id===e.category)?.label||e.category}</strong> &nbsp;|&nbsp; Minggu: <strong>${trkFmtWeek(e.week_start)}</strong></div>` : '';
-  const newFields = trkEditEntry ? '' : `
+  const editCat = trkEditEntry ? `<div style="font-size:12px;color:var(--txt2);margin-bottom:12px">Kategori: <strong>${TRK_CATS.find(c=>c.id===e.category)?.label||e.category}</strong> &nbsp;|&nbsp; Periode: <strong>${trkFmtPeriod(e)}</strong></div>` : '';
+  const periodFields = `
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--txt3);display:block;margin-bottom:6px">Periode</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+        <div><label style="font-size:10px;color:var(--txt3);display:block;margin-bottom:3px">Tanggal Mulai</label><input name="trk_week_start" type="date" value="${e.week_start||trkToday()}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)"></div>
+        <div id="trk-end-wrap" style="${e.is_ongoing?'opacity:.35;pointer-events:none':''}" ><label style="font-size:10px;color:var(--txt3);display:block;margin-bottom:3px">Tanggal Selesai</label><input name="trk_period_end" type="date" value="${e.period_end||''}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--txt);cursor:pointer">
+        <input type="checkbox" name="trk_ongoing" id="trk-ongoing-chk" ${e.is_ongoing?'checked':''} onchange="document.getElementById('trk-end-wrap').style.opacity=this.checked?'.35':'1';document.getElementById('trk-end-wrap').style.pointerEvents=this.checked?'none':'auto'" style="width:15px;height:15px;accent-color:var(--brand)">
+        Masih Berjalan
+      </label>
+    </div>`;
+  const newFields = trkEditEntry ? periodFields : `
     ${fld('Kategori',`<select name="trk_cat" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--txt);background:var(--surface)">${sel(e.category,catOpts)}</select>`)}
-    ${fld('Tanggal Mulai Minggu (Senin)',inp('trk_week_start',e.week_start))}
+    ${periodFields}
   `;
   return `<form id="trk-form" onsubmit="return false">
     ${editCat}${newFields}
@@ -2396,8 +2422,10 @@ function trkCollectForm(){
   const f = document.getElementById('trk-form');
   if(!f) return null;
   const g = n=>{ const el=f.querySelector(`[name="${n}"]`); return el?el.value.trim():''; };
-  const status = g('trk_status')||'none';
+  const status    = g('trk_status')||'none';
   const next_plan = g('trk_next_plan');
+  const is_ongoing = f.querySelector('[name="trk_ongoing"]')?.checked || false;
+  const period_end = is_ongoing ? null : (g('trk_period_end')||null);
   const inis=[]; f.querySelectorAll('.trk-ini').forEach((div,i)=>{
     const name=div.querySelector(`[name^="ini_name_"]`)?.value?.trim()||'';
     if(!name) return;
@@ -2414,7 +2442,7 @@ function trkCollectForm(){
     const inp=div.querySelector('input'); const name=inp?.value?.trim()||'';
     if(name) inis.push({name,is_backlog:true});
   });
-  return {status, next_plan, initiatives: inis};
+  return {status, next_plan, initiatives: inis, is_ongoing, period_end};
 }
 
 async function trkSave(){
@@ -2432,7 +2460,7 @@ async function trkSave(){
       const f=document.getElementById('trk-form');
       const cat=f.querySelector('[name="trk_cat"]')?.value;
       const ws=f.querySelector('[name="trk_week_start"]')?.value;
-      if(!cat||!ws){alert('Kategori dan tanggal wajib diisi');btn.disabled=false;btn.textContent='Simpan';return;}
+      if(!cat||!ws){alert('Kategori dan tanggal mulai wajib diisi');btn.disabled=false;btn.textContent='Simpan';return;}
       const payload={...collected,category:cat,week_start:ws};
       const res=await apiFetch('/api/learnings-tracker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const j=await res.json();
