@@ -132,6 +132,7 @@ def sync_programs_coaching():
     Terpisah dari /api/process agar tidak timeout di ujung pipeline.
     """
     log = []
+    BATCH = 200
     try:
         from programs_client import read_and_parse_programs
         from coaching_client import read_and_parse_coaching_sessions
@@ -146,7 +147,6 @@ def sync_programs_coaching():
         try:
             cp_rows = read_and_parse_programs()
             cp_total = 0
-            BATCH = 200
             for i in range(0, len(cp_rows), BATCH):
                 res = upsert_programs(cp_rows[i:i + BATCH])
                 cp_total += res.get("inserted", 0)
