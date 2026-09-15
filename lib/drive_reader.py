@@ -127,11 +127,16 @@ def read_sales_from_drive():
 
 
 def _fetch_sheet_tab(sheet_id, gid, label):
-    """Baca satu tab dari Google Sheet via CSV export."""
+    """
+    Baca satu tab dari Google Sheet via CSV export.
+    dtype=str mencegah pandas menebak kolom seperti Phone Number sebagai float
+    (mis. "81573064789" jadi "81573064789.0") saat kebetulan semua nilai di
+    tab itu terlihat numerik — muncul di tab kecil seperti "Membership Student".
+    """
     csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
     resp = requests.get(csv_url, timeout=30)
     resp.raise_for_status()
-    df = pd.read_csv(io.StringIO(resp.text), header=0)
+    df = pd.read_csv(io.StringIO(resp.text), header=0, dtype=str)
     df.columns = df.columns.str.strip()
     df["Sheet Tab"] = label
     return df

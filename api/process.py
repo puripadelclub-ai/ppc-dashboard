@@ -266,24 +266,15 @@ def sync_members():
     Dipanggil oleh Vercel Cron (setiap 4 jam) agar count member selalu up-to-date
     tanpa menunggu full ESB pipeline.
     """
-    import re as _re, io as _io
-    import requests as _req
+    import re as _re
     import pandas as _pd
 
     log = []
     try:
         from supabase_client import upsert_members, log_start as _ls, log_complete as _lc
 
-        SHEET_ID = os.environ.get("MEMBERSHIP_SHEET_ID")
-        if not SHEET_ID:
-            raise RuntimeError("MEMBERSHIP_SHEET_ID env var belum diset")
-        csv_url  = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
-        resp = _req.get(csv_url, timeout=30)
-        resp.raise_for_status()
-
-        df = _pd.read_csv(_io.StringIO(resp.text), header=0)
-        df.columns = df.columns.str.strip()
-        df = df.dropna(how="all")
+        # Gabungan tab "Membership" + "Membership Student" (lihat read_membership_from_drive()).
+        df = read_membership_from_drive()
 
         def _norm(raw):
             if not raw: return None
@@ -1780,26 +1771,16 @@ def run_pipeline():
     # ── 9. SUPABASE SYNC: MEMBERS (business profile) ──────────────
     log.append("Syncing member profiles to Supabase members table...")
     try:
-        import re as _re, io as _io
-        import requests as _req_mem
+        import re as _re
 
         from supabase_client import (
             upsert_members, log_start as _ls_m, log_complete as _lc_m,
         )
 
-        SHEET_ID_MEM = os.environ.get("MEMBERSHIP_SHEET_ID")
-        if not SHEET_ID_MEM:
-            raise RuntimeError("MEMBERSHIP_SHEET_ID env var belum diset")
-        csv_url = (
-            f"https://docs.google.com/spreadsheets/d/{SHEET_ID_MEM}"
-            f"/export?format=csv&gid=0"
-        )
-        resp_m = _req_mem.get(csv_url, timeout=30)
-        resp_m.raise_for_status()
-
-        df_sheet = pd.read_csv(_io.StringIO(resp_m.text), header=0)
-        df_sheet.columns = df_sheet.columns.str.strip()
-        df_sheet = df_sheet.dropna(how="all")
+        # Reuse df_mem yang sudah dibaca di step 1 (gabungan tab Membership +
+        # Membership Student, lihat read_membership_from_drive()) — hindari
+        # fetch ulang & hindari sumber terpisah yang bisa beda-beda tab.
+        df_sheet = df_mem
 
         def _norm_phone(raw) -> str | None:
             if not raw:
