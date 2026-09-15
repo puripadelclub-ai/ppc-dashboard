@@ -3875,7 +3875,7 @@ function renderMembers() {
   const bmUsers = prefs.filter(p=>sf(p.AVM_BM_30d||0)>=1||sf(p.Sess_BM||0)>=1).length;
   const coachUsers = prefs.filter(p=>sf(p.AVM_Coaching_30d||0)>=1||sf(p.Sess_Coaching||0)>=1).length;
   document.getElementById('mem-kpi-row').innerHTML = `
-    <div class="kpi"><div class="kpi-lbl">Total Member${ii('total-member')}</div><div class="kpi-val" id="mem-total-kpi">${fN(si(s.total_members)||0)}</div><div class="kpi-d">${fN(si(s.matched))} matched POS</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Member${ii('total-member')}</div><div class="kpi-val" id="mem-total-kpi">${fN(si(s.total_members)||0)}</div><div class="kpi-d"></div></div>
     <div class="kpi"><div class="kpi-lbl">Avg CLV 6 Bulan${ii('avg-clv')}</div><div class="kpi-val">${fIDR(si(s.avg_clv_moderate||0))}</div><div class="kpi-d">Moderate estimate</div></div>
   `;
 
