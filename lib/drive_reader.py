@@ -6,6 +6,7 @@ import io
 import os
 import json
 import pandas as pd
+import requests
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2.service_account import Credentials
@@ -126,16 +127,20 @@ def read_sales_from_drive():
 
 
 def read_membership_from_drive():
-    """Baca file Membership List terbaru dari Drive."""
-    folder_id = os.environ.get("DRIVE_FOLDER_ID")
-    drive_service = get_drive_service()
+    """
+    Baca Membership List langsung dari Google Sheet admin (MEMBERSHIP_SHEET_ID) via CSV export.
+    Sumber yang sama persis dengan sync_members() di api/process.py — bukan lagi
+    file Excel snapshot manual di Drive folder, yang basi (tidak ikut ter-update).
+    """
+    SHEET_ID = os.environ.get("MEMBERSHIP_SHEET_ID")
+    if not SHEET_ID:
+        raise RuntimeError("MEMBERSHIP_SHEET_ID env var belum diset")
+    csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+    resp = requests.get(csv_url, timeout=30)
+    resp.raise_for_status()
 
-    file_meta = get_latest_file(drive_service, folder_id, "Membership List")
-    if not file_meta:
-        raise FileNotFoundError("Tidak ada file Membership List di Drive folder")
-
-    buf = download_excel_from_drive(file_meta["id"])
-    df = pd.read_excel(buf, sheet_name="Sheet1")
+    df = pd.read_csv(io.StringIO(resp.text), header=0)
+    df.columns = df.columns.str.strip()
     df["name_clean"] = df["Member Name"].str.lower().str.strip()
     df["Kode ads"] = df["Kode ads"].fillna("").str.strip()
     return df

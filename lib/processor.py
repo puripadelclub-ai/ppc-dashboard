@@ -78,10 +78,21 @@ def normalize_kode(kode):
 # 2. MEMBER MATCHING
 # ─────────────────────────────────────────────
 
+def _norm_member_code(code):
+    """Strip + uppercase Member Code untuk join key. Kosong/NaN → NA (tidak match apapun)."""
+    if pd.isna(code):
+        return pd.NA
+    s = str(code).strip().upper()
+    return s if s else pd.NA
+
+
 def match_members_to_sales(df_mem, df_sales):
     """
-    Match Membership List ke POS Sales via name_clean.
-    Deduplikasi member dengan nama sama (multiple loyalty codes).
+    Match Membership List ke POS Sales via Member Code (bukan nama — rawan salah ejaan).
+    Member yang Member Code-nya masih kosong (belum di-backfill di sheet) sengaja
+    dibiarkan unmatched (NaN) alih-alih fallback ke name_clean, supaya gap backfill
+    kelihatan jelas bukan malah ketutupan match-by-nama yang rawan salah.
+    Deduplikasi member dengan Member Code sama (multiple loyalty codes).
     """
     # Sales per loyalty code
     df_sl = df_sales[df_sales["Loyalty Member Code"].notna()].copy()
@@ -95,14 +106,16 @@ def match_members_to_sales(df_mem, df_sales):
         first_visit  = ("Sales Date", "min"),
         last_visit   = ("Sales Date", "max"),
     ).reset_index()
+    sales_agg["member_code_norm"] = sales_agg["Loyalty Member Code"].apply(_norm_member_code)
 
     # Membership — normalize
     df_mem = df_mem.copy()
     df_mem["Kode_norm"]   = df_mem["Kode ads"].apply(normalize_kode)
     df_mem["Source Type"] = df_mem["Kode ads"].apply(classify_source)
     df_mem["name_clean"]  = df_mem["name_clean"].fillna("")
+    df_mem["member_code_norm"] = df_mem["Member Code"].apply(_norm_member_code)
 
-    # Merge via name_clean
+    # Merge via member_code_norm (member tanpa kode → NA, tidak match apapun)
     merged = df_mem.merge(
         sales_agg.rename(columns={
             "Loyalty Member Code": "Loyalty_Code",
@@ -110,14 +123,14 @@ def match_members_to_sales(df_mem, df_sales):
             "total_bills": "total_bills_raw",
             "first_visit": "first_visit_raw",
             "last_visit": "last_visit_raw",
-        }),
-        on="name_clean",
+        }).drop(columns=["name_clean"]),
+        on="member_code_norm",
         how="left",
     )
 
-    # Deduplikasi: member dengan nama sama → aggregate
-    grp_cols = ["No", "Member Name", "Kode ads", "Source Type", "Join Date",
-                "Phone Number", "name_clean", "Kode_norm"]
+    # Deduplikasi: member dengan Member Code sama → aggregate
+    grp_cols = ["No", "Member Name", "Member Code", "member_code_norm", "Kode ads",
+                "Source Type", "Join Date", "Phone Number", "name_clean", "Kode_norm"]
     grp_cols = [c for c in grp_cols if c in merged.columns]
 
     fd = merged.groupby(grp_cols, dropna=False).agg(
