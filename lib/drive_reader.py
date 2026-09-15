@@ -126,21 +126,41 @@ def read_sales_from_drive():
     return df, file_meta["name"]
 
 
+def _fetch_sheet_tab(sheet_id, gid, label):
+    """Baca satu tab dari Google Sheet via CSV export."""
+    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+    resp = requests.get(csv_url, timeout=30)
+    resp.raise_for_status()
+    df = pd.read_csv(io.StringIO(resp.text), header=0)
+    df.columns = df.columns.str.strip()
+    df["Sheet Tab"] = label
+    return df
+
+
 def read_membership_from_drive():
     """
     Baca Membership List langsung dari Google Sheet admin (MEMBERSHIP_SHEET_ID) via CSV export.
-    Sumber yang sama persis dengan sync_members() di api/process.py — bukan lagi
-    file Excel snapshot manual di Drive folder, yang basi (tidak ikut ter-update).
+    Gabungan dari 2 tab:
+      - "Membership" (gid=0) — tab utama, wajib ada.
+      - "Membership Student" (gid=1561935041) — program terpisah untuk member student,
+        opsional: kalau gagal dibaca, di-skip dengan warning, tidak menggagalkan seluruh sync.
+    Sumber yang sama persis dengan sync_members() di api/process.py untuk tab utama —
+    bukan lagi file Excel snapshot manual di Drive folder, yang basi (tidak ikut ter-update).
     """
     SHEET_ID = os.environ.get("MEMBERSHIP_SHEET_ID")
     if not SHEET_ID:
         raise RuntimeError("MEMBERSHIP_SHEET_ID env var belum diset")
-    csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
-    resp = requests.get(csv_url, timeout=30)
-    resp.raise_for_status()
 
-    df = pd.read_csv(io.StringIO(resp.text), header=0)
-    df.columns = df.columns.str.strip()
+    df_main = _fetch_sheet_tab(SHEET_ID, 0, "Membership")
+
+    try:
+        df_student = _fetch_sheet_tab(SHEET_ID, 1561935041, "Membership Student")
+    except Exception as e:
+        print(f"WARNING: gagal baca tab Membership Student ({e}), lanjut tanpa tab ini")
+        df_student = None
+
+    df = pd.concat([df_main, df_student], ignore_index=True, sort=False) if df_student is not None else df_main
+
     df["name_clean"] = df["Member Name"].str.lower().str.strip()
     df["Kode ads"] = df["Kode ads"].fillna("").str.strip()
     return df
