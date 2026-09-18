@@ -371,8 +371,8 @@ def upsert_members(rows: list[dict]) -> dict:
     return upsert("members", rows, on_conflict="phone")
 
 
-def upsert_daily_summary(row: dict) -> dict:
-    return upsert("daily_summaries", [row], on_conflict="summary_date")
+def upsert_daily_summaries(rows: list[dict]) -> dict:
+    return upsert("daily_summaries", rows, on_conflict="summary_date")
 
 
 def upsert_programs(rows: list[dict]) -> dict:

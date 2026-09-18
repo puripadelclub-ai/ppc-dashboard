@@ -1583,7 +1583,7 @@ def run_pipeline():
             # ── Supabase sync: bookings + daily_summaries ──────────────────
             try:
                 from supabase_client import (
-                    upsert_bookings, upsert_daily_summary,
+                    upsert_bookings, upsert_daily_summaries,
                     log_start, log_complete,
                 )
                 sb_log_id = log_start(
@@ -1627,10 +1627,12 @@ def run_pipeline():
                 booking_rows = list(seen_ids.values())
                 res_b = upsert_bookings(booking_rows) if booking_rows else {"inserted": 0, "error": None}
 
-                # Upsert daily_summaries from avm_summary
-                ds_inserted = 0
+                # Upsert daily_summaries from avm_summary — satu request untuk semua
+                # hari; dulu 1 request per hari (~117x) dan makan ~70 detik karena
+                # tiap request dari Vercel iad1 ke Supabase Singapura ~0,6 detik.
+                ds_rows = []
                 for _, s in df_avm_summary.iterrows():
-                    row = {
+                    ds_rows.append({
                         "summary_date":          str(s["date"]),
                         "total_bookings":         int(s.get("total_bookings", 0)),
                         "regular_bookings":        int(s.get("regular_bookings", 0)),
@@ -1643,10 +1645,13 @@ def run_pipeline():
                         "morning_occ_pct":         float(s.get("Morning Occ %", 0)),
                         "afternoon_occ_pct":       float(s.get("Afternoon Occ %", 0)),
                         "evening_occ_pct":         float(s.get("Evening Occ %", 0)),
-                    }
-                    res = upsert_daily_summary(row)
-                    if res.get("inserted"):
-                        ds_inserted += 1
+                    })
+                res_ds = upsert_daily_summaries(ds_rows)
+                ds_inserted = res_ds.get("inserted", 0)
+                if res_ds.get("error"):
+                    # Satu hari yang rusak jangan sampai menggagalkan semua hari
+                    log.append(f"  ⚠️ daily_summaries batch gagal, ulang per hari: {str(res_ds['error'])[:120]}")
+                    ds_inserted = sum(upsert_daily_summaries([r]).get("inserted", 0) for r in ds_rows)
 
                 log_complete(sb_log_id, "success", {
                     "rows_fetched":  len(booking_rows),
