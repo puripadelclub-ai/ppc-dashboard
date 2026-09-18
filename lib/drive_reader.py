@@ -136,28 +136,42 @@ def _latest_sales_file():
     raise FileNotFoundError("Tidak ada file Sales di Drive folder maupun Supabase Storage")
 
 
-def _sales_period_end(buf):
-    """Tanggal akhir baris 'Period' di header file ESB (mis. '01-03-2026 - 17-09-2026')."""
-    head = pd.read_excel(buf, sheet_name="Report", header=None, nrows=10)
-    for row in head.itertuples(index=False):
+def read_esb_sales(buf):
+    """
+    Baca export ESB "Sales Recapitulation Detail Report" (sheet "Report").
+    Posisi baris header tidak tetap: export manual punya baris metadata "Branch"
+    (header di row index 10), export dari /api/fetch-esb tidak (row index 9).
+    Jadi header dicari = baris pertama yang berisi "Sales Date".
+    df.attrs["period_end"] = tanggal akhir baris "Period" (mis. "01-03-2026 - 17-09-2026").
+    """
+    head = pd.read_excel(buf, sheet_name="Report", header=None, nrows=30)
+    header_row, period_end = None, None
+    for i, row in enumerate(head.itertuples(index=False)):
         cells = [str(v).strip() for v in row if pd.notna(v)]
         if cells and cells[0] == "Period":
             m = re.search(r"(\d{2}-\d{2}-\d{4})$", " ".join(cells[1:]))
             if m:
-                return datetime.strptime(m.group(1), "%d-%m-%Y").date()
-    return None
+                period_end = datetime.strptime(m.group(1), "%d-%m-%Y").date()
+        if "Sales Date" in cells:
+            header_row = i
+            break
+    if header_row is None:
+        raise ValueError("Format file ESB berubah: baris header 'Sales Date' tidak ditemukan")
+
+    buf.seek(0)
+    df = pd.read_excel(buf, sheet_name="Report", header=header_row)
+    df.attrs["period_end"] = period_end
+    return df
 
 
 def read_sales_from_drive():
     """
     Baca file Sales terbaru (Supabase Storage atau Drive, lihat _latest_sales_file).
-    Header di row index 10 (sesuai format ESB Loop).
     df.attrs["period_end"] = tanggal akhir periode export, untuk cek data basi.
     """
     buf, filename = _latest_sales_file()
-    period_end = _sales_period_end(buf)
-    buf.seek(0)
-    df = pd.read_excel(buf, sheet_name="Report", header=10)
+    df = read_esb_sales(buf)
+    period_end = df.attrs["period_end"]
     df["Sales Date"] = pd.to_datetime(df["Sales Date"], errors="coerce")
     df["name_clean"] = df["Loyalty Member Name"].str.lower().str.strip()
     df.attrs["period_end"] = period_end
