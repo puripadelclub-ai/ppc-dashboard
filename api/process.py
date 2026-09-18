@@ -1910,7 +1910,7 @@ def run_pipeline():
     log.append("Syncing ESB transactions to Supabase transactions table...")
     try:
         from supabase_client import (
-            upsert_transactions, make_row_hash,
+            upsert_transactions, build_esb_transaction_rows,
             log_start as _ls_t, log_complete as _lc_t,
         )
 
@@ -1919,50 +1919,9 @@ def run_pipeline():
         log_id_t = _ls_t("ESB", "sync_transactions",
                           date_start=_date_min, date_end=_date_max)
 
-        # Helper: safe int conversion (handles NaN, None, empty string)
-        def _si(v, default=0) -> int:
-            try:
-                f = float(v)
-                return default if f != f else int(f)  # f!=f → NaN check
-            except Exception:
-                return default
-
-        # Map ESB columns — ESB "Sales Recapitulation" header baris 10
-        # Kolom kunci: Sales Date, Loyalty Member Name, Bill No,
-        #              Menu, Menu Category, Qty, Price, Total, Payment Method
-        seen_hashes: dict = {}
-        for _, r in df_sales.iterrows():
-            _sd_raw = r.get("Sales Date", "")
-            # Skip baris tanpa tanggal valid (NaT, NaN, None, blank)
-            if pd.isna(_sd_raw) or str(_sd_raw).lower() in ("nat", "nan", "none", ""):
-                continue
-            sale_date   = str(_sd_raw)[:10]
-            member_name = str(r.get("Loyalty Member Name", "") or "").strip()
-            product     = str(r.get("Menu",   "") or r.get("Product",  "") or "").strip()
-            category    = str(r.get("Menu Category", "") or r.get("Category", "") or "").strip()
-            bill_no     = str(r.get("Bill No", "") or r.get("Bill Number", "") or "").strip()
-            qty_raw     = r.get("Qty",  r.get("Quantity", 1))
-            price_raw   = r.get("Price", r.get("Unit Price", 0))
-            total_raw   = r.get("Total", r.get("Amount", r.get("Subtotal", 0)))
-            pay_method  = str(r.get("Payment Method", "") or r.get("Payment", "") or "").strip()
-
-            rh = make_row_hash(sale_date, bill_no, member_name, product, qty_raw, total_raw)
-            if rh in seen_hashes:
-                continue  # dedup within batch
-
-            seen_hashes[rh] = {
-                "row_hash":         rh,
-                "transaction_date": sale_date or None,  # kolom: transaction_date (NOT NULL)
-                "customer_name":    member_name or None, # kolom: customer_name
-                "product_name":     product or None,
-                "category":         category or None,
-                "gross_amount":     _si(total_raw, 0),  # kolom: gross_amount
-                "payment_method":   pay_method or None,
-                "source":           "ESB",
-                # TIDAK kirim: net_amount (generated column), qty, unit_price
-            }
-
-        tx_rows  = list(seen_hashes.values())
+        tx_rows, tx_dup = build_esb_transaction_rows(df_sales)
+        if tx_dup:
+            log.append(f"  ⚠️ {tx_dup} baris ESB punya row_hash kembar dan tidak disimpan")
         tx_total = 0
         tx_err   = None
         for i in range(0, len(tx_rows), 500):

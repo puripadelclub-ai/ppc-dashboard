@@ -184,6 +184,65 @@ def make_row_hash(*parts) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
+def build_esb_transaction_rows(df_sales) -> tuple[list[dict], int]:
+    """
+    Baris ESB "Sales Recapitulation Detail Report" → baris tabel transactions.
+    Return (rows, n_kembar). Baris dengan row_hash kembar dibuang karena satu
+    upsert tidak boleh berisi conflict key yang sama dua kali.
+
+    row_hash memuat Sales Number + Batch Order: satu bill bisa berisi item yang
+    persis sama di batch order berbeda (mis. 2x "225K COURT RENT SOFT OPENING"
+    di PPC01202605170013). Tanpa dua kolom itu baris kedua ikut terbuang.
+    Angka di-hash sebagai int supaya hash tidak berubah kalau pandas membaca
+    kolomnya sebagai float ("1.0") di satu file dan int ("1") di file lain.
+    """
+    import pandas as pd
+
+    def _si(v, default=0) -> int:
+        try:
+            f = float(v)
+            return default if f != f else int(f)  # f!=f → NaN check
+        except Exception:
+            return default
+
+    rows: dict = {}
+    n_dup = 0
+    for _, r in df_sales.iterrows():
+        _sd_raw = r.get("Sales Date", "")
+        # Skip baris tanpa tanggal valid (NaT, NaN, None, blank) — baris total di footer
+        if pd.isna(_sd_raw) or str(_sd_raw).lower() in ("nat", "nan", "none", ""):
+            continue
+        sale_date   = str(_sd_raw)[:10]
+        sales_no    = str(r.get("Sales Number", "") or "").strip()
+        batch_order = _si(r.get("Batch Order"), 0)
+        member_name = str(r.get("Loyalty Member Name", "") or "").strip()
+        product     = str(r.get("Menu",   "") or r.get("Product",  "") or "").strip()
+        category    = str(r.get("Menu Category", "") or r.get("Category", "") or "").strip()
+        bill_no     = str(r.get("Bill No", "") or r.get("Bill Number", "") or "").strip()
+        qty         = _si(r.get("Qty",  r.get("Quantity", 1)), 0)
+        total       = _si(r.get("Total", r.get("Amount", r.get("Subtotal", 0))), 0)
+        pay_method  = str(r.get("Payment Method", "") or r.get("Payment", "") or "").strip()
+
+        rh = make_row_hash(sale_date, sales_no, batch_order, bill_no,
+                           member_name, product, qty, total)
+        if rh in rows:
+            n_dup += 1
+            continue
+
+        rows[rh] = {
+            "row_hash":         rh,
+            "transaction_date": sale_date or None,
+            "customer_name":    member_name or None,
+            "product_name":     product or None,
+            "category":         category or None,
+            "gross_amount":     total,
+            "payment_method":   pay_method or None,
+            "source":           "ESB",
+            # TIDAK kirim: net_amount (generated column), qty, unit_price
+        }
+    return list(rows.values()), n_dup
+
+
 # ---------------------------------------------------------------------------
 # Campaign name parser (mirror dari dashboard.html extractOffer)
 # ---------------------------------------------------------------------------
