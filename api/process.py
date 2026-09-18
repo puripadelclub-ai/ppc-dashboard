@@ -426,7 +426,8 @@ def fetch_esb():
     /api/process (07:30 WIB) otomatis memakai file ini kalau lebih baru dari file di Drive.
 
     Dipanggil oleh Vercel Cron setiap pagi ~05:00 WIB (22:00 UTC).
-    Manual: ?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+    Manual: ?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD — disimpan di adhoc/,
+    BUKAN sales-recap/, supaya export parsial tidak dipakai pipeline.
     """
     import io
     from datetime import date, timedelta, timezone
@@ -448,7 +449,9 @@ def fetch_esb():
             raise ValueError("Format file ESB berubah: kolom 'Sales Date' tidak ditemukan")
         df = df[pd.to_datetime(df["Sales Date"], errors="coerce", dayfirst=True).notna()]
 
-        path = (f"{ESB_SALES_PREFIX}/sales_recap_{date_from:%Y%m%d}_{date_to:%Y%m%d}"
+        custom_range = bool(request.args.get("date_from") or request.args.get("date_to"))
+        prefix = "adhoc" if custom_range else ESB_SALES_PREFIX
+        path = (f"{prefix}/sales_recap_{date_from:%Y%m%d}_{date_to:%Y%m%d}"
                 f"_{now_wib:%Y%m%d%H%M%S}.xlsx")
         storage_upload(ESB_EXPORT_BUCKET, path, content)
 
