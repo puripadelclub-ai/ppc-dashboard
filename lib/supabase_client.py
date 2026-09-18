@@ -124,6 +124,57 @@ def log_complete(log_id: str, status: str, counts: dict = None, error: str = Non
 
 
 # ---------------------------------------------------------------------------
+# Storage: arsip file export mentah (ESB xlsx) di bucket privat
+# ---------------------------------------------------------------------------
+
+ESB_EXPORT_BUCKET = "esb-exports"
+ESB_SALES_PREFIX = "sales-recap"
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _storage_headers() -> dict:
+    return {"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"}
+
+
+def storage_upload(bucket: str, path: str, content: bytes, content_type: str = XLSX_MIME):
+    resp = _requests.post(
+        f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}",
+        headers={**_storage_headers(), "Content-Type": content_type, "x-upsert": "true"},
+        data=content,
+        timeout=60,
+    )
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"Upload ke Supabase Storage gagal: HTTP {resp.status_code}: {resp.text[:300]}")
+
+
+def storage_latest(bucket: str, prefix: str, suffix: str = ".xlsx") -> Optional[dict]:
+    """File terbaru di bucket/prefix → {"path", "created_at"}, atau None kalau kosong."""
+    resp = _requests.post(
+        f"{SUPABASE_URL}/storage/v1/object/list/{bucket}",
+        headers=_storage_headers(),
+        json={"prefix": prefix, "limit": 20, "offset": 0,
+              "sortBy": {"column": "created_at", "order": "desc"}},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    files = [f for f in resp.json() if f.get("id") and f["name"].endswith(suffix)]
+    if not files:
+        return None
+    newest = max(files, key=lambda f: f["created_at"])
+    return {"path": f"{prefix}/{newest['name']}", "created_at": newest["created_at"]}
+
+
+def storage_download(bucket: str, path: str) -> bytes:
+    resp = _requests.get(
+        f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}",
+        headers=_storage_headers(),
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.content
+
+
+# ---------------------------------------------------------------------------
 # row_hash helper (untuk transactions dedup)
 # ---------------------------------------------------------------------------
 

@@ -2,6 +2,10 @@
   "version": 2,
   "crons": [
     {
+      "path": "/api/fetch-esb",
+      "schedule": "0 22 * * *"
+    },
+    {
       "path": "/api/fetch-ads",
       "schedule": "0 0 * * *"
     },

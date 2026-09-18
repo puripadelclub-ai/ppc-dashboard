@@ -56,7 +56,7 @@ app = Flask(__name__)
 # Route cron: hanya boleh dipanggil dengan Bearer CRON_SECRET (bukan JWT user).
 CRON_PATHS = {
     "/api/process", "/api/sync-members", "/api/sync-programs",
-    "/api/fetch-ads", "/api/fetch-competitors",
+    "/api/fetch-ads", "/api/fetch-competitors", "/api/fetch-esb",
 }
 # Route publik: tanpa auth sama sekali.
 PUBLIC_PATHS = {"/dashboard", "/api/health"}
@@ -415,6 +415,51 @@ def fetch_ads():
     except Exception as e:
         tb = traceback.format_exc()
         return jsonify({"status": "error", "message": str(e), "trace": tb}), 500
+
+
+@app.route("/api/fetch-esb", methods=["GET", "POST"])
+def fetch_esb():
+    """
+    Download Sales Recapitulation Detail Report dari ESB Core (tanpa browser),
+    periode ESB_START_DATE (default 1 Mar 2026) s/d kemarin (WIB),
+    lalu simpan xlsx ke Supabase Storage bucket esb-exports/sales-recap/.
+    /api/process (07:30 WIB) otomatis memakai file ini kalau lebih baru dari file di Drive.
+
+    Dipanggil oleh Vercel Cron setiap pagi ~05:00 WIB (22:00 UTC).
+    Manual: ?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+    """
+    import io
+    from datetime import date, timedelta, timezone
+    from esb_client import fetch_sales_recap_xlsx
+    from supabase_client import (
+        log_start, log_complete, storage_upload, ESB_EXPORT_BUCKET, ESB_SALES_PREFIX,
+    )
+
+    now_wib = datetime.now(timezone(timedelta(hours=7)))
+    date_from = date.fromisoformat(request.args.get("date_from") or os.environ.get("ESB_START_DATE", "2026-03-01"))
+    date_to = date.fromisoformat(request.args["date_to"]) if request.args.get("date_to") else now_wib.date() - timedelta(days=1)
+
+    log_id = log_start("ESB", "fetch_esb_export", date_start=date_from, date_end=date_to)
+    try:
+        content = fetch_sales_recap_xlsx(date_from, date_to)
+
+        df = pd.read_excel(io.BytesIO(content), sheet_name="Report", header=10)
+        if "Sales Date" not in df.columns:
+            raise ValueError("Format file ESB berubah: kolom 'Sales Date' tidak ditemukan")
+        df = df[pd.to_datetime(df["Sales Date"], errors="coerce", dayfirst=True).notna()]
+
+        path = (f"{ESB_SALES_PREFIX}/sales_recap_{date_from:%Y%m%d}_{date_to:%Y%m%d}"
+                f"_{now_wib:%Y%m%d%H%M%S}.xlsx")
+        storage_upload(ESB_EXPORT_BUCKET, path, content)
+
+        log_complete(log_id, "success", {"rows_fetched": len(df), "rows_inserted": len(df)})
+        return jsonify({
+            "status": "success", "file": path, "rows": len(df), "bytes": len(content),
+            "date_from": str(date_from), "date_to": str(date_to),
+        })
+    except Exception as e:
+        log_complete(log_id, "error", error=str(e))
+        return jsonify({"status": "error", "message": str(e), "trace": traceback.format_exc()}), 500
 
 
 @app.route("/api/fetch-competitors", methods=["GET", "POST"])
@@ -1389,7 +1434,8 @@ def run_pipeline():
 
     log.append("Reading Sales from Drive...")
     df_sales, sales_filename = read_sales_from_drive()
-    log.append(f"  → {sales_filename}: {len(df_sales)} rows")
+    sales_period_end = df_sales.attrs.get("period_end")
+    log.append(f"  → {sales_filename}: {len(df_sales)} rows (periode s/d {sales_period_end})")
 
     log.append("Reading Membership from Drive...")
     df_mem = read_membership_from_drive()
@@ -1922,9 +1968,23 @@ def run_pipeline():
                 log.append(f"  ⚠️ transactions batch {i//500+1} error: {tx_err[:120]}")
                 break
 
-        _lc_t(log_id_t, "success" if not tx_err else "error",
+        # Cek data basi: file terbaru harus mencakup sampai kemarin (WIB).
+        # Tanpa ini sync tetap "success" walau file ESB-nya lama.
+        from datetime import timedelta as _td, timezone as _tz
+        _yesterday = datetime.now(_tz(_td(hours=7))).date() - _td(days=1)
+        _covered_to = sales_period_end or pd.to_datetime(_date_max).date()
+        _status, _err = ("success", None)
+        if tx_err:
+            _status, _err = ("error", tx_err)
+        elif _covered_to < _yesterday:
+            _status = "stale"
+            _err = (f"Data ESB basi: file terbaru hanya sampai {_covered_to:%d %b %Y} "
+                    f"(seharusnya {_yesterday:%d %b %Y}). Cek /api/fetch-esb.")
+            log.append(f"  ⚠️ {_err}")
+
+        _lc_t(log_id_t, _status,
               {"rows_fetched": len(df_sales), "rows_inserted": tx_total},
-              error=tx_err)
+              error=_err)
         log.append(
             f"  → Supabase transactions: {tx_total} upserted "
             f"({len(tx_rows)} unique dari {len(df_sales)} ESB rows)"

@@ -4,13 +4,17 @@ Membaca file Excel terbaru (Sales & Membership) dari Google Drive folder.
 """
 import io
 import os
+import re
 import json
+from datetime import datetime
 import pandas as pd
 import requests
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2.service_account import Credentials
 from google.auth.transport.requests import AuthorizedSession
+
+from supabase_client import storage_latest, storage_download, ESB_EXPORT_BUCKET, ESB_SALES_PREFIX
 
 
 SCOPES = [
@@ -107,23 +111,57 @@ def download_excel_from_drive(file_id):
     return buf
 
 
+def _parse_ts(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _latest_sales_file():
+    """
+    File Sales terbaru dari dua sumber, mana yang lebih baru:
+    - Supabase Storage bucket esb-exports (hasil otomatis /api/fetch-esb)
+    - Drive folder DRIVE_FOLDER_ID (upload manual, tetap jadi cadangan)
+    Return (BytesIO, nama file).
+    """
+    drive_meta = get_latest_file(get_drive_service(), os.environ.get("DRIVE_FOLDER_ID"), "Sales Recapitulation")
+    try:
+        stored = storage_latest(ESB_EXPORT_BUCKET, ESB_SALES_PREFIX)
+    except Exception as e:
+        print(f"WARNING: gagal cek Supabase Storage ({e}), pakai file Drive")
+        stored = None
+
+    if stored and (not drive_meta or _parse_ts(stored["created_at"]) > _parse_ts(drive_meta["createdTime"])):
+        return io.BytesIO(storage_download(ESB_EXPORT_BUCKET, stored["path"])), stored["path"]
+    if drive_meta:
+        return download_excel_from_drive(drive_meta["id"]), drive_meta["name"]
+    raise FileNotFoundError("Tidak ada file Sales di Drive folder maupun Supabase Storage")
+
+
+def _sales_period_end(buf):
+    """Tanggal akhir baris 'Period' di header file ESB (mis. '01-03-2026 - 17-09-2026')."""
+    head = pd.read_excel(buf, sheet_name="Report", header=None, nrows=10)
+    for row in head.itertuples(index=False):
+        cells = [str(v).strip() for v in row if pd.notna(v)]
+        if cells and cells[0] == "Period":
+            m = re.search(r"(\d{2}-\d{2}-\d{4})$", " ".join(cells[1:]))
+            if m:
+                return datetime.strptime(m.group(1), "%d-%m-%Y").date()
+    return None
+
+
 def read_sales_from_drive():
     """
-    Baca file Sales terbaru dari Drive.
+    Baca file Sales terbaru (Supabase Storage atau Drive, lihat _latest_sales_file).
     Header di row index 10 (sesuai format ESB Loop).
+    df.attrs["period_end"] = tanggal akhir periode export, untuk cek data basi.
     """
-    folder_id = os.environ.get("DRIVE_FOLDER_ID")
-    drive_service = get_drive_service()
-
-    file_meta = get_latest_file(drive_service, folder_id, "Sales Recapitulation")
-    if not file_meta:
-        raise FileNotFoundError("Tidak ada file Sales di Drive folder")
-
-    buf = download_excel_from_drive(file_meta["id"])
+    buf, filename = _latest_sales_file()
+    period_end = _sales_period_end(buf)
+    buf.seek(0)
     df = pd.read_excel(buf, sheet_name="Report", header=10)
     df["Sales Date"] = pd.to_datetime(df["Sales Date"], errors="coerce")
     df["name_clean"] = df["Loyalty Member Name"].str.lower().str.strip()
-    return df, file_meta["name"]
+    df.attrs["period_end"] = period_end
+    return df, filename
 
 
 def _fetch_sheet_tab(sheet_id, gid, label):
