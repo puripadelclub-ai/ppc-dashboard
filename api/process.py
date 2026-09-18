@@ -446,7 +446,10 @@ def fetch_esb():
 
         df = pd.read_excel(io.BytesIO(content), sheet_name="Report", header=10)
         if "Sales Date" not in df.columns:
-            raise ValueError("Format file ESB berubah: kolom 'Sales Date' tidak ditemukan")
+            bad_path = f"adhoc/invalid_{now_wib:%Y%m%d%H%M%S}.xlsx"
+            storage_upload(ESB_EXPORT_BUCKET, bad_path, content)
+            raise ValueError(f"Format file ESB berubah: kolom 'Sales Date' tidak ditemukan "
+                             f"(file disimpan di {ESB_EXPORT_BUCKET}/{bad_path})")
         df = df[pd.to_datetime(df["Sales Date"], errors="coerce", dayfirst=True).notna()]
 
         custom_range = bool(request.args.get("date_from") or request.args.get("date_to"))
