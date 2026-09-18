@@ -1193,7 +1193,7 @@ def supabase_data():
                 return d
 
         # ── Fetch current period ──────────────────────────────────
-        tx_cur   = _sb("transactions",    "transaction_date,category,gross_amount",
+        tx_cur   = _sb("transactions",    "transaction_date,category,gross_amount,net_amount",
                         "transaction_date", d_from, d_to)
         ds_cur   = _sb("daily_summaries", "summary_date,occupancy_pct",
                         "summary_date",    d_from, d_to)
@@ -1203,7 +1203,7 @@ def supabase_data():
                         "report_date",     d_from, d_to)
 
         # ── Fetch previous period (for comparison) ────────────────
-        tx_prv   = _sb("transactions",    "gross_amount",
+        tx_prv   = _sb("transactions",    "net_amount",
                         "transaction_date", prev_from, prev_to)
         ds_prv   = _sb("daily_summaries", "occupancy_pct",
                         "summary_date",    prev_from, prev_to)
@@ -1215,9 +1215,10 @@ def supabase_data():
         bk_heat  = _sb("bookings", "booking_date,start_time,booking_code",
                         "booking_date", heat_from, today)
 
-        # ── Aggregate revenue ─────────────────────────────────────
-        rev_cur = sum(_sf(r.get("gross_amount")) for r in tx_cur)
-        rev_prv = sum(_sf(r.get("gross_amount")) for r in tx_prv)
+        # ── Aggregate revenue (nett = setelah semua diskon; gross hanya info) ──
+        rev_cur   = sum(_sf(r.get("net_amount")) for r in tx_cur)
+        rev_prv   = sum(_sf(r.get("net_amount")) for r in tx_prv)
+        gross_cur = sum(_sf(r.get("gross_amount")) for r in tx_cur)
 
         # ── Aggregate occupancy ───────────────────────────────────
         occ_vals = [_sf(r.get("occupancy_pct")) * 100 for r in ds_cur
@@ -1241,7 +1242,7 @@ def supabase_data():
         cat_totals: dict = {}
         for r in tx_cur:
             cat = str(r.get("category") or "Lainnya").strip() or "Lainnya"
-            cat_totals[cat] = cat_totals.get(cat, 0) + _sf(r.get("gross_amount"))
+            cat_totals[cat] = cat_totals.get(cat, 0) + _sf(r.get("net_amount"))
         rev_by_cat = sorted(
             [{"category": k, "total": int(v),
               "pct": round(v / rev_cur * 100, 1) if rev_cur else 0}
@@ -1254,7 +1255,7 @@ def supabase_data():
         for r in tx_cur:
             d = str(r.get("transaction_date", ""))[:10]
             if d:
-                daily_rev[d] = daily_rev.get(d, 0) + _sf(r.get("gross_amount"))
+                daily_rev[d] = daily_rev.get(d, 0) + _sf(r.get("net_amount"))
         rev_daily = [{"date": k, "revenue": int(v)}
                      for k, v in sorted(daily_rev.items())]
 
@@ -1309,6 +1310,8 @@ def supabase_data():
             "kpis": {
                 "revenue": {
                     "value":         int(rev_cur),
+                    "gross_value":   int(gross_cur),
+                    "discount_value": int(gross_cur - rev_cur),
                     "prev_value":    int(rev_prv),
                     "target":        scaled_rev,
                     "pct_of_target": _pct(rev_cur, scaled_rev),
@@ -1427,7 +1430,19 @@ def run_pipeline():
     2. Proses semua analisis
     3. Tulis hasil ke output Sheets
     """
-    log = []
+    import time as _time
+    _t0 = _time.monotonic()
+
+    class _TimedLog(list):
+        """Tiap baris diberi [+detik sejak mulai] dan ikut dicetak ke stdout, supaya
+        langkah yang lambat kelihatan dan Vercel logs tetap mencatat progres
+        kalau function kena timeout (batas 300 detik) sebelum sempat return."""
+        def append(self, msg):
+            line = f"[+{_time.monotonic() - _t0:5.1f}s] {msg}"
+            print(line, flush=True)
+            super().append(line)
+
+    log = _TimedLog()
 
     # ── 1. BACA DATA ──────────────────────────────────
     # Log ESB read ke sync_logs agar health panel bisa tracking
@@ -1910,7 +1925,7 @@ def run_pipeline():
     log.append("Syncing ESB transactions to Supabase transactions table...")
     try:
         from supabase_client import (
-            upsert_transactions, build_esb_transaction_rows,
+            upsert_transactions, build_esb_transaction_rows, prune_esb_transactions,
             log_start as _ls_t, log_complete as _lc_t,
         )
 
@@ -1933,6 +1948,23 @@ def run_pipeline():
                 log.append(f"  ⚠️ transactions batch {i//500+1} error: {tx_err[:120]}")
                 break
 
+        # Hapus baris yang sudah tidak ada di export (void/koreksi/rename di ESB).
+        # Hanya kalau upsert lengkap, dan hanya di rentang tanggal file ini.
+        _prune_msg = None
+        if not tx_err and tx_rows:
+            _tx_dates = [r["transaction_date"] for r in tx_rows]
+            try:
+                _pr = prune_esb_transactions({r["row_hash"] for r in tx_rows},
+                                             min(_tx_dates), max(_tx_dates))
+                if _pr["skipped"]:
+                    _prune_msg = f"Hapus baris ESB lama dibatalkan: {_pr['skipped']}"
+                    log.append(f"  ⚠️ {_prune_msg}")
+                elif _pr["deleted"]:
+                    log.append(f"  → {_pr['deleted']} baris lama dihapus (tidak ada lagi di export ESB)")
+            except Exception as e_pr:
+                _prune_msg = f"Hapus baris ESB lama gagal: {e_pr}"
+                log.append(f"  ⚠️ {_prune_msg}")
+
         # Cek data basi: file terbaru harus mencakup sampai kemarin (WIB).
         # Tanpa ini sync tetap "success" walau file ESB-nya lama.
         from datetime import timedelta as _td, timezone as _tz
@@ -1946,6 +1978,8 @@ def run_pipeline():
             _err = (f"Data ESB basi: file terbaru hanya sampai {_covered_to:%d %b %Y} "
                     f"(seharusnya {_yesterday:%d %b %Y}). Cek /api/fetch-esb.")
             log.append(f"  ⚠️ {_err}")
+        elif _prune_msg:
+            _status, _err = ("warning", _prune_msg)
 
         _lc_t(log_id_t, _status,
               {"rows_fetched": len(df_sales), "rows_inserted": tx_total},

@@ -195,6 +195,10 @@ def build_esb_transaction_rows(df_sales) -> tuple[list[dict], int]:
     di PPC01202605170013). Tanpa dua kolom itu baris kedua ikut terbuang.
     Angka di-hash sebagai int supaya hash tidak berubah kalau pandas membaca
     kolomnya sebagai float ("1.0") di satu file dan int ("1") di file lain.
+
+    Revenue = Nett Sales (setelah diskon item dan bill discount):
+    gross_amount = Subtotal (sebelum diskon), discount = Subtotal - Nett Sales,
+    net_amount (kolom generated) = gross_amount - discount = Nett Sales.
     """
     import pandas as pd
 
@@ -215,12 +219,16 @@ def build_esb_transaction_rows(df_sales) -> tuple[list[dict], int]:
         sale_date   = str(_sd_raw)[:10]
         sales_no    = str(r.get("Sales Number", "") or "").strip()
         batch_order = _si(r.get("Batch Order"), 0)
-        member_name = str(r.get("Loyalty Member Name", "") or "").strip()
+        member_raw  = r.get("Loyalty Member Name")
+        # Input hash: NaN tetap jadi "nan" supaya row_hash baris yang sudah ada tidak berubah
+        member_name = str(member_raw or "").strip()
         product     = str(r.get("Menu",   "") or r.get("Product",  "") or "").strip()
         category    = str(r.get("Menu Category", "") or r.get("Category", "") or "").strip()
         bill_no     = str(r.get("Bill No", "") or r.get("Bill Number", "") or "").strip()
         qty         = _si(r.get("Qty",  r.get("Quantity", 1)), 0)
         total       = _si(r.get("Total", r.get("Amount", r.get("Subtotal", 0))), 0)
+        gross       = _si(r.get("Subtotal", total), total)
+        nett        = _si(r.get("Nett Sales", total), total)
         pay_method  = str(r.get("Payment Method", "") or r.get("Payment", "") or "").strip()
 
         rh = make_row_hash(sale_date, sales_no, batch_order, bill_no,
@@ -232,15 +240,63 @@ def build_esb_transaction_rows(df_sales) -> tuple[list[dict], int]:
         rows[rh] = {
             "row_hash":         rh,
             "transaction_date": sale_date or None,
-            "customer_name":    member_name or None,
+            # Walk-in tanpa loyalty member → NULL, bukan string "nan"
+            "customer_name":    None if pd.isna(member_raw) else (member_name or None),
             "product_name":     product or None,
             "category":         category or None,
-            "gross_amount":     total,
+            "gross_amount":     gross,
+            "discount":         gross - nett,
             "payment_method":   pay_method or None,
             "source":           "ESB",
             # TIDAK kirim: net_amount (generated column), qty, unit_price
         }
     return list(rows.values()), n_dup
+
+
+def prune_esb_transactions(keep_hashes: set, date_from: str, date_to: str,
+                           max_ratio: float = 0.02) -> dict:
+    """
+    Hapus baris ESB di [date_from, date_to] yang row_hash-nya tidak ada lagi di
+    export terbaru: bill di-void/dikoreksi di ESB, atau member/menu di-rename.
+    Upsert saja tidak pernah menghapus, jadi tanpa ini hash lama tertinggal dan
+    revenue terhitung dobel.
+
+    Pengaman: kalau yang akan dihapus lebih dari max(20, max_ratio × baris di
+    rentang itu), batal. Itu tanda file export-nya parsial/terfilter.
+    Return {"stale": N, "deleted": N, "skipped": None | alasan}.
+    """
+    existing: list = []
+    while True:
+        resp = _requests.get(_url("transactions"), headers=_headers(), params=[
+            ("select", "row_hash"), ("source", "eq.ESB"),
+            ("transaction_date", f"gte.{date_from}"), ("transaction_date", f"lte.{date_to}"),
+            ("order", "id"), ("limit", "1000"), ("offset", str(len(existing))),
+        ], timeout=30)
+        resp.raise_for_status()
+        page = resp.json()
+        existing += [r["row_hash"] for r in page]
+        if len(page) < 1000:
+            break
+
+    stale = [h for h in existing if h and h not in keep_hashes]
+    out = {"stale": len(stale), "deleted": 0, "skipped": None}
+    limit = max(20, int(max_ratio * len(existing)))
+    if len(stale) > limit:
+        out["skipped"] = (f"{len(stale)} dari {len(existing)} baris {date_from}..{date_to} "
+                          f"tidak ada di file export (batas {limit}); cek apakah file-nya lengkap")
+        return out
+
+    for i in range(0, len(stale), 100):
+        chunk = stale[i : i + 100]
+        resp = _requests.delete(
+            _url("transactions"),
+            headers={**_headers(), "Prefer": "return=minimal"},
+            params={"source": "eq.ESB", "row_hash": f"in.({','.join(chunk)})"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        out["deleted"] += len(chunk)
+    return out
 
 
 # ---------------------------------------------------------------------------

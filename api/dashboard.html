@@ -1389,8 +1389,8 @@ let currentPage = 'home';
 const METRIC_INFO = {
   // HOME
   'rev-bulan-ini':{title:'Revenue Bulan Ini',
-    what:'Total gross revenue dari semua transaksi POS di bulan kalender berjalan. Mencakup sewa lapangan, ball machine, coaching, F&B, dan produk lainnya.',
-    source:'Sumber: ESB POS (Sales Recapitulation) → kolom Amount. Pipeline menjumlahkan semua transaksi dengan Sales Date di bulan ini.',
+    what:'Total revenue nett (setelah diskon item dan bill discount) dari semua transaksi POS di bulan kalender berjalan. Mencakup sewa lapangan, ball machine, coaching, F&B, dan produk lainnya.',
+    source:'Sumber: ESB POS (Sales Recapitulation) → kolom Nett Sales. Pipeline menjumlahkan semua transaksi dengan Sales Date di bulan ini.',
     bench:'Benchmark: Revenue per court per bulan yang sehat untuk padel premium Jakarta berkisar Rp 40–80 jt/court. (Sports Venue Management, ISCA 2022)'},
   'trx-bulan-ini':{title:'Transaksi Bulan Ini',
     what:'Jumlah transaksi (invoice/struk) yang tercatat di POS bulan ini. Satu transaksi bisa berisi beberapa item (sewa + F&B, dll).',
@@ -1614,8 +1614,8 @@ const METRIC_INFO = {
 
   // SPRINT 4 — Target vs Actual
   'kpi-target-revenue':{title:'Revenue vs Target',
-    what:'Gross revenue bulan ini dari Supabase transactions table, dibandingkan terhadap target bulanan Rp145jt (target realistis jangka pendek) atau Rp180jt (target 3 bulan). Progress bar: hijau ≥100%, kuning ≥70%, merah <70%.',
-    source:'Sumber: Supabase transactions → SUM(gross_amount) untuk periode yang dipilih. Data disync dari ESB setiap kali pipeline berjalan. Kolom: transaction_date, gross_amount.',
+    what:'Revenue nett (Nett Sales ESB: setelah diskon item dan bill discount) untuk periode yang dipilih, dibandingkan terhadap target bulanan Rp145jt (target realistis jangka pendek) atau Rp180jt (target 3 bulan). Baris "Gross" di bawah angka = revenue sebelum semua diskon; selisihnya = total diskon. Progress bar: hijau ≥100%, kuning ≥70%, merah <70%.',
+    source:'Sumber: Supabase transactions → SUM(net_amount) untuk periode yang dipilih; gross = SUM(gross_amount) = Subtotal ESB. Data disync dari ESB setiap kali pipeline berjalan. Kolom: transaction_date, net_amount, gross_amount.',
     bench:'Target bulan ini: Rp145jt (match Juli 2026 — bulan terbaik YTD). Target 3 bulan: Rp180jt (+24% dari Juli). Pace Agustus saat ini: Rp111jt pada H-26 → proyeksi ~Rp132jt full bulan.'},
   'kpi-target-occ':{title:'Occupancy vs Target',
     what:'Rata-rata occupancy rate harian selama periode yang dipilih, dibandingkan target 55% (jangka pendek) atau 62% (3 bulan). Occupancy = total slot terisi ÷ total slot tersedia (2 court × 32 jam/hari).',
@@ -1630,8 +1630,8 @@ const METRIC_INFO = {
     source:'Spend & Results: Supabase ads_daily → SUM(spend), SUM(results) untuk periode. New Members: Supabase members → COUNT(*) berdasarkan join_date. CPR = spend ÷ results. Lead→Member conv rate = new members ÷ results × 100.',
     bench:'CPR benchmark Meta Ads untuk fitness/sports Indonesia: Rp3.000–8.000 (lead generation). CPR PPC Jul: Rp4.737 — masih dalam range efisien. Masalah utama: conv rate lead→member yang terus turun (14.2% → 6.1%) — indikasi follow-up atau penawaran ke leads perlu diperbaiki, bukan budget iklan.'},
   'sb-revenue-cat':{title:'Revenue per Kategori (Supabase)',
-    what:'Breakdown total gross revenue berdasarkan kategori produk untuk periode yang dipilih. Berbeda dengan ESB panel di atas yang selalu menampilkan 6 bulan terakhir, panel ini mengikuti date filter yang dipilih.',
-    source:'Sumber: Supabase transactions → GROUP BY category, SUM(gross_amount). Category diambil dari kolom "Menu Category" di ESB Sales Recapitulation. Data diupdate setiap pipeline run.',
+    what:'Breakdown revenue nett (setelah diskon) berdasarkan kategori produk untuk periode yang dipilih. Berbeda dengan ESB panel di atas yang selalu menampilkan 6 bulan terakhir, panel ini mengikuti date filter yang dipilih.',
+    source:'Sumber: Supabase transactions → GROUP BY category, SUM(net_amount). Category diambil dari kolom "Menu Category" di ESB Sales Recapitulation. Data diupdate setiap pipeline run.',
     bench:'Distribusi sehat padel club: Court Rent 55–65%, Membership 10–15%, Coaching 8–12%, F&B 5–10%, Lainnya <10%. Court Rent >70% = terlalu bergantung satu revenue stream. Coaching <8% = potensi underoptimized coaching program.'},
 };
 
@@ -1875,14 +1875,14 @@ async function fetchSupabaseKPIs(period) {
       const now = new Date();
       const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
       const [catRes, progRes] = await Promise.all([
-        _SB.from('transactions').select('category,gross_amount').gte('transaction_date', monthStart),
+        sbSelectAll(() => _SB.from('transactions').select('category,net_amount').gte('transaction_date', monthStart).order('id')),
         _SB.from('programs').select('status'),
       ]);
       const txns  = catRes.data  || [];
       const progs = progRes.data || [];
       // Top category by revenue this month
       const catMap = {};
-      txns.forEach(r => { const c = r.category||'Other'; catMap[c]=(catMap[c]||0)+sf(r.gross_amount||0); });
+      txns.forEach(r => { const c = r.category||'Other'; catMap[c]=(catMap[c]||0)+sf(r.net_amount||0); });
       const catEntries = Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
       const totalRev   = catEntries.reduce((s,e)=>s+e[1],0);
       const topCatEntry= catEntries[0];
@@ -1965,7 +1965,7 @@ function renderKPIProgress() {
     countUp(numId, kpi.value, 900, fmtFn);
   }
 
-  drawCard('kpi-prog-revenue', 'Revenue',     'kpi-target-revenue',  SB.kpis.revenue,     fmtRp,  '', 'kpi-rev-sub');
+  drawCard('kpi-prog-revenue', 'Revenue (Nett)', 'kpi-target-revenue', SB.kpis.revenue,  fmtRp,  '', 'kpi-rev-sub');
   drawCard('kpi-prog-occ',     'Occupancy',   'kpi-target-occ',      SB.kpis.occupancy,   fmtOcc, '(rata-rata)', 'kpi-occ-sub');
   drawCard('kpi-prog-mem',     'New Members', 'kpi-target-members',  SB.kpis.new_members, fmtNum, 'member baru',  'kpi-mem-sub');
 
@@ -1977,8 +1977,12 @@ function renderKPIProgress() {
   const _runRate = _dom > 0 && _revNow > 0 ? Math.round(_revNow / _dom * _dim) : 0;
   const _months  = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
   const _revSub  = document.getElementById('kpi-rev-sub');
-  if (_revSub && _runRate > 0) {
-    _revSub.innerHTML = `<div style="font-size:10px;color:var(--txt3);margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">Proyeksi ${_months[_today.getMonth()]}: <strong style="color:var(--txt2)">${fmtRp(_runRate)}</strong></div>`;
+  const _revGross = SB.kpis.revenue.gross_value || 0;
+  const _subLines = [];
+  if (_revGross > 0) _subLines.push(`Gross <strong style="color:var(--txt2)">${fmtRp(_revGross)}</strong> · diskon ${fmtRp(SB.kpis.revenue.discount_value || 0)}`);
+  if (_runRate > 0)  _subLines.push(`Proyeksi ${_months[_today.getMonth()]}: <strong style="color:var(--txt2)">${fmtRp(_runRate)}</strong>`);
+  if (_revSub && _subLines.length) {
+    _revSub.innerHTML = `<div style="font-size:10px;color:var(--txt3);margin-top:8px;padding-top:6px;border-top:1px solid var(--border);line-height:1.6">${_subLines.join('<br>')}</div>`;
   }
 
   // Inject ESB sub-stats if already loaded
@@ -4179,7 +4183,7 @@ function openMember360(name) {
   // Parallel: transactions + programs + coaching sessions
   Promise.all([
     _SB.from('transactions')
-      .select('transaction_date,product_name,gross_amount,payment_method')
+      .select('transaction_date,product_name,net_amount,payment_method')
       .ilike('customer_name',`%${name}%`)
       .order('transaction_date',{ascending:false}).limit(20),
     _SB.from('programs')
@@ -4265,7 +4269,7 @@ function openMember360(name) {
     if (!txnEl) return;
     if (eTx) { txnEl.innerHTML=`<div style="color:var(--txt3);font-size:11px">Error: ${eTx.message}</div>`; return; }
     if (!txns?.length) { txnEl.innerHTML='<div style="color:var(--txt3);font-size:11px">Tidak ada transaksi ditemukan.</div>'; return; }
-    const total = txns.reduce((s,r)=>s+sf(r.gross_amount||0),0);
+    const total = txns.reduce((s,r)=>s+sf(r.net_amount||0),0);
     // Update KPI cards with real Supabase data
     const spEl = document.getElementById('m360-spending');
     const lvEl = document.getElementById('m360-lastvisit');
@@ -4279,7 +4283,7 @@ function openMember360(name) {
             <div style="font-size:11.5px;font-weight:500;color:var(--txt)">${r.product_name||'—'}</div>
             <div style="font-size:10px;color:var(--txt3)">${r.transaction_date||''}${r.payment_method?' · '+r.payment_method:''}</div>
           </div>
-          <span style="font-size:12px;font-weight:600;color:var(--txt);flex-shrink:0;margin-left:8px">${fIDR(sf(r.gross_amount||0))}</span>
+          <span style="font-size:12px;font-weight:600;color:var(--txt);flex-shrink:0;margin-left:8px">${fIDR(sf(r.net_amount||0))}</span>
         </div>`).join('')}`;
   });
 }
@@ -4672,7 +4676,7 @@ function renderRevTrend() {
     data:{
       labels: rev6.map(r=>r.Month||r.month||''),
       datasets:[{
-        label:'Revenue',
+        label:'Revenue (Nett)',
         data: rev6.map(r=>si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0)),
         backgroundColor: rev6.map((_,i) => i === rev6.length - 1 ? 'rgba(3,72,66,.85)' : 'rgba(3,72,66,.25)'),
         borderRadius:6,
@@ -4691,7 +4695,10 @@ function renderRevTrend() {
           bodyFont:{size:13,weight:'700'},
           padding:10,
           cornerRadius:8,
-          callbacks:{label:ctx=>'  ' + fIDR(ctx.raw)}
+          callbacks:{
+            label:ctx=>'  Nett ' + fIDR(ctx.raw),
+            afterLabel:ctx=>{ const g = si(rev6[ctx.dataIndex]?.Gross_Revenue||0); return g > ctx.raw ? '  Gross ' + fIDR(g) : ''; }
+          }
         }
       },
       scales:{
@@ -4711,6 +4718,7 @@ function _renderRevKPI() {
   // Prefer Supabase (same source as Home PENCAPAIAN KPI) for consistency
   const revThis  = SB?.kpis?.revenue?.value || si(summ.revenue_this_month || summ.Revenue_This_Month || 0);
   const revLast  = SB?.kpis?.revenue?.prev_value || si(summ.revenue_last_month || summ.Revenue_Last_Month || 0);
+  const revGross = SB?.kpis?.revenue?.gross_value || 0;
   const mom      = revLast > 0 ? ((revThis - revLast) / revLast * 100) : null;
   const momSign  = mom === null ? '' : (mom >= 0 ? '+' : '');
   const momColor = mom === null ? 'var(--txt3)' : (mom >= 0 ? '#2da870' : '#ef4444');
@@ -4722,16 +4730,18 @@ function _renderRevKPI() {
 
   // YTD: sum all months in revenue where year matches
   const curYear = new Date().getFullYear();
-  const ytd = (D.revenue||[]).filter(r => {
+  const ytdRows = (D.revenue||[]).filter(r => {
     const m = r.Month||r.month||'';
     return m && m.toString().startsWith(String(curYear));
-  }).reduce((a,r) => a + si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0), 0);
+  });
+  const ytd      = ytdRows.reduce((a,r) => a + si(r.Total_Revenue||r.Revenue_Total||r.revenue_total||0), 0);
+  const ytdGross = ytdRows.reduce((a,r) => a + si(r.Gross_Revenue||0), 0);
 
   const kpis = [
-    {label:'Revenue Bulan Ini', val: fIDR(revThis), sub: revLast > 0 ? `vs ${fIDR(revLast)} bln lalu` : '', badge: mom !== null ? `${momSign}${mom.toFixed(1)}%` : '', badgeColor: momColor},
+    {label:'Revenue Bulan Ini (Nett)', val: fIDR(revThis), sub: [revLast > 0 ? `vs ${fIDR(revLast)} bln lalu` : '', revGross > revThis ? `Gross ${fIDR(revGross)} · diskon ${fIDR(revGross - revThis)}` : ''].filter(Boolean).join('<br>'), badge: mom !== null ? `${momSign}${mom.toFixed(1)}%` : '', badgeColor: momColor},
     {label:'Growth MoM', val: mom !== null ? `${momSign}${mom.toFixed(1)}%` : 'N/A', sub: 'vs bulan lalu', badge: '', badgeColor:''},
     {label:'Avg per Transaksi', val: fIDR(Math.round(avgTx)), sub: totalTx > 0 ? `${totalTx.toLocaleString()} transaksi` : '', badge:'', badgeColor:''},
-    {label:'Revenue YTD', val: fIDR(ytd), sub: `Jan–${new Date().toLocaleDateString('id-ID',{month:'short'})} ${curYear}`, badge:'', badgeColor:''},
+    {label:'Revenue YTD (Nett)', val: fIDR(ytd), sub: `Jan–${new Date().toLocaleDateString('id-ID',{month:'short'})} ${curYear}` + (ytdGross > ytd ? `<br>Gross ${fIDR(ytdGross)} · diskon ${fIDR(ytdGross - ytd)}` : ''), badge:'', badgeColor:''},
   ];
 
   el.innerHTML = kpis.map(k => `
@@ -4822,9 +4832,10 @@ async function _renderRevPaymentAsync() {
   const fromStr = from6.toISOString().slice(0,10);
 
   try {
-    const {data, error} = await _SB.from('transactions')
-      .select('payment_method,gross_amount')
-      .gte('transaction_date', fromStr);
+    const {data, error} = await sbSelectAll(() => _SB.from('transactions')
+      .select('payment_method,net_amount')
+      .gte('transaction_date', fromStr)
+      .order('id'));
 
     if (error || !data || !data.length) {
       el.innerHTML = '<span style="font-size:11px;color:var(--txt3)">Data tidak tersedia</span>';
@@ -4835,7 +4846,7 @@ async function _renderRevPaymentAsync() {
     const map = {};
     data.forEach(r => {
       const pm = r.payment_method || 'Lainnya';
-      map[pm] = (map[pm] || 0) + si(r.gross_amount);
+      map[pm] = (map[pm] || 0) + si(r.net_amount);
     });
     const total = Object.values(map).reduce((a,v) => a+v, 0);
     const sorted = Object.entries(map).sort((a,b) => b[1]-a[1]);
@@ -6364,6 +6375,18 @@ const _SB = supabase.createClient(
   'https://vdtcrgbrnibyasjjnckw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkdGNyZ2JybmlieWFzampuY2t3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NDE5NzIsImV4cCI6MjEwMzExNzk3Mn0.C-gOC19dV1xCjHp4bPUQSb3BGuPPEPYIGFlUPR1Lzno'
 );
+
+// Supabase membatasi 1000 baris per request; ambil semua halaman.
+// build() harus mengembalikan query baru setiap dipanggil.
+async function sbSelectAll(build) {
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build().range(from, from + 999);
+    if (error) return { data: rows, error };
+    rows.push(...(data || []));
+    if (!data || data.length < 1000) return { data: rows, error: null };
+  }
+}
 
 // Wrapper fetch: sisipkan Supabase access token supaya lolos auth guard backend.
 async function apiFetch(url, options = {}) {

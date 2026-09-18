@@ -11,6 +11,12 @@ from datetime import datetime, timedelta
 
 TODAY = pd.Timestamp.today().normalize()
 
+
+def _rev_col(df) -> str:
+    """Kolom revenue ESB: Nett Sales (setelah diskon item + bill discount).
+    Fallback ke Total untuk export lama yang belum punya kolom Nett Sales."""
+    return "Nett Sales" if "Nett Sales" in df.columns else "Total"
+
 # ─────────────────────────────────────────────
 # 1. KLASIFIKASI SOURCE TYPE
 # ─────────────────────────────────────────────
@@ -100,7 +106,7 @@ def match_members_to_sales(df_mem, df_sales):
 
     sales_agg = df_sl.groupby("Loyalty Member Code").agg(
         name_clean   = ("name_clean", lambda x: x.mode()[0] if len(x) else ""),
-        total_spending = ("Total", "sum"),
+        total_spending = (_rev_col(df_sl), "sum"),
         nett_sales   = ("Nett Sales", "sum"),
         total_bills  = ("Bill Number", "nunique"),
         first_visit  = ("Sales Date", "min"),
@@ -281,12 +287,16 @@ def calculate_revenue(df_sales):
     df["year_month"]    = df["Sales Date"].dt.to_period("M").astype(str)
     df["Menu Category"] = df["Menu Category"].fillna("OTHER")
 
-    # Revenue per bulan — filter NaT rows, no redundant Month_str column
-    rev_monthly = df[df["year_month"].notna() & (df["year_month"] != "NaT")].groupby("year_month")["Total"].sum().reset_index()
-    rev_monthly.columns = ["Month", "Total_Revenue"]
+    rev = _rev_col(df)
+    df["_gross"] = df["Subtotal"] if "Subtotal" in df.columns else df[rev]
+
+    # Revenue per bulan (nett) + gross sebelum diskon sebagai info
+    # — filter NaT rows, no redundant Month_str column
+    rev_monthly = df[df["year_month"].notna() & (df["year_month"] != "NaT")].groupby("year_month")[[rev, "_gross"]].sum().reset_index()
+    rev_monthly.columns = ["Month", "Total_Revenue", "Gross_Revenue"]
 
     # Revenue per kategori per bulan
-    rev_cat = df.groupby(["year_month", "Menu Category"])["Total"].sum().reset_index()
+    rev_cat = df.groupby(["year_month", "Menu Category"])[rev].sum().reset_index()
     rev_cat.columns = ["Month", "Category", "Revenue"]
 
     # Peak day of week
@@ -306,7 +316,7 @@ def calculate_products(df_sales):
 
     products = df.groupby(["Menu Category", "Menu"]).agg(
         Total_Qty     = ("Qty", "sum"),
-        Total_Revenue = ("Total", "sum"),
+        Total_Revenue = (_rev_col(df), "sum"),
         Total_Orders  = ("Bill Number", "nunique"),
     ).reset_index().sort_values("Total_Revenue", ascending=False)
 
@@ -707,13 +717,13 @@ def calculate_member_preferences(df_sales: pd.DataFrame, df_raw_avm: pd.DataFram
     cat_col = "Menu Category" if "Menu Category" in df.columns else None
     df["product_type"] = df[cat_col].fillna("Other").apply(map_esb_category) if cat_col else "Other"
 
-    total_col = "Total" if "Total" in df.columns else None
+    total_col = _rev_col(df)
     bill_col  = "Bill Number" if "Bill Number" in df.columns else None
-    if not total_col:
-        df["Total"] = 0
+    if total_col not in df.columns:
+        df[total_col] = 0
 
     # ── Aggregate per member × kategori ──────────────
-    agg_dict = {"Total": "sum"}
+    agg_dict = {total_col: "sum"}
     if bill_col:
         agg_dict["Bill Number"] = "nunique"
 
@@ -1042,7 +1052,7 @@ def calculate_product_detail(df_sales: pd.DataFrame) -> pd.DataFrame:
     code_col = col(["Menu Code", "menu_code", "MenuCode"])
     qty_col  = col(["Qty", "qty", "Quantity"])
     price_col= col(["Harga Jual", "Unit Price", "Price", "Harga"])
-    rev_col  = col(["Grand Total", "grand_total", "Total", "Revenue"])
+    rev_col  = col(["Nett Sales", "Grand Total", "grand_total", "Total", "Revenue"])
     date_col = col(["Sales Date", "Tanggal", "Date"])
     cust_col = col(["Loyalty Member Name", "Customer Name", "name_clean", "Nama"])
 
